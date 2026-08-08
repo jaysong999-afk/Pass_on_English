@@ -1,0 +1,240 @@
+{
+  "common": {
+    "brand": "Pass on English",
+    "tagline": "영어 원어민 1:1 화상영어",
+    "login": "로그인",
+    "signup": "회원가입",
+    "freeTrial": "무료 체험 시작",
+    "learnMore": "서비스 알아보기",
+    "getStarted": "지금 시작하기",
+    "submit": "제출",
+    "cancel": "취소",
+    "save": "저장",
+    "back": "뒤로",
+    "next": "다음",
+    "confirm": "확인",
+    "search": "검색",
+    "viewAll": "전체 보기"
+  },
+  "nav": {
+    "home": "홈",
+    "about": "PassOn 소개",
+    "curriculum": "커리큘럼",
+    "pricing": "요금제",
+    "teachers": "강사소개",
+    "howItWorks": "이용 방법",
+    "faq": "FAQ"
+  },
+  "hero": {
+    "badge": "한국 · 중국 학생을 위한 맞춤 영어",
+    "titleLine1": "집에서 만나는",
+    "titleHighlight": "영어 원어민",
+    "titleLine2": "1:1 화상 영어",
+    "subtitle": "아이부터 성인까지, ESL 전문 강사와 매일 짧게·꾸준히. 첫 수업은 무료로 부담 없이 시작하세요.",
+    "ctaPrimary": "무료 1회 체험 신청",
+    "ctaSecondary": "요금제 보기",
+    "trust1": "첫 수업 100% 무료",
+    "trust2": "1:1 맞춤 수업",
+    "trust3": "한·중 맞춤 요금"
+  },
+  "stats": {
+    "teachers": "ESL 전문 강사",
+    "teachersValue": "30+",
+    "lessons": "누적 1:1 수업",
+    "lessonsValue": "10,000+",
+    "rating": "재수강률",
+    "ratingValue": "95%",
+    "countries": "회화 자신감 향상 응답",
+    "countriesValue": "98.5%"
+  },
+  "features": {
+    "eyebrow": "왜 Pass on English?",
+    "title": "템플릿이 아닌, 우리 아이에게 맞는 영어",
+    "subtitle": "화상 수업의 일정·소통·피드백까지 한곳에서. 학부모는 안심하고, 아이는 재미있게 배웁니다.",
+    "native": {
+      "title": "ESL 경력 영어 원어민",
+      "desc": "아동·성인 ESL 경험이 풍부한 강사만 선발합니다. 회화, 파닉스, 비즈니스 등 목적에 맞게 매칭해 드립니다."
+    },
+    "flexible": {
+      "title": "내 일정에 맞춘 예약",
+      "desc": "선생님별 가능 시간을 확인하고 원하는 요일·시간에 예약하세요. 바쁜 학부모와 학생 모두를 위해 설계했습니다."
+    },
+    "trial": {
+      "title": "첫 수업 무료 체험",
+      "desc": "계정당 1회 무료 수업으로 선생님·수업 스타일을 직접 경험한 뒤, 정규 수강을 결정할 수 있습니다."
+    },
+    "pwa": {
+      "title": "앱처럼 편한 채팅·알림",
+      "desc": "홈 화면에 추가하면 수업 알림과 선생님 채팅을 바로 확인. 별도 앱 설치 없이 이용할 수 있습니다."
+    }
+  },
+  "curriculum": {
+    "eyebrow": "Curriculum",
+    "title": "목표에 맞는 7가지 커리큘럼",
+    "subtitle": "어린이 파닉스부터 성인 비즈니스·시사 영어까지 — 수준과 목적에 맞게 강사와 수업을 설계합니다.",
+    "daily": {
+      "title": "일상회화",
+      "tag": "Daily Conversation",
+      "desc": "인사, 취미, 학교·직장 이야기 등 생활 속 주제로 자연스럽게 말하는 연습. 짧은 1:1 대화로 ‘영어로 생각하고 말하는’ 감각을 키웁니다."
+    },
+    "phonics": {
+      "title": "파닉스",
+      "tag": "Phonics",
+      "desc": "알파벳 소리·블렌딩·파닉스 규칙을 단계별로 익혀 읽기·쓰기 기초를 탄탄히 합니다. 유·초등 학습자에게 특히 적합합니다."
+    },
+    "reading": {
+      "title": "영어 원서 리딩",
+      "tag": "Original Book Reading",
+      "desc": "레벨에 맞는 영어 원서를 읽으며 어휘·문장 구조·독해를 함께 다룹니다. 읽은 내용을 말로 요약·토론해 이해도를 높입니다."
+    },
+    "debate": {
+      "title": "Debate",
+      "tag": "Debate & Discussion",
+      "desc": "주제를 정하고 찬반 의견을 영어로 표현·반박하는 토론 수업. 논리적 사고와 설득력 있는 스피킹을 기릅니다."
+    },
+    "adult": {
+      "title": "성인영어회화",
+      "tag": "Adult Conversation",
+      "desc": "여행, 일상, 문화 등 성인 학습자의 관심사 중심 회화. 부담 없는 1:1 환경에서 실전 표현과 발음을 집중 연습합니다."
+    },
+    "business": {
+      "title": "비즈니스 영어",
+      "tag": "Business English",
+      "desc": "미팅, 이메일, 프레젠테이션, 협상 등 업무 상황별 표현과 에티켓. 직장인·예비 취업자의 글로벌 커뮤니케이션을 지원합니다."
+    },
+    "news": {
+      "title": "시사영어",
+      "tag": "Current Affairs English",
+      "desc": "뉴스·시사 이슈를 소재로 어휘와 배경지식을 확장하고, 자신의 견해를 영어로 말하는 연습을 합니다. 중·고등·성인 고급 학습자에게 추천합니다."
+    },
+    "note": "가입 설문과 체험 수업 후 학습자 수준·목표에 맞는 커리큘럼과 강사를 매칭해 드립니다. 여러 과목을 병행하거나 수준에 따라 조정할 수 있습니다."
+  },
+  "pricing": {
+    "eyebrow": "투명한 요금",
+    "title": "생활 패턴에 맞는 요금제",
+    "subtitle": "매일 조금씩, 주 3회, 주말까지 — 우리 가족 루틴에 맞게 선택하세요.",
+    "weekday5": "주 5회 · 20분",
+    "weekday5Desc": "20회 / 매일 꾸준히 · 인기",
+    "mwf": "월·수·금 · 20분",
+    "mwfDesc": "12회 / 주 3회 집중",
+    "tuth": "화·목",
+    "tuthDesc": "8회 / 부담 없이",
+    "perMonth": "월",
+    "krw": "원",
+    "cny": "위안",
+    "popular": "가장 많이 선택",
+    "cta": "이 플랜으로 시작"
+  },
+  "howItWorks": {
+    "eyebrow": "4단계로 시작",
+    "title": "가입부터 첫 수업까지, 이렇게 진행돼요",
+    "subtitle": "복잡한 절차 없이 10분이면 첫 체험 예약까지 완료할 수 있습니다.",
+    "step1Title": "가입 & 간단 설문",
+    "step1Desc": "영어 수준과 목적(회화·파닉스 등)을 알려주시면 맞춤 추천을 드립니다.",
+    "step2Title": "선생님 · 시간 선택",
+    "step2Desc": "프로필을 보고 마음에 드는 선생님과 수업 시간을 골라 예약합니다.",
+    "step3Title": "무료 1회 체험",
+    "step3Desc": "Zoom 화상으로 1:1 수업을 경험해 보세요. 일정·채팅은 플랫폼에서 관리됩니다.",
+    "step4Title": "입금 후 정규 수업",
+    "step4Desc": "체험 후 만족하시면 계좌이체로 수업료를 납부하고 정기 수업을 시작합니다."
+  },
+  "teachers": {
+    "eyebrow": "강사진",
+    "title": "아이 눈높이에 맞춘 원어민 선생님",
+    "subtitle": "경력과 전문 분야를 확인하고, 우리 아이에게 맞는 선생님을 직접 선택하세요.",
+    "yearsExp": "년 경력",
+    "specialties": "전문 분야",
+    "cta": "선생님 더 보기"
+  },
+  "faq": {
+    "eyebrow": "FAQ",
+    "title": "자주 묻는 질문",
+    "subtitle": "궁금한 점이 더 있으시면 언제든 문의해 주세요.",
+    "q1": "화상 수업은 어떻게 진행되나요?",
+    "a1": "Zoom 등 화상 프로그램으로 1:1 수업이 진행됩니다. 수업 일정, 선생님과의 채팅, 피드백 확인은 Pass on English 플랫폼에서 관리합니다.",
+    "q2": "첫 수업은 정말 무료인가요?",
+    "a2": "네. 계정당 1회 무료 체험 수업을 제공합니다. 체험 후 수업료 입금 안내를 드리며, 원하실 때만 정규 수강을 시작하시면 됩니다.",
+    "q3": "결제는 어떻게 하나요?",
+    "a3": "현재 계좌이체로만 결제 가능합니다. 입금 후 관리자 확인이 완료되면 정규 수업이 활성화됩니다.",
+    "q4": "수업 시간 변경(보강)이 가능한가요?",
+    "a4": "네. 학생은 월 2회까지 일정 변경을 요청할 수 있으며, 선생님 승인 후 변경됩니다."
+  },
+  "ctaBand": {
+    "title": "오늘, 첫 무료 수업을 예약해 보세요",
+    "subtitle": "10분이면 가입부터 체험 예약까지. 아이의 영어, 미루지 마세요.",
+    "button": "무료 체험 시작하기"
+  },
+  "footer": {
+    "tagline": "영어 원어민과 함께하는 1:1 화상 영어",
+    "terms": "이용약관",
+    "privacy": "개인정보처리방침",
+    "contact": "support@passonenglish.com",
+    "copyright": "© 2026 Pass on English. All rights reserved."
+  },
+  "auth": {
+    "signupTitle": "학생 회원가입",
+    "loginTitle": "학생 로그인",
+    "email": "이메일",
+    "password": "비밀번호",
+    "name": "이름",
+    "country": "국가",
+    "countryKr": "한국",
+    "countryCn": "중국",
+    "noAccount": "계정이 없으신가요?",
+    "hasAccount": "이미 계정이 있으신가요?"
+  },
+  "heroVisual": {
+    "live": "Live",
+    "lessonTitle": "Today's Lesson",
+    "teacherName": "Sarah M.",
+    "topic": "Conversation · Greetings",
+    "nextLesson": "Next lesson",
+    "nextTime": "Tomorrow 10:00 AM",
+    "freeBadge": "1st FREE"
+  },
+  "about": {
+    "eyebrow": "About PassOn",
+    "heroTitle": "PassOn English",
+    "brandSub": "PassOn Learning",
+    "heroSubtitle": "영어 원어민 강사와 함께하는 1:1 화상 영어 교육 플랫폼. 우리는 ‘영어를 가르치는 서비스’가 아니라, 배움을 나누고 성장을 이어가는 학습 공동체를 만듭니다.",
+    "philosophyQuote": "배워서 남주자",
+    "philosophyDesc": "배움을 혼자만 간직하는 것이 아니라, 다른 사람에게 전달하고 나누는 사람을 기릅니다. PassOn은 학생이 배운 영어를 세상과 연결하는 다리가 되도록 돕습니다.",
+    "philosophyEn": "Learn and pass it on — share knowledge, grow together.",
+    "missionTitle": "우리가 하는 일",
+    "missionSubtitle": "PassOn English · PassOn Learning",
+    "missionBody": "PassOn English는 ESL 전문 영어 원어민 강사와 한국·중국 학습자를 1:1 화상 수업으로 연결합니다. 어린이부터 성인까지, 각자의 수준과 목표·일정에 맞춘 맞춤형 커리큘럼을 제공합니다. 단순히 ‘저렴한 화상 영어’가 아니라, 매일 짧게라도 말하는 습관을 만들고 회화 자신감을 키우는 것 — 그것이 PassOn이 지향하는 교육입니다.",
+    "serviceEyebrow": "Service",
+    "serviceTitle": "PassOn이 제공하는 가치",
+    "serviceSubtitle": "전문성과 따뜻함을 겸비한 1:1 화상 영어 경험",
+    "s1Title": "영어 원어민 1:1 화상 영어",
+    "s1Desc": "ESL 경력이 풍부한 영어 원어민 강사와 Zoom 기반 실시간 1:1 수업. 일정·소통·피드백은 PassOn 플랫폼에서 통합 관리합니다.",
+    "s2Title": "어린이부터 성인까지",
+    "s2Desc": "유아·초등 파닉스부터 비즈니스 회화, 시험 대비까지. 연령과 목적에 맞는 강사 매칭과 수업 설계를 제공합니다.",
+    "s3Title": "한국 · 중국 맞춤 서비스",
+    "s3Desc": "한국과 중국 학생·학부모를 위한 다국어 UI, 현지 통화 요금, 시간대 맞춤 예약. 각 시장의 학습 문화를 이해합니다.",
+    "s4Title": "무료 체험 수업",
+    "s4Desc": "계정당 1회 무료 체험으로 강사·수업 방식을 직접 경험한 후, 부담 없이 정규 수강을 결정할 수 있습니다.",
+    "s5Title": "맞춤형 수업 설계",
+    "s5Desc": "가입 설문을 바탕으로 영어 수준·목표·가능 시간을 반영합니다. 학생의 페이스에 맞춘 커리큘럼으로 꾸준히 성장합니다.",
+    "s6Title": "습관과 자신감",
+    "s6Desc": "짧고 잦은 1:1 대화가 실력 향상의 핵심입니다. ‘말해본 경험’이 쌓이면서 자연스럽게 회화 자신감이 자랍니다.",
+    "diffEyebrow": "Why PassOn",
+    "diffTitle": "단순한 영어 수업을 넘어서",
+    "diffSubtitle": "가격 경쟁이 아닌, 학습 습관과 성장을 설계합니다.",
+    "v1Title": "꾸준히 말하는 습관",
+    "v1Desc": "주 2~5회, 20분 수업으로 ‘매일 영어를 쓰는 루틴’을 만듭니다. 휴식은 선생님이 슬롯을 비워 자율 관리합니다.",
+    "v2Title": "회화 자신감",
+    "v2Desc": "1:1 안전한 환경에서 반복 연습 — 틀려도 괜찮다는 경험이 자신감을 키웁니다.",
+    "v3Title": "배움을 나누는 문화",
+    "v3Desc": "‘배워서 남주자’ — 배운 내용을 가족·친구와 나누며 학습 효과를 확장합니다.",
+    "audienceTitle": "함께하는 학습자",
+    "audienceSubtitle": "한국과 중국의 학생 및 학부모가 주요 고객입니다.",
+    "audienceKrTitle": "한국 학생 · 학부모",
+    "audienceKrDesc": "초·중·고 및 성인 학습자, 학부모님께서 자녀의 영어 습관과 회화 자신감을 중요하게 생각하시는 가정을 위해 설계했습니다. 원화 요금·한국어 UI로 편리하게 이용하실 수 있습니다.",
+    "audienceCnTitle": "중국 학생 · 家长",
+    "audienceCnDesc": "儿童至成人的一对一视频英语。中文界面、人民币定价，满足中国家庭对优质外教与灵活日程的需求。",
+    "ctaTitle": "PassOn과 함께 시작하세요",
+    "ctaSubtitle": "첫 수업은 무료입니다. 우리 아이·나 자신의 영어, 오늘 한 걸음 내딛어 보세요.",
+    "ctaButton": "무료 체험 신청"
+  }
+}

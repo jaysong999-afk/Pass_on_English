@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@theme {
+  /* Primary green — #25632d */
+  --color-brand-50: #eef5ef;
+  --color-brand-100: #d4e8d8;
+  --color-brand-200: #a8cdb0;
+  --color-brand-300: #6aad76;
+  --color-brand-400: #3d8a4a;
+  --color-brand-500: #2f7840;
+  --color-brand-600: #25632d;
+  --color-brand-700: #1e5024;
+  --color-brand-800: #183f1d;
+  --color-brand-900: #122f16;
+
+  /* Mint accent — #80CBC4 */
+  --color-mint-50: #f2faf9;
+  --color-mint-100: #d9f2ef;
+  --color-mint-200: #80cbc4;
+  --color-mint-300: #66c0b8;
+  --color-mint-400: #4db5ac;
+  --color-mint-500: #3a9d95;
+
+  /* Accent alias (mint) for shared UI */
+  --color-accent-400: #66c0b8;
+  --color-accent-500: #80cbc4;
+
+  /* Cream beige surface — #F7F3EB */
+  --color-surface: #f7f3eb;
+  --color-surface-muted: #efeae0;
+
+  --color-ink: #1e2a20;
+  --color-ink-muted: #4a5c4e;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-ko: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", var(--font-sans);
+  --font-zh: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", var(--font-sans);
+}
+
+@layer base {
+  * {
+    @apply border-brand-100/60;
+  }
+  body {
+    @apply bg-surface text-ink antialiased;
+    font-family: var(--font-sans);
+    line-height: 1.65;
+  }
+  .locale-ko {
+    font-family: var(--font-ko);
+    word-break: keep-all;
+  }
+  .locale-zh-CN {
+    font-family: var(--font-zh);
+  }
+}
+
+@layer utilities {
+  .landing-prose {
+    @apply text-base leading-[1.75] text-ink-muted md:text-lg md:leading-[1.8];
+    max-width: 38rem;
+  }
+  .landing-prose-narrow {
+    @apply text-[0.9375rem] leading-[1.7] text-ink-muted md:text-base md:leading-[1.75];
+  }
+  .landing-display {
+    @apply font-extrabold tracking-tight text-ink;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+  .landing-section {
+    @apply py-20 md:py-28 lg:py-32;
+  }
+  .landing-container {
+    @apply mx-auto max-w-6xl px-5 sm:px-6 lg:px-8;
+  }
+  .landing-gradient-hero {
+    background:
+      radial-gradient(ellipse 80% 60% at 70% 20%, rgba(128, 203, 196, 0.18), transparent),
+      radial-gradient(ellipse 50% 40% at 10% 80%, rgba(37, 99, 45, 0.08), transparent),
+      linear-gradient(180deg, #f7f3eb 0%, #eef5ef 40%, #f7f3eb 100%);
+  }
+  .landing-grid-pattern {
+    background-image:
+      linear-gradient(rgba(37, 99, 45, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(37, 99, 45, 0.05) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .landing-gradient-brand {
+    background: linear-gradient(135deg, #25632d 0%, #1e5024 55%, #4db5ac 100%);
+  }
+}

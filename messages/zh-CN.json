@@ -1,0 +1,240 @@
+{
+  "common": {
+    "brand": "Pass on English",
+    "tagline": "英语外教 1 对 1 在线英语",
+    "login": "登录",
+    "signup": "注册",
+    "freeTrial": "免费试听",
+    "learnMore": "了解服务",
+    "getStarted": "立即开始",
+    "submit": "提交",
+    "cancel": "取消",
+    "save": "保存",
+    "back": "返回",
+    "next": "下一步",
+    "confirm": "确认",
+    "search": "搜索",
+    "viewAll": "查看全部"
+  },
+  "nav": {
+    "home": "首页",
+    "about": "PassOn 介绍",
+    "curriculum": "课程",
+    "pricing": "价格",
+    "teachers": "讲师介绍",
+    "howItWorks": "使用方法",
+    "faq": "常见问题"
+  },
+  "hero": {
+    "badge": "为韩国 · 中国学生量身打造",
+    "titleLine1": "在家就能上的",
+    "titleHighlight": "英语母语",
+    "titleLine2": "1 对 1 视频英语",
+    "subtitle": "从儿童到成人，与 ESL 专业教师每天短课、持续进步。首节课免费，零压力开始。",
+    "ctaPrimary": "申请免费试听",
+    "ctaSecondary": "查看价格",
+    "trust1": "首节 100% 免费",
+    "trust2": "1 对 1 定制",
+    "trust3": "中韩专属定价"
+  },
+  "stats": {
+    "teachers": "ESL 专业教师",
+    "teachersValue": "30+",
+    "lessons": "累计 1 对 1 课程",
+    "lessonsValue": "10,000+",
+    "rating": "续报率",
+    "ratingValue": "95%",
+    "countries": "口语自信提升反馈",
+    "countriesValue": "98.5%"
+  },
+  "features": {
+    "eyebrow": "为什么选择 Pass on English？",
+    "title": "不是模板课，而是适合您孩子的英语",
+    "subtitle": "视频课程的日程、沟通、反馈一站管理。家长放心，孩子学得开心。",
+    "native": {
+      "title": "ESL 经验英语母语教师",
+      "desc": "只选用有丰富儿童与成人 ESL 经验的教师。根据会话、自然拼读、商务等目标为您匹配。"
+    },
+    "flexible": {
+      "title": "按您的时间预约",
+      "desc": "查看每位教师的可约时段，选择适合的星期与时间。为忙碌的家长和学生而设计。"
+    },
+    "trial": {
+      "title": "首节免费试听",
+      "desc": "每个账户 1 次免费课，先体验教师和上课风格，再决定是否正式报名。"
+    },
+    "pwa": {
+      "title": "像 App 一样方便",
+      "desc": "添加到主屏幕即可接收上课提醒和教师聊天，无需额外安装应用。"
+    }
+  },
+  "curriculum": {
+    "eyebrow": "Curriculum",
+    "title": "7 大课程体系",
+    "subtitle": "从儿童自然拼读到成人商务与时事英语——按水平与目标匹配讲师与课程。",
+    "daily": {
+      "title": "日常会话",
+      "tag": "Daily Conversation",
+      "desc": "以问候、爱好、学校与职场等生活话题练习自然开口。通过简短 1 对 1 对话，培养「用英语思考并表达」的感觉。"
+    },
+    "phonics": {
+      "title": "自然拼读",
+      "tag": "Phonics",
+      "desc": "分阶段学习字母发音、拼读与拼读规则，夯实读写基础。特别适合幼儿与小学生。"
+    },
+    "reading": {
+      "title": "英文原版阅读",
+      "tag": "Original Book Reading",
+      "desc": "按水平选读英文原版书，同步提升词汇、句型与理解力。读后口头总结与讨论，加深 comprehension。"
+    },
+    "debate": {
+      "title": "Debate",
+      "tag": "Debate & Discussion",
+      "desc": "围绕议题用英语陈述观点、反驳与讨论，培养逻辑思维与有说服力的口语表达。"
+    },
+    "adult": {
+      "title": "成人英语会话",
+      "tag": "Adult Conversation",
+      "desc": "以旅行、日常、文化等成人兴趣为主的会话课。在轻松的 1 对 1 环境中集中练习实用表达与发音。"
+    },
+    "business": {
+      "title": "商务英语",
+      "tag": "Business English",
+      "desc": "会议、邮件、演示、谈判等职场场景用语与礼仪。支持职场人士与求职者的国际沟通需求。"
+    },
+    "news": {
+      "title": "时事英语",
+      "tag": "Current Affairs English",
+      "desc": "以新闻与时事为素材扩展词汇与背景知识，练习用英语表达观点。推荐初高中及成人进阶学习者。"
+    },
+    "note": "注册问卷与试听后，我们将根据学习者水平与目标匹配课程与讲师。可组合多门课程，也可随水平调整。"
+  },
+  "pricing": {
+    "eyebrow": "透明定价",
+    "title": "灵活套餐，适配不同节奏",
+    "subtitle": "每天一点、每周三次或周末 — 选择最适合家庭作息的方案。",
+    "weekday5": "每周 5 次 · 20 分钟",
+    "weekday5Desc": "20 次 / 每天坚持 · 热门",
+    "mwf": "周一三五 · 20 分钟",
+    "mwfDesc": "12 次 / 每周 3 次",
+    "tuth": "周二四",
+    "tuthDesc": "8 次 / 轻松入门",
+    "perMonth": "月",
+    "krw": "韩元",
+    "cny": "元",
+    "popular": "最多人选",
+    "cta": "选择此方案"
+  },
+  "howItWorks": {
+    "eyebrow": "四步开始",
+    "title": "从注册到首课，流程很简单",
+    "subtitle": "无需复杂手续，10 分钟即可完成试听预约。",
+    "step1Title": "注册 & 简短问卷",
+    "step1Desc": "告知英语水平和目标（会话、拼读等），我们将为您推荐合适方案。",
+    "step2Title": "选教师 · 选时间",
+    "step2Desc": "查看教师简介，选择心仪的教师和上课时间完成预约。",
+    "step3Title": "免费试听 1 次",
+    "step3Desc": "通过 Zoom 视频体验 1 对 1 课程。日程与聊天在平台统一管理。",
+    "step4Title": "汇款后开始正式课",
+    "step4Desc": "试听满意后，通过银行转账缴费，即可开始常规课程。"
+  },
+  "teachers": {
+    "eyebrow": "教师团队",
+    "title": "懂孩子、有耐心的母语教师",
+    "subtitle": "查看履历与专长，为孩子选择最合适的老师。",
+    "yearsExp": "年经验",
+    "specialties": "专长",
+    "cta": "查看更多教师"
+  },
+  "faq": {
+    "eyebrow": "FAQ",
+    "title": "常见问题",
+    "subtitle": "还有疑问？欢迎随时联系我们。",
+    "q1": "视频课如何进行？",
+    "a1": "通过 Zoom 等软件进行 1 对 1 课程。上课日程、与教师的聊天、反馈查看均在 Pass on English 平台完成。",
+    "q2": "首节课真的免费吗？",
+    "a2": "是的，每个账户提供 1 次免费试听。体验后我们会发送缴费说明，您可自主决定是否继续。",
+    "q3": "如何付款？",
+    "a3": "目前仅支持银行转账。确认到账后，常规课程将被激活。",
+    "q4": "可以改上课时间吗？",
+    "a4": "可以。学生每月最多 2 次申请改期，教师确认后生效。"
+  },
+  "ctaBand": {
+    "title": "今天就开始第一节免费课",
+    "subtitle": "10 分钟完成注册与试听预约。孩子的英语，别再拖延。",
+    "button": "开始免费试听"
+  },
+  "footer": {
+    "tagline": "与英语母语教师一起的 1 对 1 视频英语",
+    "terms": "服务条款",
+    "privacy": "隐私政策",
+    "contact": "support@passonenglish.com",
+    "copyright": "© 2026 Pass on English. All rights reserved."
+  },
+  "auth": {
+    "signupTitle": "学生注册",
+    "loginTitle": "学生登录",
+    "email": "邮箱",
+    "password": "密码",
+    "name": "姓名",
+    "country": "国家",
+    "countryKr": "韩国",
+    "countryCn": "中国",
+    "noAccount": "还没有账户？",
+    "hasAccount": "已有账户？"
+  },
+  "heroVisual": {
+    "live": "直播中",
+    "lessonTitle": "今日课程",
+    "teacherName": "Sarah M.",
+    "topic": "会话 · 问候",
+    "nextLesson": "下一节课",
+    "nextTime": "明天 上午 10:00",
+    "freeBadge": "首节免费"
+  },
+  "about": {
+    "eyebrow": "About PassOn",
+    "heroTitle": "PassOn English",
+    "brandSub": "PassOn Learning",
+    "heroSubtitle": "与英语母语讲师进行的一对一视频英语平台。我们不只是「教英语的服务」，而是打造分享所学、延续成长的学习共同体。",
+    "philosophyQuote": "学了就传给别人",
+    "philosophyDesc": "学习不应只留给自己，而应传递给他人、与他人分享。PassOn 帮助学生将所学英语连接世界。",
+    "philosophyEn": "Learn and pass it on — share knowledge, grow together.",
+    "missionTitle": "我们在做什么",
+    "missionSubtitle": "PassOn English · PassOn Learning",
+    "missionBody": "PassOn English 通过一对一视频课，连接 ESL 专业英语母语讲师与韩国、中国学习者。从儿童到成人，我们根据水平、目标与日程提供定制课程。PassOn 追求的不是「便宜的网课」，而是养成每日开口的习惯、建立口语自信——这才是我们的教育方向。",
+    "serviceEyebrow": "Service",
+    "serviceTitle": "PassOn 提供的价值",
+    "serviceSubtitle": "专业与温暖兼备的一对一视频英语体验",
+    "s1Title": "英语母语一对一视频英语",
+    "s1Desc": "与 ESL 经验丰富的英语母语讲师通过 Zoom 实时 1:1 上课。日程、沟通与反馈均在 PassOn 平台统一管理。",
+    "s2Title": "儿童至成人全覆盖",
+    "s2Desc": "从幼儿自然拼读到商务口语、考试备考。按年龄与目标匹配讲师并设计课程。",
+    "s3Title": "面向韩国 · 中国",
+    "s3Desc": "为多语言界面、本地货币定价、时区预约而设计，理解两国学习文化与家庭需求。",
+    "s4Title": "免费试听课",
+    "s4Desc": "每账户一次免费试听，亲身体验讲师与上课方式后再决定是否正式报名。",
+    "s5Title": "定制化课程",
+    "s5Desc": "根据注册问卷反映英语水平、目标与可用时间，按学生节奏设计课程，稳步成长。",
+    "s6Title": "习惯与自信",
+    "s6Desc": "短而频的一对一对话是进步关键。「说过」的经验积累，口语自信自然提升。",
+    "diffEyebrow": "Why PassOn",
+    "diffTitle": "超越普通英语课",
+    "diffSubtitle": "不靠低价竞争，而是设计学习习惯与成长路径。",
+    "v1Title": "持续开口的习惯",
+    "v1Desc": "每周 2～5 次、每次 20 分钟短课，建立「每天用英语」的 routine。休息由老师在可用时间里关闭时段安排。",
+    "v2Title": "口语自信",
+    "v2Desc": "在 1:1 安全环境中反复练习——「说错也没关系」的体验培养自信。",
+    "v3Title": "分享学习的文化",
+    "v3Desc": "「学而传之」——与家人朋友分享所学，扩大学习效果。",
+    "audienceTitle": "我们的学习者",
+    "audienceSubtitle": "韩国与中国的学生及家长是主要服务对象。",
+    "audienceKrTitle": "韩国学生 · 家长",
+    "audienceKrDesc": "为重视孩子英语习惯与口语自信的小初高及成人学习者家庭而设计。韩元定价、韩语界面，使用便捷。",
+    "audienceCnTitle": "中国学生 · 家长",
+    "audienceCnDesc": "儿童至成人的一对一视频英语。中文界面、人民币定价，满足中国家庭对外教质量与灵活日程的需求。",
+    "ctaTitle": "与 PassOn 一起开始",
+    "ctaSubtitle": "首节课程免费。为孩子的英语，或为自己的成长，今天迈出第一步。",
+    "ctaButton": "申请免费试听"
+  }
+}
