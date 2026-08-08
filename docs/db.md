@@ -2,21 +2,37 @@
 
 ## 0. MVP 구현 현황 (2026-08)
 
-Supabase migration 전, 아래 스키마는 **TypeScript 타입 + in-memory store** 로 검증 중이다. store → DB 이전 시 본 문서의 컬럼·ENUM을 migration 기준으로 사용한다.
+| 단계 | 상태 | 비고 |
+|------|------|------|
+| 스키마 설계 | ✅ | 본 문서 + `supabase/migrations/` |
+| 통합 DDL | ✅ | `001_initial_schema.sql` — ENUM·테이블 27개·인덱스·FK·트리거·시드 |
+| `pricing_plans` 런타임 | ✅ | `@supabase/ssr` + `pricing-plans/repository.ts` |
+| 나머지 store | ⏳ | TypeScript in-memory (`src/lib/*-store.ts`) |
 
-| store 모듈 | 대응 테이블 (목표) |
-|------------|-------------------|
-| `teacher-lesson-store.ts` | `lessons` |
-| `teacher-student-context-store.ts` | `teacher_student_context` |
-| `reschedule-store.ts` | `lesson_reschedule_requests` |
-| `learning-store.ts` | `lesson_feedbacks`, `monthly_growth_reports` |
-| `teacher-salary-store.ts` | `teacher_salary_statements` |
-| `teacher-availability-store.ts` | `teachers_weekly_availability` |
-| `admin-lesson-operation-log-store.ts` | `admin_lesson_operation_logs` |
-| `admin-review-log-store.ts` | `admin_review_logs` |
-| `teacher-payroll-penalty-store.ts` | `teacher_payroll_penalties` |
-| `lesson-scheduler.ts` | (lessons 생성 로직) |
-| `lesson-operations-store.ts` | (lessons·enrollments 조치 로직) |
+**Supabase migration 파일**
+
+| 파일 | 내용 |
+|------|------|
+| `supabase/migrations/001_initial_schema.sql` | 전체 스키마 + `pricing_plans`·`salary_settings` 시드 |
+| `supabase/migrations/002_pricing_plans_plan_type_text.sql` | `plan_type` ENUM → `text` (관리자 커스텀 플랜 CRUD) |
+
+store → DB 이전 시 본 문서의 컬럼·ENUM을 migration 기준으로 사용한다.
+
+| store / 모듈 | 대응 테이블 | DB 연동 |
+|--------------|-------------|---------|
+| `pricing-plans/repository.ts` | `pricing_plans` | ✅ Supabase |
+| `pricing-plan-cache.ts` | (캐시) | scheduler·enrollment용 sync 읽기 |
+| `teacher-lesson-store.ts` | `lessons` | ⏳ |
+| `teacher-student-context-store.ts` | `teacher_student_context` | ⏳ |
+| `reschedule-store.ts` | `lesson_reschedule_requests` | ⏳ |
+| `learning-store.ts` | `lesson_feedbacks`, `monthly_growth_reports` | ⏳ |
+| `teacher-salary-store.ts` | `teacher_salary_statements` | ⏳ |
+| `teacher-availability-store.ts` | `teachers_weekly_availability` | ⏳ |
+| `admin-lesson-operation-log-store.ts` | `admin_lesson_operation_logs` | ⏳ |
+| `admin-review-log-store.ts` | `admin_review_logs` | ⏳ |
+| `teacher-payroll-penalty-store.ts` | `teacher_payroll_penalties` | ⏳ |
+| `lesson-scheduler.ts` | (lessons 생성 로직) | ⏳ |
+| `lesson-operations-store.ts` | (lessons·enrollments 조치) | ⏳ |
 
 ---
 
@@ -57,30 +73,20 @@ lessons.student_id → students.id (learner)
 ## 3. ENUM 타입
 
 ```sql
+CREATE TYPE user_role AS ENUM ('student', 'teacher', 'admin');
 CREATE TYPE account_type AS ENUM ('self', 'guardian');
 CREATE TYPE country_code AS ENUM ('KR', 'CN');
-CREATE TYPE teacher_status AS ENUM ('pending', 'active', 'inactive');
-CREATE TYPE enrollment_status AS ENUM ('pending_payment', 'active', 'completed', 'cancelled');
+CREATE TYPE teacher_status AS ENUM ('pending', 'active', 'inactive', 'on_leave', 'terminated');
+CREATE TYPE enrollment_status AS ENUM (
+  'pending_payment', 'active', 'expiring_soon', 'completed', 'cancelled'
+);
 CREATE TYPE lesson_status AS ENUM (
   'pending_payment', 'scheduled', 'reschedule_pending', 'completed', 'cancelled', 'no_show'
 );
-CREATE TYPE payment_status AS ENUM ('pending', 'reported', 'confirmed', 'rejected');
-CREATE TYPE reschedule_status AS ENUM (
-  'pending_student_approval', 'pending_teacher_approval',
-  'approved', 'rejected', 'cancelled'
-);
-CREATE TYPE reschedule_initiator AS ENUM ('student', 'teacher');
-CREATE TYPE salary_payout_status AS ENUM ('estimated', 'processing', 'paid');
-CREATE TYPE video_platform AS ENUM ('ZOOM', 'VOOV');
-CREATE TYPE plan_type AS ENUM (
-  'weekday5_20min', 'mwf_20min', 'tuth_20min', 'weekend_20min'
-);
-CREATE TYPE currency_code AS ENUM ('KRW', 'CNY', 'PHP');
-CREATE TYPE notification_type AS ENUM (
-  'payment_request', 'payment_confirmed', 'reschedule_request',
-  'reschedule_result', 'chat_message', 'admin_broadcast', 'lesson_reminder'
-);
+-- ... payment_status, reschedule_*, salary_payout_status, video_platform, currency_code, notification_type
 ```
+
+> **`plan_type`**: `001` migration에서는 ENUM 4종으로 생성. `002` migration에서 **`text`** 로 변경 — 관리자 `/admin/pricing` CRUD 시 `mwf_40min` 등 임의 slug 허용.
 
 ---
 
@@ -184,16 +190,41 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | id | uuid PK | |
-| plan_type | plan_type | UNIQUE |
+| plan_type | text | UNIQUE — 시드 4종 slug 또는 관리자 생성 slug (`mwf_40min` 등) |
 | sessions_count | int | 20, 12, 8 |
-| session_minutes | int | **20** (기본 플랜; UI·관리자 CRUD로 20/25/30/40 등 가변) |
-| slot_block_minutes | int | **20** (:00·:20·:40 그리드; 시스템 휴식 블록 없음) |
+| session_minutes | int | **20** (기본; UI·관리자 CRUD로 20/40/60 등 가변) |
+| slot_block_minutes | int | **20** (:00·:20·:40 그리드) |
 | price_krw | int | |
 | price_cny | int | |
-| description | jsonb | i18n labels |
+| description | jsonb | i18n·UI 메타 (아래 스키마) |
 | is_active | boolean | default true |
 
-**시드 데이터**
+**`description` JSONB 스키마** (앱 ↔ DB 매핑)
+
+```json
+{
+  "ko": { "name": "주5회(월~금) 20분" },
+  "zh-CN": { "name": "每周5次(周一至周五) 20分钟" },
+  "schedule_days": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+  "sort_order": 1,
+  "is_popular": true
+}
+```
+
+| TS `PricingPlan` 필드 | DB 출처 |
+|----------------------|---------|
+| `id` | `id` |
+| `name` | `description.ko.name` |
+| `nameZh` | `description.zh-CN.name` |
+| `scheduleDays` | `description.schedule_days` |
+| `sessionsCount` | `sessions_count` |
+| `sessionMinutes` | `session_minutes` |
+| `priceKrw` / `priceCny` | `price_krw` / `price_cny` |
+| `isPopular` | `description.is_popular` |
+| `active` | `is_active` |
+| `sortOrder` | `description.sort_order` |
+
+**시드 데이터** (`001_initial_schema.sql` INSERT, `ON CONFLICT` upsert)
 
 | plan_type | sessions | minutes | slot | KRW | CNY |
 |-----------|----------|---------|------|-----|-----|
@@ -221,6 +252,9 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | total_amount | int | |
 | sessions_total | int | |
 | sessions_completed | int | default 0 |
+| sessions_remaining | int | nullable — 잔여 회차 (관리자 가감) |
+| curriculum | text | nullable |
+| session_adjustments | jsonb | default `[]` — 관리자 회차 조정 이력 |
 | preferred_slot_time | text | nullable — HH:mm (KST), 주간 통일 시간 |
 | preferred_slot_day | text | nullable — legacy; plan scheduleDays 사용 |
 | renewed_from_enrollment_id | uuid FK | nullable — 재수강 출처 |
@@ -250,7 +284,6 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | cancel_reason | text | nullable — e.g. `teacher_no_show` |
 | original_teacher_id | uuid FK | nullable — 대체·노쇼 추적 |
 | related_lesson_id | uuid FK | nullable — 노쇼↔보강 연결 |
-| enrollment_id | uuid FK | nullable |
 | operation_note | text | nullable — 관리자 조치 메모 |
 | completed_at | timestamptz | nullable |
 | created_at | timestamptz | |
@@ -671,19 +704,47 @@ CREATE POLICY chat_insert ON chat_messages
 
 ---
 
-## 8. 마이그레이션 순서
+## 8. 마이그레이션
 
-1. ENUM types
-2. profiles (+ auth trigger on signup)
-3. students, teachers
-4. pricing_plans (seed)
-5. teacher_availability
-6. enrollments, lessons
-7. payments, lesson_feedbacks, reschedule_requests
-8. chat_rooms, chat_messages
-9. salary_settings (seed), teacher_bonuses, attendance tables
-10. push_subscriptions, notifications, admin_broadcasts
-11. views, functions, RLS, triggers
+### 8.1 적용 방법
+
+```bash
+# Supabase CLI
+supabase db push
+
+# 또는 Supabase Dashboard → SQL Editor 에서 migration 파일 순서대로 실행
+```
+
+### 8.2 파일 목록
+
+| 순서 | 파일 | 내용 |
+|------|------|------|
+| 1 | `001_initial_schema.sql` | ENUM, 테이블 27개, 인덱스, FK, auth→profiles 트리거, 비즈니스 트리거, `v_teacher_completed_hours`, 시드 |
+| 2 | `002_pricing_plans_plan_type_text.sql` | `plan_type` text 변환 (커스텀 요금제) |
+| 3 | `003_faq_dashboard_teacher_applications.sql` | `faq_items`, `dashboard_settings`, `teacher_applications` + 시드 |
+
+### 8.3 `001` 포함 항목 (개념적 순서)
+
+1. ENUM types (`CREATE TYPE` — idempotent `DO` 블록)
+2. `profiles` (+ `auth.users` INSERT 트리거)
+3. `students`, `teachers`, availability
+4. `pricing_plans` (seed 4종)
+5. `enrollments`, `lessons`, feedbacks, reschedule, payments, chat
+6. salary·attendance·finance·notifications·admin logs
+7. views, functions, triggers
+
+> RLS 정책은 §6 예시만 문서화 — **production 적용 전 별도 migration 권장**.
+
+### 8.4 migration 003 (`faq_items`, `dashboard_settings`, `teacher_applications`)
+
+| 테이블 | 주요 컬럼 |
+|--------|-----------|
+| `faq_items` | category_ko/zh, question/answer ko/zh, sort_order, published |
+| `dashboard_settings` | slogan (singleton row, id `…0002`) |
+| `teacher_applications` | full_name, date_of_birth, phone, bank_account, email, status, submitted_at |
+| `teachers.application_id` | FK → `teacher_applications` (signup step 2) |
+
+> `student_registration_reviews` — 아직 DDL 없음 (in-memory, migration 004 후보).
 
 ---
 
@@ -691,7 +752,9 @@ CREATE POLICY chat_insert ON chat_messages
 
 - `pricing_plans`: 4종 20분 플랜 (db.md §4.6 시드)
 - `salary_settings`: 기본 보너스 정책 1 row
-- (dev) admin user, sample teacher, sample student
+- `dashboard_settings`: 관리자 슬로건 1 row (`003`)
+- `faq_items`: FAQ 10건 (`003`)
+- `teacher_applications`: dev 샘플 1건 (`003`)
 
 ---
 

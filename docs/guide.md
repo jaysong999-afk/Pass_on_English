@@ -84,7 +84,9 @@
 | Monthly Growth Report (5필드) | ✅ | `MonthlyGrowthReportEditor` |
 | Teacher Salary (월별 명세·EN 보너스 정책) | ✅ | `TeacherSalaryDashboard` |
 | Admin: teacher-profiles, pricing, FAQ | ✅ | `/admin/teacher-profiles`, `/admin/pricing`, `/admin/faq` |
-| In-memory stores → Supabase | ⏳ | `src/lib/*-store.ts` |
+| **Supabase DDL** | ✅ | `001_initial_schema.sql`, `002_pricing_plans_plan_type_text.sql`, `003_faq_dashboard_teacher_applications.sql` |
+| **`pricing_plans` → Supabase** | ✅ | `pricing-plans/repository.ts`, `/api/pricing-plans` |
+| In-memory stores → Supabase (나머지) | ⏳ | enrollments, lessons, teachers, … |
 | 입금 확인·재무 API | ⏳ | 재무 집계 mock |
 | Trial → 결제 → 승인 | ✅ | learner 단위 enrollment |
 | Account vs Learner | ✅ | account-store, StudentSwitcher |
@@ -241,12 +243,18 @@ supabase start
 cp .env.example .env.local
 # NEXT_PUBLIC_SUPABASE_URL, ANON_KEY, VAPID keys 등 입력
 
-# 5. DB 마이그레이션
+# 5. DB 마이그레이션 (001 → 002 → 003 순서)
 supabase db push
+# 또는 Supabase Dashboard SQL Editor에서
+#   supabase/migrations/001_initial_schema.sql
+#   supabase/migrations/002_pricing_plans_plan_type_text.sql
+#   supabase/migrations/003_faq_dashboard_teacher_applications.sql
 
 # 6. 개발 서버
 pnpm dev
 ```
+
+> **요금제 검증**: `.env.local`에 Supabase URL·ANON_KEY 설정 후 `/admin/pricing` 또는 랜딩 요금 섹션에서 DB 연동 확인.
 
 ### 6.3 VAPID 키 생성
 
@@ -271,7 +279,10 @@ Pass_on_English/
 │   └── 원어민 화상영어 ... 요구사항 정리.md
 ├── supabase/
 │   ├── migrations/
-│   └── seed.sql
+│   │   ├── 001_initial_schema.sql
+│   │   ├── 002_pricing_plans_plan_type_text.sql
+│   │   └── 003_faq_dashboard_teacher_applications.sql
+│   └── seed.sql                 # (선택) dev seed
 ├── public/
 │   ├── icons/          # PWA
 │   └── manifest.json
@@ -305,7 +316,9 @@ Pass_on_English/
 - [x] 학생: 가입, 설문, My Lessons, Learning Results
 - [x] 선생님: My Lessons, availability, schedule, feedback
 - [x] 관리자: teacher-profiles, pricing, students/teachers UI
-- [ ] DB migrations per db.md (in-memory store 사용 중)
+- [x] DB migrations DDL (`001`·`002`·`003`) — [`db.md`](./db.md) §8
+- [x] `pricing_plans` Supabase CRUD (첫 도메인 이전)
+- [ ] enrollments·lessons·teachers store → Supabase
 
 ### Phase 2 — 운영 기능 (2~3주)
 
@@ -330,8 +343,8 @@ Pass_on_English/
 - [ ] Tencent Cloud HK 배포
 - [ ] 한·중 접속 테스트
 - [ ] PWA iOS/Android 검증
-- [ ] 보안·RLS 감사
-- [ ] in-memory store → Supabase migration
+- [ ] 보안·RLS 감사 (`pricing_plans` mutation 보호 포함)
+- [ ] in-memory store → Supabase migration (enrollments, lessons, …)
 
 ---
 
@@ -439,10 +452,12 @@ Pass_on_English/
 
 ## 15. 다음 단계
 
-1. ~~본 명세서 리뷰 및 MVP UI 플로우 검증~~ (2026-08 진행 중)
-2. **Supabase migration** — `src/lib/*-store.ts` → db.md 스키마
-3. Auth·RLS 연동, Realtime 채팅
-4. 입금 확인·재무 API 완성
-5. Tencent Cloud HK 배포 및 한·중 QA
+1. ~~본 명세서 리뷰 및 MVP UI 플로우 검증~~ ✅
+2. ~~통합 DDL migration + `pricing_plans` Supabase 연동~~ ✅
+3. **Supabase migration (나머지)** — `enrollments`, `lessons`, `profiles`/`students` 순
+4. Auth·RLS 연동 (`pricing_plans` admin mutation 보호 포함)
+5. Realtime 채팅
+6. 입금 확인·재무 API 완성
+7. Tencent Cloud HK 배포 및 한·중 QA
 
 상세 구현은 각 명세서를 참조한다.

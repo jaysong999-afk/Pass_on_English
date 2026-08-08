@@ -1,713 +1,533 @@
-# Pass on English — 백엔드 개발 요청 명세서
+# Pass on English — 백엔드 개발 명세서 (Frontend-Driven)
 
-## 0. MVP 구현 현황 (2026-08)
+## 0. 문서 목적 · 범위
 
-현재 프로덕션 DB(Supabase) 연동 전 **Next.js Route Handlers + in-memory store** 로 UI·플로우를 검증 중이다.
+본 문서는 **현재 프론트엔드(MVP UI)에 존재하는 화면·플로우만** 백엔드로 구현할 수 있도록 재정의한 명세이다.
 
-| 영역 | store / 모듈 | API prefix | 비고 |
-|------|--------------|------------|------|
-| 선생님 수업 | `teacher-lesson-store.ts` | `/api/teacher/lessons` | 완료·스케줄·Live demo 날짜 |
-| 학생 컨텍스트 | `teacher-student-context-store.ts` | `/api/teacher/student-context` | 교재·Special Notes |
-| 보강(일정 변경) | `reschedule-store.ts` | `/api/lessons/reschedule` | 승인·거절·취소 |
-| 수업 피드백 | `learning-store.ts` | `/api/learning/feedback` | progressPages, 완료 연동 |
-| 월 성장 레포트 | `learning-store.ts` | `/api/learning/reports` | 필드 구조 변경 (§5.9) |
-| 선생님 급여 | `teacher-salary-store.ts` | `/api/teacher/salary`, `/api/admin/teacher-salary` | 월별 명세서 |
-| 가능 시간 | `teacher-availability-store.ts` | `/api/teacher/availability` | KST 저장, PHT 표시 |
-| 선생님 프로필 | `teacher-profile-store.ts` | `/api/teachers/profile` | 관리자 CRUD |
-| 요금제 | `pricing-plan-store.ts` | `/api/pricing-plans` | 관리자 CRUD |
-| 수강 | `enrollment-store.ts` | `/api/enrollments` | |
-| 채팅 | `chat-store.ts` | `/api/chat/rooms` | learner별 room |
-| **계정·수강생** | `account-store.ts` | `/api/student/account`, `/api/student/learners` | account_holder + learners |
-| **수업 운영** | `lesson-operations-store.ts` | `/api/admin/lessons/[id]`, `bulk-reassign` | 대체·노쇼·무급취소·일정변경 |
-| **수업 조치 로그** | `admin-lesson-operation-log-store.ts` | `/api/admin/lessons/operation-logs` | 주간 로그·undo |
-| **관리자 검토** | `admin-review-store.ts`, `admin-review-log-store.ts` | `/api/admin/reviews` | 4카테고리 승인·로그 |
-| **급여 패널티** | `teacher-payroll-penalty-store.ts` | (lesson-operations 내부) | 노쇼 시 만근/분기 보너스 리셋 |
-| **스케줄 생성** | `lesson-scheduler.ts` | enrollment confirm 시 | 잔여 회차 lesson 생성 |
-
-> Supabase 마이그레이션 시 위 store 로직을 RPC/RLS로 이전한다.
-
----
-
-## 1. 개요
-
-| 항목 | 내용 |
+| 원칙 | 설명 |
 |------|------|
-| 아키텍처 | Next.js Route Handlers + Supabase (BaaS) |
-| DB | Supabase PostgreSQL |
-| Auth | Supabase Auth |
-| Realtime | Supabase Realtime |
-| Storage | Supabase Storage (프로필 이미지) |
-| 배포 | Tencent Cloud 홍콩 리전 |
+| **UI First** | 화면·Route Handler·in-memory store에 없는 API·테이블은 **구현하지 않는다** |
+| **계약 유지** | Supabase 이전 시 `/api/*` 요청·응답 JSON **형식을 그대로** 유지한다 |
+| **DB 상세** | 컬럼·ENUM·인덱스는 [`db.md`](./db.md)를 SSOT로 따른다. 본 문서는 **UI가 실제로 쓰는 테이블·필드**만 강조한다 |
+| **목표 스택** | Next.js Route Handlers + Supabase PostgreSQL + Auth + (선택) Realtime |
 
-본 문서는 API, 비즈니스 로직, Edge Functions, 알림, 권한, 배치 작업을 정의한다. 별도 Express/Nest 서버 없이 **Supabase + Next.js API** 를 기본으로 한다.
+> **현재 (2026-08)**: Route Handler + **혼합 데이터 레이어** — `pricing_plans`는 Supabase PostgreSQL CRUD 완료, 나머지 도메인은 in-memory store. Auth·RLS·Realtime은 **미연동** (로그인 UI만 존재).
 
 ---
 
-## 2. 아키텍처
+## 1. MVP 구현 현황
+
+### 1.1 포털별 UI ↔ API
+
+| 포털 | 주요 경로 | API prefix |
+|------|-----------|------------|
+| **학생** | `/[locale]/student/*` | `/api/student/*`, `/api/enrollments`, `/api/learning/*`, `/api/lessons/reschedule`, `/api/chat/rooms` |
+| **선생님** | `/teacher/*` | `/api/teacher/*`, `/api/learning/*`, `/api/lessons/reschedule`, `/api/chat/rooms` |
+| **관리자** | `/admin/*` | `/api/admin/*`, `/api/enrollments/*`, `/api/teachers/profile`, `/api/pricing-plans` |
+| **공개** | `/[locale]`, `/[locale]/pricing` | `/api/teachers/public`, `/api/pricing-plans`, `/api/faq` |
+
+### 1.2 Store → DB 이전 대상
+
+| store / 모듈 | DB 테이블 (목표) | 연동 상태 | UI에서 쓰는 기능 |
+|--------------|------------------|-----------|------------------|
+| `pricing-plans/repository.ts` | `pricing_plans` | **✅ Supabase** | 랜딩·수강신청·관리자 CRUD (20/40/60분 등) |
+| `pricing-plan-cache.ts` | (in-memory cache) | ✅ | scheduler·enrollment sync 읽기 |
+| `pricing-plan-display.ts` | — | ✅ | 클라이언트 표시 유틸 (DB 미참조) |
+| `account-store.ts` | `profiles`, `students` | ⏳ | 가입, learner 전환, 설문, 체험 예약 |
+| `enrollment-store.ts` | `enrollments`, `payments` | ⏳ | 수강·입금·재수강·회차 조정 |
+| `teacher-profile-store.ts` | `teachers` | ⏳ | 공개 목록·관리자 프로필·가입 Step2 |
+| `teacher-lesson-store.ts` | `lessons` | ⏳ | My Lessons, Schedule, 상세, 완료 |
+| `teacher-availability-store.ts` | `teachers_weekly_availability` | ⏳ | Availability 그리드 |
+| `teacher-booked-slots.ts` | (lessons + reservations) | ⏳ | 슬롯 마감·연속 블록 |
+| `lesson-scheduler.ts` | (lessons 생성 로직) | ⏳ | 결제 확정·회차 조정 시 스케줄 |
+| `lesson-scheduler-bootstrap.ts` | — | ✅ | 서버: pricing cache warm → schedule sync |
+| `slot-continuity.ts` | (로직 only) | ✅ | 20분 그리드·연속 N블록 검증 |
+| `reschedule-store.ts` | `lesson_reschedule_requests` | ⏳ | 보강 요청·승인·거절·취소 |
+| `learning-store.ts` | `lesson_feedbacks`, `monthly_growth_reports` | ⏳ | Learning 탭·피드백·레포트 |
+| `teacher-student-context-store.ts` | `teacher_student_context` | ⏳ | 교재·Special Notes·ZOOM/VOOV |
+| `teacher-salary-store.ts` + adj/policy | `teacher_salary_statements`, … | ⏳ | 급여 명세·관리자 정산 |
+| `teacher-payroll-penalty-store.ts` | `teacher_payroll_penalties` | ⏳ | 노쇼 패널티 |
+| `chat-store.ts` | `chat_rooms` (+ `chat_messages` Phase 2) | ⏳ | 방 목록·unread·ensure room |
+| `faq-store.ts` | `faq_items` | ⏳ | FAQ CRUD·공개 조회 |
+| `admin/lesson-operations-store.ts` | `lessons`, `enrollments` | ⏳ | 운영 센터 조치 |
+| `admin/admin-lesson-operation-log-store.ts` | `admin_lesson_operation_logs` | ⏳ | 주간 로그·undo |
+| `admin/admin-review-store.ts` | (여러 큐) | ⏳ | 검토 센터 4탭 |
+| `admin/admin-review-log-store.ts` | `admin_review_logs` | ⏳ | 검토 처리 로그 |
+| `admin/teacher-application-store.ts` | `teacher_applications` | ⏳ | 선생님 가입 검토 |
+| `admin/student-registration-store.ts` | `student_registration_reviews` | ⏳ | 학생 가입 검토 |
+| `admin/dashboard-settings-store.ts` | `dashboard_settings` | ⏳ | 대시보드 슬로건 |
+| `finance/payroll-finance-store.ts` | `finance_transactions`* | ⏳ | 급여 확정 시 지출 기록 |
+
+\* `session_adjustments`, `finance_transactions` 등은 [`db.md`](./db.md) §4 또는 JSONB(`enrollments.adjustments`)로 흡수 가능.
+
+---
+
+## 2. 구현 범위 밖 (명시적 제외)
+
+프론트에 **UI가 없거나 stub만** 있는 기능 — **DB/API 구현 금지** (UI 추가 전까지).
+
+| 항목 | 현재 상태 | 비고 |
+|------|-----------|------|
+| Zoom / VOOV / 화상 SDK | `videoPlatform` 필드만 | URL·미팅 생성 없음 |
+| PG·카드·위챗페이 | 입금 **신고** + 관리자 **수동 확인**만 | |
+| SMS OTP | 없음 | 이메일 Auth만 (연동 전) |
+| 채팅 **메시지 전송** | 스레드 UI + mock `chatMessages` | rooms/unread만 API ✅ |
+| 채팅 Realtime | 없음 | |
+| Web Push **발송** | `/api/push/send` stub | subscribe API만 존재, **UI 미연동** (TODO) |
+| 관리자 **메시지 방송** | `/admin/messages` UI shell | 버튼 미연동 |
+| `GET /api/admin/finance/summary` | Finance 페이지 client 집계 | 별도 API 없음 |
+| 선생님 **자기 프로필 수정** | `/teacher/profile` → redirect | 관리자만 CRUD |
+| `teacher_availability_exceptions` | UI 없음 | 휴무는 슬롯 Off로 대체 |
+| Edge Function cron (급여 자동 정산 등) | UI 수동 확정 | cron은 Phase 3 |
+
+---
+
+## 3. 아키텍처
 
 ```
-[Client PWA]
-    ↓ HTTPS
-[Next.js App (Tencent Cloud HK)]
-    ├── Route Handlers (/api/*)
-    ├── Server Actions (선택)
-    └── Middleware (auth, locale)
-    ↓
+[Client PWA — student / teacher / admin]
+        ↓ HTTPS
+[Next.js App Router]
+  ├── Pages (프론트 — front.md 참조)
+  └── Route Handlers (/api/*)  ← 본 명세 SSOT
+        ↓
 [Supabase]
-    ├── PostgreSQL + RLS
-    ├── Auth
-    ├── Realtime
-    ├── Storage
-    └── Edge Functions (선택: 급여 계산, Push 발송)
+  ├── PostgreSQL (+ migration 001·002 적용)
+  ├── `@supabase/ssr` createClient (Route Handler CRUD)
+  ├── Auth (profiles.role) — 미연동
+  └── (선택) Realtime — chat Phase 2
 ```
+
+- 별도 Express/Nest 서버 **없음**
+- `pricing_plans` CRUD: Route Handler → `pricing-plans/repository.ts` → Supabase (anon key, **RLS 미적용 시 주의**)
+- Service Role Key: 향후 admin-only mutation·RLS bypass용 (현재 pricing CRUD는 `@supabase/ssr` 사용)
 
 ---
 
-## 3. 인증·역할
+## 4. 인증 · 역할
 
-### 3.1 Supabase Auth
+### 4.1 UI 진입점 (front.md와 동일)
 
-- 가입 시 `raw_user_meta_data.role`: `student` | `teacher` | `admin`
-- 학생: `country` (KR | CN), `locale`, 설문 결과
-- 선생님: **자가 회원가입** → `teachers.status = pending` → **관리자 승인 후 `active`** (아래 §3.5)
+| prefix | role | 비고 |
+|--------|------|------|
+| `/[locale]/*`, `/student/*` | `student` | ko / zh-CN |
+| `/teacher/*` | `teacher` + `teachers.status=active` | en |
+| `/admin/*` | `admin` | ko |
 
-### 3.5 선생님 자가 회원가입 · 관리자 승인 (Teacher Self-Registration)
+### 4.2 Supabase Auth (연동 시)
 
-#### 플로우
+- `profiles.role`: `student` | `teacher` | `admin`
+- **학생**: `account_type` (`self` | `guardian`) — 1 account : N `students`(learners)
+- **선생님 가입**: UI 2단계 → `POST /api/teacher/applications` → `POST /api/teachers/profile` → 검토 센터 `teacher_signup`
+- **pending 선생님**: `/teacher/*` 차단, `/teacher/signup/complete` 안내
 
-```
-[선생님] /teacher/signup — Step 1: Registration 폼 제출
-    → POST /api/teacher/signup (또는 dev: localStorage)
-    → applicationId 발급
+### 4.3 API 인증 (연동 시)
 
-[선생님] /teacher/signup/profile?applicationId=… — Step 2: 공개 프로필 작성
-    → POST /api/teachers/profile { applicationId, displayName, bio, specialties[], experienceYears }
-    → teachers 레코드 생성 (status=pending, profile_completed=true)
-    → /teacher/signup/complete 안내
+- Public: `/api/health`, `/api/teachers/public`, `/api/pricing-plans`(GET), `/api/faq`, teacher signup Step1·2
+- 그 외: session 필수 + role 검증 (Route Handler에서 `profiles.role` 확인)
 
-[관리자] /admin/teachers 에서 pending 신청 목록 조회
-    → PATCH /api/admin/teachers/applications/[id]/approve
-        → teachers.status = active
-        → 승인 이메일 / Push (선택)
-    → PATCH .../reject
-        → status = rejected
+---
 
-[관리자] /admin/teacher-profiles — 공개 프로필 CRUD (랜딩·수강신청 연동)
-    → GET/PUT /api/teachers/profile/[id]
-```
+## 5. API 명세 (UI 검증 반영 · 2026-08)
 
-선생님 포탈에는 **Profile 탭 없음**. 프로필 수정은 관리자만 `/admin/teacher-profiles`에서 수행.
-랜딩·수강신청에는 `status=active` **且** `profile_completed=true` 인 선생님만 노출 (`GET /api/teachers/public`).
+> **범례**: ✅ Route Handler 구현 · 🗄️ Supabase 연동 · ⚠️ DDL 001 미포함(in-memory) · 🔇 UI 미호출
 
-#### 회원가입 입력 필드 (프론트 `/teacher/signup`)
+**집계**: Route Handler **39**개 · 프론트 `fetch('/api/…')` **고유 경로 ~35** · DDL 001 테이블 **27**개 중 API 직접 매핑 **24** (+ in-memory 전용 3)
 
-| 필드 | JSON key | 필수 | 검증 | 비고 |
-|------|----------|------|------|------|
-| 이름 | `fullName` | ✅ | 2~100자 | teachers.display_name 초기값 |
-| 생년월일 | `dateOfBirth` | ✅ | ISO date `YYYY-MM-DD`, 만 18세 이상 권장 | |
-| 전화번호 | `phone` | ✅ | E.164 또는 지역 형식 | |
-| 계좌번호 | `bankAccount` | ✅ | 숫자·하이픈, 8~30자 | 급여 지급용, RLS로 본인·admin만 |
-| Facebook Messenger ID | `facebookMessengerId` | ✅ | 1~200자 | URL 또는 프로필 ID |
-| 주소 | `address` | ✅ | 1~500자 | |
-| 이메일 | `email` | ✅ | email 형식, unique | Supabase Auth login |
-| 비밀번호 | `password` | ✅ | min 8자 | Auth에만 저장, DB 평문 금지 |
+### 5.1 Public · 공통
 
-#### API (추후 구현)
+| Method | Path | UI | DB | Query / Response |
+|--------|------|-----|-----|------------------|
+| GET | `/api/health` | — | — | `{ ok }` — §5.7 |
+| GET | `/api/teachers/public` | 🔇 SSR 대체 | `teachers` | `{ teachers[] }` — 랜딩은 RSC `getPublicTeachers()` |
+| GET | `/api/pricing-plans` | `PricingSection`, `usePricingPlans` | 🗄️ `pricing_plans` | `active=true?` → `{ plans[] }` |
+| POST | `/api/pricing-plans` | `/admin/pricing` | 🗄️ | Upsert fields → `{ plan }` |
+| GET/PATCH/DELETE | `/api/pricing-plans/[id]` | admin pricing | 🗄️ | PATCH/DELETE; GET 🔇 |
+| GET | `/api/faq` | `StudentFaqPage` | ⚠️ `faq_items` | `{ items[] }` published |
+| POST | `/api/push/subscribe` | 🔇 TODO | `push_subscriptions` | stub — §5.7 |
 
-| Method | Path | Auth | 설명 |
-|--------|------|------|------|
-| POST | `/api/teacher/signup` | public | 가입 신청. Auth user + pending teacher 생성 |
-| GET | `/api/teacher/signup/status` | teacher | 본인 신청 상태 (`pending` / `approved` / `rejected`) |
-| GET | `/api/admin/teachers/applications` | admin | pending 포함 전체 신청 목록 |
-| GET | `/api/admin/teachers/applications/[id]` | admin | 신청 상세 |
-| PATCH | `/api/admin/teachers/applications/[id]/approve` | admin | 승인 → `teachers.status=active`, 시급 등 설정 body 허용 |
-| PATCH | `/api/admin/teachers/applications/[id]/reject` | admin | 거절. body: `{ reason?: string }` |
+> **제거·통합 후보** (프론트 미사용)
+>
+> | Path | 사유 |
+> |------|------|
+> | `GET /api/teachers/profile?scope=public` | `/api/teachers/public` 중복 |
+> | `GET /api/teacher/applications` (목록) | 검토는 `/api/admin/reviews` |
+> | `GET /api/pricing-plans/[id]` | 목록 API만 사용 |
+> | `GET /api/enrollments/[id]` | `?studentId=` 목록으로 대체 |
 
-#### Step 2 — 공개 프로필 (회원가입 직후 `/teacher/signup/profile`)
+### 5.2 학생 · 계정
 
-| 필드 | JSON key | 필수 | 비고 |
-|------|----------|------|------|
-| 표시 이름 | `displayName` | ✅ | 랜딩·수강신청에 노출 |
-| 소개 | `bio` | ✅ | |
-| 전문 분야 | `specialties` | ✅ | 복수 선택. 아래 고정 목록 |
-| 경력(년) | `experienceYears` | ✅ | ≥ 0 |
+| Method | Path | UI | DB (목표) | Body / Query |
+|--------|------|-----|-----------|--------------|
+| POST | `/api/student/account` | signup | `profiles`, `students` | `accountType`, `fullName`, `email`, `phone`, `country`, learner fields |
+| GET | `/api/student/account` | 전역 `ActiveLearnerContext` | ↑ | `{ account, learners[], activeLearnerId }` |
+| PATCH | `/api/student/account` | `switch_learner`, **book_trial** | ↑ + `lessons` | `action` 또는 survey fields |
+| POST | `/api/student/learners` | `/student/learners/new` | `students` | `fullName`, `englishName`, `dateOfBirth` |
+| PATCH | `/api/student/profile` | onboarding, `EnrollmentFlow` trial | ↑ | **deprecated** — `account`와 동일 계약, 신규 코드는 `account` 사용 |
 
-**Specialties (multi-select, 고정 목록)**
-
-`Beginners`, `Adult`, `Phonics`, `Business`, `Debate`, `IELTS Speeking`, `Storytelling`, `Patient`, `Energetic`, `Encouraging`, `Friendly`, `Interactive`, `Detail-Oriented`, `Academic`, `Interview Prep`
-
-| Method | Path | Auth | 설명 |
-|--------|------|------|------|
-| POST | `/api/teachers/profile` | public (applicationId) | 가입 Step 2 프로필 저장 |
-| GET | `/api/teachers/profile` | admin | 전체 선생님 프로필 목록 |
-| GET | `/api/teachers/profile?scope=public` | public | active + profile_completed 목록 |
-| GET | `/api/teachers/profile/[id]` | admin | 단일 프로필 |
-| PUT | `/api/teachers/profile/[id]` | admin | 프로필 수정 (status, hourlyRatePhp 포함) |
-
-**POST `/api/teachers/profile` 요청 예시**
+**`book_trial` (PATCH account 또는 profile)**
 
 ```json
 {
-  "applicationId": "uuid",
-  "displayName": "Maria Santos",
-  "bio": "10 years ESL with kids and adults…",
-  "specialties": ["Beginners", "Phonics", "Friendly"],
-  "experienceYears": 10,
-  "email": "maria@email.com",
-  "fullName": "Maria Santos"
+  "action": "book_trial",
+  "scheduledAt": "2026-08-08T10:00:00+09:00",
+  "teacherId": "uuid",
+  "teacherName": "Sarah Mitchell",
+  "planId": "uuid",
+  "sessionMinutes": 20
 }
 ```
 
-**POST `/api/teacher/signup` 요청 예시**
+> `planId` = Supabase `pricing_plans.id`. in-memory enrollment 시드 `plan-1` 등과 **불일치**.
+
+- DB: `lessons` 1건 (`is_trial`, `duration_minutes`, `student_id`, `teacher_id`, `scheduled_at`)
+- 슬롯: `teachers_weekly_availability` + in-memory reserve (`teacher-booked-slots`)
+
+### 5.3 수강 · 결제
+
+| Method | Path | UI | DB (목표) | Body / Query |
+|--------|------|-----|-----------|--------------|
+| GET | `/api/enrollments` | `EnrollmentDashboard`, admin | `enrollments` | `studentId?` |
+| POST | `/api/enrollments` | `EnrollmentFlow` | ↑ + `payments` | 신규: `planId`, `teacherId`, `preferredSlotTime`, `depositorName`, `learnerId?` / 재수강: `renewFromEnrollmentId` |
+| GET | `/api/enrollments/[id]` | — | `enrollments` | (미사용) `{ enrollment }` |
+| PATCH | `/api/enrollments/[id]` | admin 학생상세, 검토센터 | ↑ | `confirm_payment` \| `reject_payment` |
+| PATCH | `/api/enrollments/[id]/sessions` | `EnrollmentSessionEditor` | `enrollments`, `lessons`, `session_adjustments` JSONB | §6.3 |
+
+**결제 플로우**
+
+1. `POST /api/enrollments` → `status=pending_payment`, `payment_status=reported`
+2. `PATCH confirm_payment` → `active`, `scheduleLessonsForConfirmedEnrollment()` → `lessons` N건 생성
+3. 검토 센터 `payment_activation` / `activate` → 동일
+
+### 5.4 학습 · 보강
+
+| Method | Path | UI | DB (목표) | Query / Body |
+|--------|------|-----|-----------|--------------|
+| GET | `/api/learning/feedback` | `LearningResultsHub` | `lesson_feedbacks` | `studentId` (required) |
+| POST | `/api/learning/feedback` | teacher feedback pages | ↑ + `lessons` | body → feedback; `lessonId` 시 `status=completed` |
+| PATCH | `/api/learning/feedback` | Learning read | `lesson_feedbacks.read_at` | `?id=&action=read` |
+| GET | `/api/learning/reports` | Learning, `MonthlyGrowthReportEditor` | `monthly_growth_reports` | `studentId` \| `teacherId` |
+| POST | `/api/learning/reports` | teacher reports | ↑ | 5필드 + `month`, `studentId`, `teacherId` |
+| PATCH | `/api/learning/reports` | Learning read | `monthly_growth_reports.read_at` | `?id=&action=read` |
+| GET | `/api/lessons/reschedule` | My Lessons hubs, `RescheduleProgressPanel` | `lesson_reschedule_requests` | `studentId` \| `teacherId` (+ `makeupRemaining`) |
+| POST | `/api/lessons/reschedule` | `RescheduleRequestForm` | ↑ + `lessons` | `lessonId`, `proposedScheduledAt`, `initiator`, `reason?` |
+| PATCH | `/api/lessons/reschedule` | `RescheduleProgressPanel`, 검토센터 | ↑ | `{ id, action: approve\|reject\|cancel, role }` |
+
+> `GET ?scope=all` — Route Handler에만 존재, **UI 미호출**. admin 검토는 `GET /api/admin/reviews` 스냅샷 사용.
+
+### 5.5 선생님
+
+| Method | Path | UI | DB (목표) | Query / Body |
+|--------|------|-----|-----------|--------------|
+| GET | `/api/teacher/availability` | availability page, operations, (optional) enrollment | `teachers_weekly_availability` | `teacherId`; `planDays`+`sessionMinutes` → `{ openSlots }` |
+| PUT | `/api/teacher/availability` | availability, `EnrollmentFlow` reserve | ↑ | `action`: `slots`\|`toggle`\|`copy`\|`reserve` (+ `sessionMinutes`, `planDays`) |
+| GET | `/api/teacher/lessons` | My Lessons, Schedule, student hub | `lessons` | default hub; `scope=all`; `scope=student&studentId=`; `timeZone` |
+| GET | `/api/teacher/lessons/[id]` | lesson detail, feedback | ↑ + `lesson_feedbacks` | `{ lesson, display, needsFeedback, feedback }` |
+| PATCH | `/api/teacher/lessons/[id]` | feedback page absent | `lessons` | `mark_student_absent` |
+| GET/PUT | `/api/teacher/student-context` | `TeacherLessonDetailCard` | `teacher_student_context` | `studentId`, `teacherId`; PUT: textbook, videoPlatform, specialNotes |
+| GET | `/api/teacher/salary` | `TeacherSalaryDashboard` | `teacher_salary_statements`, `salary_settings` | `teacherId`; `month` → 단월 명세 |
+| GET | `/api/teacher/feedback` | `TeacherFeedbackHistory` | `lesson_feedbacks` | `teacherId`, `studentId?`, `month?`; `format=csv` |
+| GET | `/api/teacher/applications` | signup profile, admin application detail | *(in-memory)* `teacher_applications`† | `?id=` → 단건; 목록은 UI 미사용 |
+| POST | `/api/teacher/applications` | signup Step1 | ↑ | 개인정보 필드 |
+| GET/PATCH | `/api/chat/rooms` | chat list, bells | `chat_rooms` | `role`; PATCH: `action=read`\|`readAll`, `id` |
+
+† `teacher_applications` — **DDL 001 미포함**, in-memory only. Supabase 이전 시 migration 추가 필요.
+
+**EnrollmentFlow 슬롯**: Step 2는 클라이언트 `useTeacherOpenSlots`(in-memory). Step 3 trial 후 `PUT … action=reserve`만 API 호출.
+
+### 5.6 관리자
+
+| Method | Path | UI | DB (목표) | Query / Body |
+|--------|------|-----|-----------|--------------|
+| GET/PATCH | `/api/admin/reviews` | `AdminReviewCenter`, application detail | `admin_review_logs` + 큐 stores | PATCH: § 아래 |
+| GET | `/api/admin/lessons` | operations, today, session editor | `lessons` | `teacherId?`, `studentId?`, `from?`, `to?`; **`scheduledAt`** → `{ teachers[] }` 대체 후보 |
+| GET/PATCH | `/api/admin/lessons/[id]` | `useAdminLessonModal` | `lessons`, `enrollments`, logs | GET: `{ lesson, availableTeachers }`; PATCH: §6.4 |
+| GET/POST | `/api/admin/lessons/bulk-reassign` | `AdminOperationsCenter` | `lessons`, `enrollments` | GET: preview; `enrollmentId`+`toTeacherId` → slots; POST: transfers |
+| GET | `/api/admin/lessons/operation-logs` | log panel | `admin_lesson_operation_logs` | `teacherId`, `weekStart` (required) |
+| POST | `/api/admin/lessons/operation-logs/[id]/undo` | undo | ↑ | — |
+| GET/PATCH | `/api/admin/teacher-salary` | `AdminTeacherSalaryOverview` | `teacher_salary_statements`, `teacher_bonuses`, `salary_settings`, `teachers` | § 아래 |
+| GET/PATCH | `/api/admin/teachers`, `[id]` | teachers list/detail | `teachers` | `[id]` PATCH: `status` only |
+| GET | `/api/admin/students/[id]` | student detail | `students`, `enrollments`, `lessons`, … | aggregate DTO |
+| GET/PATCH | `/api/admin/dashboard-settings` | `AdminDashboardSlogan` | *(in-memory)* `dashboard_settings`† | `{ slogan }` |
+| GET/POST | `/api/admin/faq` | `AdminFaqManager` | *(in-memory)* `faq_items`† | CRUD fields |
+| PATCH/DELETE | `/api/admin/faq/[id]` | FAQ edit/delete | ↑ | — |
+| GET/POST/PUT | `/api/teachers/profile`, `[id]` | teacher-profiles | `teachers` | admin list; POST signup step2; `[id]` PUT |
+
+† FAQ·dashboard·teacher_applications — **migration 001에 없음**. Phase 1b DDL 또는 JSONB 확장 필요.
+
+**PATCH `/api/admin/reviews`**
+
+| category | action | UI | DB side-effects |
+|----------|--------|-----|-----------------|
+| `reschedule` | `approve` / `reject` | 보강 검토 | `lesson_reschedule_requests`, `lessons.scheduled_at` |
+| `teacher_signup` | `approve` / `reject` | 선생님 가입 | `teachers.status`, application store |
+| `student_signup` | `confirm` / `reject` | 학생 가입 | registration review store |
+| `payment_activation` | `activate` / `reject` | 입금 확인 | `enrollments`, `payments`, `lessons` schedule |
+
+**PATCH `/api/admin/teacher-salary` actions** (UI 사용)
+
+| action | UI |
+|--------|-----|
+| `confirm` / `finalize` | 월별 명세 확정 |
+| `finalize_all` | 당월 일괄 확정 |
+| `mark_processing` | processing 전환 |
+| `mark_php_paid` | PHP 지급 완료 |
+| `complete` | KRW 이체 완료 (`krwTransferAmount`) |
+| `add_adjustment` | 수기 가감 |
+| `update_bonus_policy` | 보너스 정책 → `salary_settings` |
+| `update_hourly_rate` | `teachers.hourly_rate_php` |
+| `preview_bulk_hourly_rate` / `bulk_update_hourly_rate` | 일괄 시급 |
+
+**GET `/api/admin/teacher-salary`**: `month`, `teacherId`, `format=csv` (CSV 다운로드)
+
+### 5.7 인프라 (UI 비연동)
+
+| Method | Path | 용도 |
+|--------|------|------|
+| GET | `/api/health` | 배포·모니터링 |
+| POST | `/api/push/subscribe` | PWA (stub, UI TODO) |
+| POST | `/api/push/send` | 발송 stub — **구현 범위 밖** |
+
+---
+
+## 5.8 API ↔ DB 매핑 검증 (2026-08)
+
+| API 영역 | Primary tables | DDL 001 | 런타임 |
+|----------|----------------|---------|--------|
+| pricing-plans | `pricing_plans` | ✅ | Supabase |
+| student/account | `profiles`, `students` | ✅ | in-memory |
+| enrollments | `enrollments`, `payments` | ✅ | in-memory |
+| lessons (all portals) | `lessons` | ✅ | in-memory |
+| availability | `teachers_weekly_availability` | ✅ | in-memory |
+| student-context | `teacher_student_context` | ✅ | in-memory |
+| learning | `lesson_feedbacks`, `monthly_growth_reports` | ✅ | in-memory |
+| reschedule | `lesson_reschedule_requests` | ✅ | in-memory |
+| salary | `teacher_salary_statements`, `salary_settings`, `teacher_bonuses`, `teacher_payroll_penalties` | ✅ | in-memory |
+| chat rooms | `chat_rooms` | ✅ | in-memory (messages mock) |
+| admin ops logs | `admin_lesson_operation_logs` | ✅ | in-memory |
+| admin reviews | `admin_review_logs` | ✅ | in-memory |
+| teachers profile | `teachers` | ✅ | in-memory |
+| **faq** | `faq_items` | ✅ 003 | in-memory |
+| **dashboard slogan** | `dashboard_settings` | ✅ 003 | in-memory |
+| **teacher applications** | `teacher_applications` | ✅ 003 | in-memory |
+| **student registration review** | `student_registration_reviews` | ❌ | in-memory |
+
+**공개 선생님 목록**: 랜딩·수강신청·`/teachers` 페이지는 **Server Component**에서 `getPublicTeachers()` 직접 호출. `GET /api/teachers/public`은 Route Handler로 존재하나 **클라이언트 fetch 미사용** — 모바일/PWA 전환 시 사용.
+
+---
+
+## 6. 핵심 비즈니스 로직 (UI 연동분)
+
+### 6.1 20분 그리드 · 다중 세션 길이
+
+| 상수 | 값 | UI |
+|------|-----|-----|
+| `SLOT_BLOCK_MINUTES` | 20 | Availability `:00/:20/:40` |
+| `session_minutes` | 20 / 40 / 60 … | 관리자 pricing CRUD |
+| `requiredBlocks` | `ceil(session_minutes / 20)` | 수강신청·예약 |
+
+- **연속 블록**: `slot-continuity.ts` — `canBookSessionAt`, `getValidSessionStartTimes`
+- **충돌 검사**: `isTeacherSlotFree(teacherId, scheduledAt, ignoreLessonId?, sessionMinutes)`
+- **예약**: `reserveTeacherWeeklySlotsForPlan(teacherId, planDays, start, studentName, sessionMinutes)` — N블록 일괄
+
+### 6.2 수강 신청 · 체험 · 재수강
+
+```
+플랜 선택 → 선생님 정렬( openSlotCount ) → TeacherSlotPicker (연속 블록)
+  → (체험) book_trial → 결제 Step
+  → POST enrollments → 관리자 confirm → scheduleLessonsForConfirmedEnrollment
+재수강: renewFromEnrollmentId — plan/teacher/preferredSlotTime 유지
+```
+
+### 6.3 관리자 수업 횟수 조정 (`EnrollmentSessionEditor`)
+
+**PATCH** `/api/enrollments/[id]/sessions`
 
 ```json
 {
-  "fullName": "Maria Santos",
-  "dateOfBirth": "1990-05-12",
-  "phone": "+639171234567",
-  "bankAccount": "1234-5678-9012",
-  "facebookMessengerId": "maria.santos.fb",
-  "address": "Quezon City, Metro Manila, Philippines",
-  "email": "maria@email.com",
-  "password": "securePass123"
+  "action": "adjust_sessions",
+  "delta": 2,
+  "reason": "서비스 보상 2회",
+  "adminName": "관리자"
 }
 ```
 
-**성공 응답 (201)**
+| delta | 동작 |
+|-------|------|
+| **+N** | `sessions_remaining/total` +N · 마지막 예정 **다음**부터 N회 `generateEnrollmentLessons` |
+| **−N** | `sessions_remaining/total` −N · **마지막 N개** future lesson 삭제 |
+| 0 / invalid | `400 invalid_delta` |
+| 스케줄 실패 | `409` + `schedule_failed` (부분 생성 rollback) |
 
-```json
-{
-  "applicationId": "uuid",
-  "status": "pending",
-  "message": "Application submitted. Admin will review within 1-2 business days."
-}
-```
+- UI: ± draft → 사유 입력 → 확인 Dialog → 적용
+- 레거시: `sessionsRemaining`/`sessionsTotal` 직접 PATCH (UI 미사용, 호환만)
 
-**에러 코드**
+### 6.4 관리자 수업 운영 (`/admin/operations`)
 
-| code | HTTP | 설명 |
-|------|------|------|
-| `email_taken` | 409 | 이미 등록된 이메일 |
-| `validation_error` | 400 | Zod 검증 실패 |
-| `signup_disabled` | 503 | 관리자가 가입 중단 설정 시 |
+| PATCH action | UI 효과 |
+|--------------|---------|
+| `assign_substitute` | 대체 선생님, `original_teacher_id` 보존 |
+| `teacher_no_show` | 원 수업 cancelled · 보강 생성 · enrollment **+1** · 패널티 |
+| `cancel_unpaid` | lesson 삭제 · enrollment **−1** |
+| `reschedule` | `scheduled_at` 변경 (20분 그리드 snap) |
 
-#### DB 스키마 (추가)
+- 로그: `admin_lesson_operation_logs` (`weekStart` = KST 월요일)
+- **Undo**: `teacher_no_show`, `cancel_unpaid` 만
 
-```sql
--- teachers 테이블 확장 (또는 teacher_profiles)
-ALTER TABLE teachers ADD COLUMN IF NOT EXISTS
-  date_of_birth date,
-  phone text,
-  bank_account text,          -- 암호화 컬럼 권장 (pgsodium)
-  facebook_messenger_id text,
-  address text,
-  application_status text DEFAULT 'pending'
-    CHECK (application_status IN ('pending','approved','rejected'));
+### 6.5 보강 · 완료 · 급여
 
--- 선택: 신청 이력 분리
-CREATE TABLE teacher_applications (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES auth.users(id),
-  full_name text NOT NULL,
-  date_of_birth date NOT NULL,
-  phone text NOT NULL,
-  bank_account text NOT NULL,
-  facebook_messenger_id text NOT NULL,
-  address text NOT NULL,
-  status text NOT NULL DEFAULT 'pending',
-  rejected_reason text,
-  reviewed_by uuid REFERENCES auth.users(id),
-  reviewed_at timestamptz,
-  created_at timestamptz DEFAULT now()
-);
-```
+- **보강**: 학생 월 2회 (`cancelled` 제외), pending 중복 불가 — `reschedule-store`
+- **피드백 POST** → `completeLesson` → `status=completed` → 급여 `duration_minutes` 반영
+- **mark_student_absent** → `student_absent=true`, completed, 피드백 생략
+- **급여**: `estimated` → `processing` → `paid` — 관리자 `/admin/teacher-salary`
 
-#### 로그인 제한
+### 6.6 선생님 가입 (UI 2단계)
 
-- `teachers.status !== 'active'` (pending / rejected / inactive) 인 계정은 **POST /auth/login 후에도** `/teacher/*` 접근 차단
-- middleware: session role=teacher 이면서 `teachers.status=pending` → `/teacher/signup/complete` 또는 "승인 대기" 전용 페이지로 리다이렉트
-
-#### 프론트엔드 (현재 MVP)
-
-| 경로 | 상태 |
-|------|------|
-| `/teacher/signup` | UI 완료. 제출 시 **localStorage** 임시 저장 (API 연동 전) |
-| `/teacher/signup/complete` | 승인 대기 안내 |
-| `/admin/teachers` | localStorage 기반 pending 목록·승인/거절 UI (mock) |
-| `/admin/teachers/applications/[id]` | 신청 상세 |
-
-> API 구현 시 localStorage 로직 제거하고 위 엔드포인트로 교체.
-
-### 3.2 JWT Custom Claims (선택)
-
-- `app_metadata.role` 로 RLS 정책과 middleware 역할 검증 통일
-
-### 3.3 API 인증
-
-- 모든 `/api/*` (public 제외): Supabase session 또는 service role (내부 cron만)
-- `createServerClient` (@supabase/ssr) 로 쿠키 기반 세션
-
-### 3.4 역할별 진입점·미들웨어
-
-| 경로 prefix | 필수 role | 미인증 시 리다이렉트 |
-|-------------|-----------|---------------------|
-| `/[locale]/*`, `/student/*` | `student` (portal만) | `/[locale]/login` |
-| `/teacher/login` | — (public) | — |
-| `/teacher/signup` | — (public) | — |
-| `/teacher/signup/complete` | — (public) | — |
-| `/teacher/*` | `teacher` + **status=active** | `/teacher/login` 또는 승인 대기 페이지 |
-| `/admin/login` | — (public) | — |
-| `/admin/*` | `admin` | `/admin/login` |
-
-- `next-intl` middleware: **`ko`, `zh-CN`만** — `/teacher`, `/admin`, `/student`, `/api`는 제외
-- `/` 접속: `Accept-Language`에 `zh` 포함 → `/zh-CN`, 그 외 `/ko`
-- **`/en` 및 영문 랜딩 미제공** — 잘못된 locale → 404
-- 선생님·관리자 계정은 Supabase Auth `role` claim으로 구분; 학생 가입 플로우와 **분리**
+1. `POST /api/teacher/applications` — 개인정보 (UI에서 password 수집, **Auth 연동 전 미저장**)
+2. `POST /api/teachers/profile` — `applicationId`, 공개 프로필
+3. 검토 센터 `teacher_signup` → `approve` → `teachers.status=active`
 
 ---
 
-## 4. API 엔드포인트
+## 7. DB 구현 범위 (UI 필요 테이블)
 
-> **MVP (2026-08)**: 아래 ✅ 표시는 Route Handler + in-memory store로 **구현 완료**된 항목이다. Supabase 연동 시 동일 계약(contract)을 유지한다.
+[`db.md`](./db.md) migration `001` 기준. **§5.8** API↔DB 검증표 참조.
 
-### 4.1 Public · 공통
+### 7.1 DDL 001 포함 (Core)
 
-| Method | Path | 설명 | MVP |
-|--------|------|------|-----|
-| GET | `/api/health` | 헬스체크 | ✅ |
-| GET | `/api/teachers/public` | 랜딩용 공개 선생님 목록 | ✅ |
-| GET/POST | `/api/teachers/profile` | Step2 프로필·관리자 목록 | ✅ |
-| GET/PUT | `/api/teachers/profile/[id]` | 관리자 프로필 CRUD | ✅ |
-| GET | `/api/pricing-plans` | 요금제 목록 | ✅ |
-| POST/PUT/DELETE | `/api/pricing-plans/[id]` | 요금제 CRUD (admin) | ✅ |
-| GET/PATCH | `/api/chat/rooms` | 채팅방 목록·읽음·`studentId`로 room ensure | ✅ |
-| POST | `/api/push/subscribe` | Web Push 구독 | ✅ |
-| POST | `/api/push/send` | Push 발송 (내부) | ✅ |
+| 테이블 | UI | API |
+|--------|-----|-----|
+| `profiles`, `students` | account, signup | `/api/student/*` |
+| `teachers` | 공개·포털·급여 | `/api/teachers/*`, `/api/teacher/*`, `/api/admin/teachers/*` |
+| `pricing_plans` | 랜딩·수강·pricing | `/api/pricing-plans` 🗄️ |
+| `enrollments`, `payments` | 수강 전반 | `/api/enrollments*` |
+| `lessons` | Schedule·Operations | `/api/teacher/lessons`, `/api/admin/lessons*` |
+| `teachers_weekly_availability` | Availability | `/api/teacher/availability` |
+| `teacher_student_context` | Lesson detail | `/api/teacher/student-context` |
+| `lesson_feedbacks`, `monthly_growth_reports` | Learning | `/api/learning/*` |
+| `lesson_reschedule_requests` | Reschedule | `/api/lessons/reschedule` |
+| `teacher_salary_statements`, `salary_settings`, `teacher_bonuses`, `teacher_payroll_penalties` | Salary | `/api/teacher/salary`, `/api/admin/teacher-salary` |
+| `admin_lesson_operation_logs`, `admin_review_logs` | Operations, Review | `/api/admin/lessons/operation-logs*`, `/api/admin/reviews` |
+| `chat_rooms` | Chat list | `/api/chat/rooms` (messages mock) |
 
-### 4.2 학생 (role: student)
+### 7.2 UI 사용 · DDL 003 포함 (✅ migration 003)
 
-| Method | Path | 설명 | MVP |
-|--------|------|------|-----|
-| POST | `/api/student/account` | 계정·첫 learner 등록 | ✅ |
-| GET | `/api/student/account` | account + learners + activeLearner | ✅ |
-| PATCH | `/api/student/account` | switch_learner, book_trial, survey | ✅ |
-| POST | `/api/student/learners` | 자녀(learner) 추가 | ✅ |
-| GET/PATCH | `/api/student/profile` | (legacy) active learner 프로필 | ✅ |
-| GET | `/api/enrollments` | 수강 목록 | ✅ |
-| POST | `/api/enrollments` | 입금 신고 → pending enrollment | ✅ |
-| PATCH | `/api/enrollments/[id]` | 관리자 입금 확인·거절 | ✅ |
-| PATCH | `/api/enrollments/[id]/sessions` | 잔여 회차 조정 (admin) | ✅ |
-| GET | `/api/teacher/lessons?scope=student&studentId=` | 내 수업 목록 | ✅ |
-| GET/POST/PATCH | `/api/learning/feedback?studentId=` | 피드백 조회·읽음 | ✅ |
-| GET/POST/PATCH | `/api/learning/reports?studentId=` | 월 성장 레포트 | ✅ |
-| GET/POST/PATCH | `/api/lessons/reschedule?studentId=` | 보강 요청·승인·취소 | ✅ |
+| 테이블 | UI | API |
+|--------|-----|-----|
+| `faq_items` | FAQ student/admin | `/api/faq`, `/api/admin/faq*` |
+| `dashboard_settings` | Admin slogan | `/api/admin/dashboard-settings` |
+| `teacher_applications` | Signup, review | `/api/teacher/applications`, reviews |
 
-### 4.3 선생님 (role: teacher)
+### 7.3 UI 사용 · DDL 미포함 (⚠️ migration 후보)
 
-| Method | Path | 설명 | MVP |
-|--------|------|------|-----|
-| GET/PUT | `/api/teacher/availability` | 가능 시간 (toggle/copy/reserve) | ✅ |
-| GET | `/api/teacher/lessons` | My Lessons 허브 (next/today/action) | ✅ |
-| GET | `/api/teacher/lessons?scope=all` | 전체 수업 (Schedule 캘린더) | ✅ |
-| GET | `/api/teacher/lessons/[id]` | 수업 상세 + display context | ✅ |
-| GET/PUT | `/api/teacher/student-context` | 교재·Special Notes·ZOOM/VOOV | ✅ |
-| GET | `/api/teacher/salary?month=YYYY-MM` | 월별 급여 명세서 | ✅ |
-| POST | `/api/learning/feedback` | 피드백 작성 → `completeLesson` | ✅ |
-| GET/POST | `/api/learning/reports?teacherId=` | 월 성장 레포트 작성·조회 | ✅ |
-| GET/POST/PATCH | `/api/lessons/reschedule?teacherId=` | 보강 요청·승인·취소 | ✅ |
-| GET | `/api/chat/rooms?role=teacher&studentId=` | 학생별 채팅방 ensure | ✅ |
+| 테이블 (목표) | UI | API |
+|---------------|-----|-----|
+| `student_registration_reviews` | Review center | `/api/admin/reviews` student_signup |
 
-### 4.4 관리자 (role: admin)
+### 7.4 선택 · Phase 2 (UI stub)
 
-| Method | Path | 설명 | MVP |
-|--------|------|------|-----|
-| GET/PATCH | `/api/admin/teacher-salary` | 급여 명세 조회·상태 변경·정산 확정 | ✅ |
-| GET | `/api/lessons/reschedule?scope=all` | 전체 보강 진행 현황 | ✅ |
-| GET | `/api/teachers/profile` | 선생님 프로필 목록 | ✅ |
-| GET/PUT | `/api/teachers/profile/[id]` | 프로필 수정 | ✅ |
-| GET/POST/PATCH | `/api/pricing-plans` | 요금제 관리 | ✅ |
-| PATCH | `/api/enrollments/[id]/sessions` | 회차 가감 | ✅ |
-| GET | `/api/admin/lessons` | 관리자 수업 목록 | ✅ |
-| GET/PATCH | `/api/admin/lessons/[id]` | 수업 조치 (대체·노쇼·취소·변경) | ✅ |
-| GET/POST | `/api/admin/lessons/bulk-reassign` | enrollment 일괄 이관 preview·실행 | ✅ |
-| GET | `/api/admin/lessons/operation-logs?teacherId&weekStart` | 수업 조치 로그 (주간) | ✅ |
-| POST | `/api/admin/lessons/operation-logs/[id]/undo` | 노쇼·무급취소 되돌리기 | ✅ |
-| GET/PATCH | `/api/admin/reviews` | 검토 센터 snapshot·처리 | ✅ |
+| 테이블 | 조건 |
+|--------|------|
+| `chat_messages` | 채팅 **전송** UI 구현 시 |
+| `push_subscriptions` | Push subscribe UI 연동 시 |
 
-### 4.5 추후 구현 (목표 아키텍처)
+### 7.4 구현하지 않음
 
-| Method | Path | 설명 |
-|--------|------|------|
-| POST | `/api/teacher/signup` | 선생님 자가 가입 (§3.5) |
-| GET/PATCH | `/api/admin/teachers/applications/[id]/*` | 가입 승인·거절 |
-| POST | `/api/student/payments/report` | 입금 완료 신고 |
-| PATCH | `/api/admin/students/[id]/payment` | 입금 확인 |
-| GET | `/api/admin/finance/summary` | 재무 집계 |
-| POST | `/api/admin/messages/broadcast` | 대상별 메시지/푸시 |
+- `teacher_availability_exceptions` — UI 없음
+- `admin_broadcasts` — `/admin/messages` 미연동
+- `GET /api/admin/finance/summary` — Finance client 집계
+- PG·카드 결제 테이블
+- `POST /api/push/send` — 발송 stub
 
 ---
 
-## 5. 핵심 비즈니스 로직
-
-### 5.0 계정(account_holder) vs 수강생(learner)
-
-| 개념 | DB | MVP store | 설명 |
-|------|-----|-----------|------|
-| 로그인 계정 | `profiles` | `AccountHolder` | email, phone, full_name(입금자) |
-| 수강생 | `students` | `Learner` | english_name, trial_used, 설문 |
-| 관계 | 1:N | `account-store` | guardian → 자녀 여러 명 |
-
-- **본인 수강** (`account_type=self`): account 1명 = learner 1명 (동일 이름 가능)
-- **자녀 수강** (`account_type=guardian`): 부모 account + learner(들)
-- API·UI는 **`activeLearnerId`** 로 My Lessons / Learning / Chat / Enrollment 스코프
-- `POST /api/enrollments`: `studentId`=learner.id, `depositorName`=account.full_name
-
----
-
-**플로우 (MVP 구현)**
-
-1. 회원가입 → `trial_used = false`, `payment_status = pending`
-2. 온보딩 설문 → `/student/enrollment/new`
-3. 플랜·선생님·**20분 타임슬롯** 선택 → `PATCH /api/student/profile` `{ action: "book_trial" }`
-   - `lessons` 에 `is_trial=true`, `duration_minutes=20` 체험 수업 생성
-   - availability `reserve` 로 슬롯 마감
-4. 결제 안내 화면 → 학생 입금 후 `POST /api/enrollments` (입금 신고)
-   - `enrollments.status = pending_payment`, `payment_status = reported`
-5. 관리자 `PATCH /api/enrollments/[id]` `{ action: "confirm_payment" }`
-   - `enrollments.status = active`, `payment_status = confirmed` → **신청 완료**
-
-### 5.2 수강 신청·결제
-
-**수업 시간 정책 (통일)**
-
-- 모든 수업: **20분 세션**, **20분 그리드** (`SLOT_BLOCK_MINUTES=20`, `LESSON_MINUTES=20`, `:00/:20/:40`)
-- 요금제 `session_minutes` = 20 (관리자 CRUD로 20/25/30/40 등 가변; `ceil(session_minutes/20)` 슬롯 점유)
-
-**요금제 (4종, MVP seed)**
-
-| 이름 | 요일 | 회차 | KRW | CNY |
-|------|------|------|-----|-----|
-| 주5회(월~금) 20분 | Mon–Fri | 20 | 87,000 | 480 |
-| 월·수·금 20분 | Mon, Wed, Fri | 12 | 90,000 | 490 |
-| 화·목 20분 | Tue, Thu | 8 | 64,000 | 340 |
-| 주말(토·일) 20분 | Sat, Sun | 8 | 64,000 | 340 |
-
-1. 학생이 플랜·선생님·슬롯 선택 → (체험 시) trial lesson 생성
-2. 입금 안내 → 학생 "입금 완료" 신고 → `POST /api/enrollments`
-3. 관리자 입금 확인 → `confirm_payment` → enrollment `active`
-
-**재수강 (`renewFromEnrollmentId`)**
-
-- `POST /api/enrollments` body에 `renewFromEnrollmentId` 포함
-- `createRenewalEnrollment()`: 이전 enrollment의 plan·teacher·`preferredSlotTime`·`preferredSlotDay` 유지
-- 입금 확인 시 `scheduleLessonsForConfirmedEnrollment` + `reserveTeacherWeeklySlotsForPlan`
-
-**다중 슬롯 점유**
-
-- `session_minutes` > 20 인 플랜: `ceil(session_minutes / SLOT_BLOCK_MINUTES)` 개의 연속 20분 블록 점유
-- `occupiedSlotStarts()`, `isTeacherSlotFree()` — 예약·충돌 검사 시 전체 블록 검증
-
-### 5.3 보강(일정 변경)
-
-**상태 (`reschedule_status`)**
-
-| 값 | 설명 |
-|----|------|
-| `pending_student_approval` | 선생님 발신 → 학생 승인 대기 |
-| `pending_teacher_approval` | 학생 발신 → 선생님 승인 대기 |
-| `approved` | 승인 완료, `lessons.scheduled_at` 갱신 |
-| `rejected` | 거절, 수업은 원래 일정 유지 |
-| `cancelled` | 요청자가 pending 중 취소, 수업 `scheduled` 복귀 |
-
-**흐름**
-
-| 발신 | 흐름 |
-|------|------|
-| 학생 | POST request → `pending_teacher_approval` → teacher approve/reject |
-| 선생님 | POST request → `pending_student_approval` → student approve/reject |
-
-**API (`/api/lessons/reschedule`)**
-
-| action (PATCH body) | 설명 |
-|---------------------|------|
-| `approve` | 상대방 승인 → `scheduled_at` 갱신, status `approved` |
-| `reject` | 상대방 거절 |
-| `cancel` | **요청자 본인**만 pending 중 취소 |
-
-**제한**
-
-- 학생: `request_month` 기준 월 2회 (`cancelled` 제외)
-- 선생님: 월별 제한 없음
-- pending 중 동일 lesson에 중복 요청 불가
-
-### 5.4 수업 완료·피드백
-
-- `POST /api/learning/feedback` — 피드백 저장 시 `completeLesson(lessonId)` 호출 → `lessons.status: scheduled → completed`
-- 필드: `feedback`, `homework`, `progressPages`(교재 진도 페이지), `topic`(optional)
-- `PATCH /api/teacher/lessons/[id]` — `{ action: "mark_student_absent" }` → `completeLessonAsStudentAbsent` (피드백 없이 완료, `student_absent: true`, 급여 산정 포함)
-- 완료 시 `lesson.duration_minutes` 로 급여 산정용 `teacher_hours` 누적
-
-### 5.5 급여 (월별 명세서)
-
-**MVP**: `teacher-salary-store.ts` — 현재 월은 live estimate, 과거 월은 seeded statement.
-
-**상태 (`salary_payout_status`)**: `estimated` → `processing` → `paid`
-
-**명세서 필드**
-
-```
-baseSalary = totalHours × hourlyRate
-total = baseSalary + perfectAttendanceBonus + quarterlyBonus + otherIncentives - deductions
-```
-
-**API**
-
-| Method | Path | 설명 |
-|--------|------|------|
-| GET | `/api/teacher/salary?month=YYYY-MM` | 선생님 본인 명세서 |
-| GET | `/api/admin/teacher-salary` | 전체 명세 목록 |
-| PATCH | `/api/admin/teacher-salary` | status 변경, live estimate → processing 확정 |
-
-**보너스 정책 (UI Zone 1에 표시)**
-
-- 만근: 25 PHP/시간 × 해당 월 수업 시간
-- 분기: 300h↑ 2,000 / 150~299h 1,300 / ↓150h 700 PHP
-- 기타: 관리자 수동 입력 (`teacher_bonuses`)
-
-### 5.6 재무
-
-**수입**: 학생 `payments` confirmed 금액 (KRW/CNY 통화별)  
-**지출**: 선생님 급여 (PHP → 보고용 KRW 환산은 관리자 입력 환율 또는 고정값)  
-**집계**: 월·분기·년 — materialized view 또는 API aggregation
-
-### 5.7 주간 가능 시간 그리드 (Availability Sheet)
-
-#### 규칙
-
-- 슬롯 단위: **20분** (`:00` / `:20` / `:40` — `SLOT_BLOCK_MINUTES=20`, `normalizeSlotStart`)
-- 수업 구성: **20분 세션** (기본) — 시스템 휴식 없음; 휴식은 선생님이 슬롯 Off
-- **그리드 범위 (저장 기준)**: KST `06:00` ~ `24:00` (마지막 시작 `23:40`)
-- 저장 형식: `teachers_weekly_availability` — `teacher_id`, `day` (Mon–Sun), `start_time` (HH:mm, **KST**)
-- UI 표시:
-  - 선생님 포탈: **PHT (Asia/Manila)** — 그리드 행 라벨
-  - 학생 포탈 (ko): **KST (Asia/Seoul)**
-  - 학생 포탈 (zh-CN): **CST (Asia/Shanghai)**
-- 학생 노출: `GET /api/teacher/availability?teacherId=&planDays=` → **enabled ∧ plan 요일 ∧ NOT booked**
-
-#### 예약(마감) 판정
-
-```
-booked(start) = EXISTS lesson WHERE teacher_id AND status IN (scheduled, reschedule_pending, pending_payment)
-         AND lesson occupies grid block (day, start)
-         -- duration_minutes > 20 이면 occupiedSlotStarts() 로 연속 블록 전체 마감
-```
-
-- 수강 신청·체험 예약 시 해당 주간 슬롯 즉시 reserve → 다른 학생 선택 불가
-- 선생님 Schedule 탭: enabled + booked 오버레이 (추후 UI 재설계)
-
-#### PUT `/api/teacher/availability` actions
-
-| action | body | 설명 |
-|--------|------|------|
-| (default) | `{ slots: { Mon: ["09:00",...], ... } }` | 전체 그리드 저장 |
-| `toggle` | `{ day, startTime }` | 단일 셀 토글 |
-| `copy` | `{ sourceDay, targetDays[] }` | 요일 간 일괄 복사 |
-| `reserve` | `{ day, startTime, studentName?, planDays? }` | 학생 예약 시 마감 |
-
-### 5.8 선생님–학생 컨텍스트 (TeacherStudentContext)
-
-- `GET/PUT /api/teacher/student-context?studentId=&teacherId=`
-- 필드: `textbook`, `videoPlatform` (`ZOOM` | `VOOV`), `specialNotes`
-- 수업 카드·상세에 `buildLessonDisplayContext()` 로 병합 표시
-- 교재·Special Notes: 선생님 UI에서 Edit/Save 패턴으로 인라인 수정
-
-### 5.9 월 성장 레포트 (MonthlyGrowthReport)
-
-| 필드 | UI 라벨 (en) |
-|------|--------------|
-| `lessonsCovered` | What We Covered This Month |
-| `progressMade` | Progress Made |
-| `areasToWorkOn` | Areas to Work On |
-| `nextMonthGoals` | Next Month's Goals |
-| `overallComment` | Teacher's Overall Comment |
-
-- `GET/POST /api/learning/reports?teacherId=` — 선생님 작성·학생별 필터
-- `GET /api/learning/reports?studentId=` — 학생 조회
-- `PATCH ?id=&action=read` — 학생 읽음 처리
-- ~~`sessionsCompleted`, `summary`, `strengths`, `improvements`, `goals`~~ — **폐기** (2026-08)
-
-### 5.10 관리자 수업 운영 (`lesson-operations-store`)
-
-**API**: `GET/PATCH /api/admin/lessons/[id]`, `GET/POST /api/admin/lessons/bulk-reassign`
-
-| PATCH action | 설명 | 부수 효과 |
-|--------------|------|-----------|
-| `assign_substitute` | 대체 선생님 배정 | `originalTeacherId` 보존 |
-| `teacher_no_show` | 선생님 노쇼 | 원 수업 cancelled+`teacherNoShow` · 보강 lesson 생성 · enrollment **+1회** · `applyTeacherNoShowPenalty` |
-| `cancel_unpaid` | 무급 취소 | lesson **삭제** · enrollment **−1회** · 슬롯 Available |
-| `reschedule` | 관리자 일정 변경 | `scheduledAt` 갱신 (20분 그리드 스냅) |
-
-- 모든 조치는 `admin-lesson-operation-log-store`에 기록 (`weekStartKey` = 수업 예정 주 월요일 KST)
-- **Undo** (`POST /api/admin/lessons/operation-logs/[id]/undo`): `teacher_no_show`, `cancel_unpaid` 만 — 보강 삭제·수업 복구·회차·패널티 되돌림
-
-### 5.11 관리자 검토 센터 (`admin-review-store`)
-
-**API**: `GET/PATCH /api/admin/reviews`
-
-| category | action | 대상 |
-|----------|--------|------|
-| `reschedule` | `approve` / `reject` | `LessonRescheduleRequest` |
-| `teacher_signup` | `approve` / `reject` | `TeacherApplication` |
-| `student_signup` | `confirm` / `reject` | `StudentRegistrationReview` |
-| `payment_activation` | `activate` / `reject` | reported enrollment |
-
-- 처리 시 `admin-review-log-store`에 `AdminReviewLogEntry` append
-- GET snapshot: pending 큐 4종 + 카테고리별 최근 로그
-
----
-
-## 6. 채팅
-
-### 6.1 모델
-
-- `chat_rooms`: student_id + teacher_id (enrollment당 1 room)
-- `chat_messages`: room_id, sender_id, body, created_at, read_at
-
-### 6.2 Realtime
-
-- Supabase Realtime `chat_messages` INSERT 구독
-- 새 메시지 → 수신자 Web Push (구독 있을 때)
-
-### 6.3 관리자 메시지
-
-- `admin_broadcasts` + 개별 `chat_messages` (system sender) 또는 Push only
-- Instagram DM 스타일: 동일 thread UI, `sender_role = admin` 표시
-
----
-
-## 7. 알림 (Web Push)
-
-### 7.1 VAPID
-
-- 환경 변수: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
-- Route Handler `POST /api/push/send` — service role, 내부 호출 only
-
-### 7.2 트리거 이벤트
-
-| 이벤트 | 수신자 |
-|--------|--------|
-| payment_request | student |
-| payment_confirmed | student |
-| reschedule_request | teacher / student |
-| reschedule_result | requester |
-| new_chat_message | counterpart |
-| admin_broadcast | target users |
-
-### 7.3 구현
-
-- DB trigger → Supabase Edge Function → web-push 라이브러리  
-  또는 Next.js API + pg_net / cron polling (MVP는 API 직접 호출 허용)
-
----
-
-## 8. Supabase Edge Functions (권장)
-
-| Function | 용도 |
-|----------|------|
-| `calculate-monthly-salary` | cron 월말 정산 |
-| `send-push-notification` | 메시지 큐 처리 |
-| `reset-monthly-reschedule-count` | 매월 1일 학생 보강 카운트 리셋 |
-
----
-
-## 9. Row Level Security (RLS) 요약
+## 8. RLS 요약 (연동 시)
 
 | 테이블 | student | teacher | admin |
 |--------|---------|---------|-------|
 | profiles | own | own | all |
-| teachers | read active | own | all |
-| enrollments | own | assigned | all |
-| lessons | own enrollment | own lessons | all |
-| lesson_feedbacks | read own | write own | all |
-| payments | own | — | all |
-| chat_messages | room member | room member | all |
-| salary_settings | — | — | all |
-| finance_* | — | — | all |
-
-- Service role key는 서버 전용, 클라이언트 노출 금지
+| students | account의 learners | — | all |
+| teachers | read active | own row | all |
+| enrollments | own learners | assigned | all |
+| lessons | own | own teacher_id | all |
+| lesson_feedbacks | read own | write own lessons | all |
+| chat_rooms | member | member | read |
+| teacher_salary_statements | — | own | all |
 
 ---
 
-## 10. Storage
+## 9. Supabase 이전 체크리스트
 
-| Bucket | 경로 | 접근 |
-|--------|------|------|
-| `avatars` | `{user_id}/profile.jpg` | public read, owner write |
-| `teacher-media` | `{teacher_id}/*` | public read, teacher write |
+| # | 작업 | 상태 | 검증 (UI) |
+|---|------|------|-----------|
+| 0 | 통합 DDL migration (`001`·`002`) | ✅ | Supabase SQL Editor / `db push` |
+| 1 | Auth + `profiles.role` | ⏳ | student/teacher/admin 로그인 |
+| 2 | `students` + activeLearner | ⏳ | StudentSwitcher |
+| 3 | **`pricing_plans` + `session_minutes`** | **✅** | 랜딩·`/admin/pricing` CRUD·40/60분 |
+| 4 | availability + slot continuity | ⏳ | TeacherSlotPicker |
+| 5 | enrollments + payments flow | ⏳ | confirm → lessons 생성 |
+| 6 | `adjust_sessions` batch | ⏳ | 학생상세 수업 횟수 관리 |
+| 7 | lesson operations + logs + undo | ⏳ | `/admin/operations` |
+| 8 | admin reviews 4 categories | ⏳ | `/admin/reschedule` |
+| 9 | salary statements | ⏳ | teacher + admin salary |
+| 10 | FAQ | ⏳ | student + admin |
+| 11 | `pricing_plans` RLS + admin auth | ⏳ | mutation 보호 |
+| 12 | migration **003**: faq, dashboard_settings, teacher_applications | ✅ | `003_*.sql` |
 
 ---
 
-## 11. 환경 변수
+## 10. 환경 변수
 
 ```env
-# Supabase
+# Supabase (pricing_plans 연동 — anon key 필수)
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
-# Web Push
-NEXT_PUBLIC_VAPID_PUBLIC_KEY=
-VAPID_PRIVATE_KEY=
-VAPID_SUBJECT=mailto:admin@passonenglish.com
+SUPABASE_SERVICE_ROLE_KEY=   # RLS·admin mutation 연동 시
 
 # App
 NEXT_PUBLIC_APP_URL=
 BANK_ACCOUNT_KR=
 BANK_ACCOUNT_CN=
 
-# Optional
-EXCHANGE_RATE_PHP_TO_KRW=
+# Web Push (Phase 2 — UI subscribe only today)
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:admin@passonenglish.com
 ```
 
 ---
 
-## 12. 배포·운영 (Tencent Cloud HK)
+## 11. API ↔ 프론트 파일 빠른 참조
 
-- Next.js: Docker → CVM 또는 TKE, 또는 EdgeOne + 정적/SSR
-- Supabase: Self-host on Tencent HK **또는** Supabase Cloud (리전·중국 접속 latency 테스트 필수)
-- 도메인: ICP 없이 HK 리전으로 한·중 접속 가능하도록 DNS
-- HTTPS 필수 (PWA, Push)
-- 로그: Tencent CLS 또는 Supabase logs
-- 백업: Supabase daily backup
-
----
-
-## 13. 보안
-
-- RLS 모든 테이블 활성화
-- Rate limiting: `/api/auth/*`, `/api/chat/*` (middleware 또는 Tencent WAF)
-- Input validation: Zod on all Route Handlers
-- Admin API: role double-check server-side
-- CORS: same-origin only (API는 Next 동일 도메인)
-
----
-
-## 14. MVP API 우선순위
-
-| Phase | 상태 | API / 기능 |
-|-------|------|------------|
-| P0 | ✅ | Auth UI, onboarding, teacher list, enrollment, availability, pricing CRUD |
-| P1 | ✅ | **My Lessons** hub, lesson detail, student-context, reschedule (approve/reject/cancel), feedback+complete |
-| P1 | ✅ | Chat rooms, growth reports, teacher salary statements |
-| P1 | ✅ | Admin: teacher-profiles, pricing, **operations center**, **review center**, teacher-salary |
-| P2 | ✅ | Trial → payment report → admin confirm enrollment; **renewal enrollment** |
-| P2 | ⏳ | Teacher signup + admin approve (localStorage prototype) |
-| P3 | ⏳ | Supabase migration, RLS, Realtime, cron settlement |
+| UI 컴포넌트 / 페이지 | API |
+|----------------------|-----|
+| `PricingSection`, `usePricingPlans`, `/admin/pricing` | `/api/pricing-plans` |
+| `EnrollmentFlow`, `EnrollmentDashboard` | enrollments, student/account, teacher/availability (reserve) |
+| `ActiveLearnerContext`, signup, learners/new | `/api/student/account`, `/api/student/learners` |
+| onboarding | `/api/student/profile` (→ account 이전 권장) |
+| `TeacherSlotPicker` | 클라이언트 in-memory (API: reserve only) |
+| `TeacherMyLessonsHub`, `TeacherScheduleOverview` | `/api/teacher/lessons`, reschedule |
+| `MyLessonsHub`, `LearningResultsHub` | teacher/lessons?scope=student, learning/*, reschedule |
+| `EnrollmentSessionEditor`, admin student detail | enrollments/[id]/sessions, admin/lessons?studentId= |
+| `AdminOperationsCenter`, `useAdminLessonModal` | admin/lessons*, bulk-reassign, operation-logs |
+| `AdminReviewCenter`, teacher application detail | admin/reviews, teacher/applications?id= |
+| `AdminTeacherSalaryOverview` | admin/teacher-salary (CSV, bulk rate) |
+| `AdminFaqManager`, `StudentFaqPage` | admin/faq*, faq |
+| `AdminDashboardSlogan` | admin/dashboard-settings |
+| teacher-profiles pages | teachers/profile* |
+| Chat pages, `ChatNotificationBell` | chat/rooms |
+| teacher signup | teacher/applications, teachers/profile |
+| `[locale]/page`, enrollment/new | **SSR** teachers (not `/api/teachers/public`) |
 
 ---
 
-## 15. 제외 사항
+## 12. 문서 관계
 
-- Zoom / 화상 SDK 연동
-- PG·카드·위챗페이 결제
-- SMS OTP (이메일 인증만 MVP)
+| 문서 | 역할 |
+|------|------|
+| **front.md** | 화면·라우팅·UX |
+| **backend.md** (본 문서) | API·비즈니스·구현 범위 |
+| **db.md** | DDL·ENUM·인덱스 상세 |
+| **guide.md** | 로컬 실행·데모 |
+
+변경 시 **UI → Route Handler → store 로직 → db.md** 순으로 동기화한다.
