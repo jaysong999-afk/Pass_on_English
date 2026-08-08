@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PricingPlan } from "@/types";
 import { usePricingPlans } from "@/hooks/usePricingPlans";
-import { formatPlanLabel, STANDARD_SESSION_MINUTES } from "@/lib/pricing-plan-store";
+import { formatPlanLabel, STANDARD_SESSION_MINUTES } from "@/lib/pricing-plan-display";
 import { DAY_LABELS, formatScheduleDays } from "@/lib/teacher-availability";
 import { formatCurrency } from "@/lib/utils";
 

@@ -2,10 +2,10 @@ import type {
   ExchangeRates,
   FinanceTransaction,
   MonthlyPlSummary,
+  PricingPlan,
   TaxTreatment,
   TransactionCategory,
 } from "@/types";
-import { getActivePricingPlans } from "@/lib/pricing-plan-store";
 import { getPayrollFinanceTransactions } from "@/lib/finance/payroll-finance-store";
 import { students } from "@/lib/mock-data";
 
@@ -50,15 +50,21 @@ export function calcVatFromSupply(supply: number) {
   return Math.round(supply * 0.1);
 }
 
-function planAmountForStudent(country: "KR" | "CN" | "OTHER", planIndex = 0) {
-  const plans = getActivePricingPlans();
+function planAmountForStudent(
+  country: "KR" | "CN" | "OTHER",
+  planIndex: number,
+  plans: PricingPlan[]
+) {
   const plan = plans[planIndex] ?? plans[0];
   if (!plan) return 0;
   return country === "CN" ? plan.priceCny : plan.priceKrw;
 }
 
 /** Auto-generate transactions from students (revenue) and teachers (last month payroll) */
-export function buildAutoTransactions(rates: ExchangeRates): FinanceTransaction[] {
+export function buildAutoTransactions(
+  rates: ExchangeRates,
+  activePlans: PricingPlan[] = []
+): FinanceTransaction[] {
   const txs: FinanceTransaction[] = [];
   const now = new Date();
 
@@ -66,7 +72,7 @@ export function buildAutoTransactions(rates: ExchangeRates): FinanceTransaction[
     .filter((s) => s.paymentStatus === "confirmed" || s.paymentStatus === "reported")
     .forEach((s, i) => {
       const isKr = s.country !== "CN";
-      const amount = planAmountForStudent(s.country, i);
+      const amount = planAmountForStudent(s.country, i, activePlans);
       const currency = isKr ? "KRW" : "CNY";
       const amountKrw = convertToKrw(amount, currency as "KRW" | "CNY", rates);
       const taxTreatment: TaxTreatment = isKr ? "taxable" : "non_taxable";

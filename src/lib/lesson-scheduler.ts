@@ -13,21 +13,24 @@ import {
   computeContractEndDate,
   dayLabelForDateKey,
   sortScheduleDays,
+  addDaysToDateKey,
 } from "@/lib/contract-schedule";
 import {
   getAllEnrollments,
   getEnrollmentById,
   updateEnrollmentEndDate,
+  adjustEnrollmentSessions,
 } from "@/lib/enrollment-store";
 import { getStudent } from "@/lib/mock-data";
 import { getStudentDisplayName } from "@/lib/student-display-name";
-import { getPricingPlanById } from "@/lib/pricing-plan-store";
+import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
 import { isSlotBooked } from "@/lib/teacher-booked-slots";
 import { isSlotEnabled } from "@/lib/teacher-availability-store";
 import {
   getAllLessons,
   pushLesson,
   removeFutureScheduledLessonsForEnrollment,
+  deleteLessonById,
 } from "@/lib/teacher-lesson-store";
 
 const DEFAULT_SLOT_TIME = "10:00" as SlotStartTime;
@@ -37,12 +40,12 @@ export function buildEnrollmentSlotTime(enrollment: StudentEnrollment): SlotStar
 }
 
 export function getEnrollmentScheduleDays(enrollment: StudentEnrollment): DayLabel[] {
-  const plan = getPricingPlanById(enrollment.planId);
+  const plan = getCachedPricingPlanById(enrollment.planId);
   return (plan?.scheduleDays ?? ["Mon", "Wed", "Fri"]) as DayLabel[];
 }
 
 export function getEnrollmentSessionMinutes(enrollment: StudentEnrollment): number {
-  const plan = getPricingPlanById(enrollment.planId);
+  const plan = getCachedPricingPlanById(enrollment.planId);
   return plan?.sessionMinutes ?? LESSON_MINUTES;
 }
 
@@ -279,12 +282,230 @@ export function bootstrapActiveEnrollmentSchedules(): void {
   }
 }
 
-export function ensureSchedulesBootstrapped(): void {
-  bootstrapActiveEnrollmentSchedules();
-}
-
 export function formatEnrollmentSlotLabel(enrollment: StudentEnrollment): string {
   const time = buildEnrollmentSlotTime(enrollment);
   const days = sortScheduleDays(getEnrollmentScheduleDays(enrollment));
   return `${days.join("·")} ${time}`;
+}
+
+/** Append one lesson after the last future slot (same weekly time / plan days). */
+export function appendNextEnrollmentLesson(
+  enrollmentId: string,
+  operationNote?: string
+): { lesson: Lesson | null; error?: string } {
+  const enrollment = getEnrollmentById(enrollmentId);
+  if (!enrollment) return { lesson: null, error: "enrollment_not_found" };
+
+  const student = getStudent(enrollment.studentId);
+  const studentName = student
+    ? getStudentDisplayName(student)
+    : enrollment.studentId;
+
+  const future = futureLessonsForEnrollment(enrollmentId);
+  const todayKey = getDateKeyInTimezone(new Date(), CANONICAL_TIMEZONE);
+  const startFromDate =
+    future.length > 0
+      ? addDaysToDateKey(
+          getDateKeyInTimezone(
+            new Date(future[future.length - 1].scheduledAt),
+            CANONICAL_TIMEZONE
+          ),
+          1
+        )
+      : todayKey;
+
+  const result = generateEnrollmentLessons({
+    enrollment,
+    studentName,
+    count: 1,
+    startFromDate,
+    replaceExistingFuture: false,
+    operationNote: operationNote ?? "관리자 무료 수업 추가",
+  });
+
+  if (result.created.length === 0) {
+    return { lesson: null, error: result.skipped[0] ?? "schedule_failed" };
+  }
+
+  const scheduleDays = getEnrollmentScheduleDays(enrollment);
+  const contractEnd = computeContractEndDate(
+    enrollment.startDate,
+    enrollment.sessionsTotal + 1,
+    scheduleDays
+  );
+  updateEnrollmentEndDate(
+    enrollmentId,
+    result.endDate > contractEnd ? result.endDate : contractEnd
+  );
+
+  return { lesson: result.created[0] };
+}
+
+/** Remove the chronologically last future scheduled lesson for an enrollment. */
+export function removeLastFutureEnrollmentLesson(
+  enrollmentId: string
+): { removed: Lesson | null; error?: string } {
+  const future = futureLessonsForEnrollment(enrollmentId);
+  if (future.length === 0) {
+    return { removed: null, error: "no_future_lessons" };
+  }
+
+  const last = future[future.length - 1];
+  deleteLessonById(last.id);
+
+  const enrollment = getEnrollmentById(enrollmentId);
+  if (enrollment) {
+    const remaining = futureLessonsForEnrollment(enrollmentId);
+    const endDate =
+      remaining.length > 0
+        ? getDateKeyInTimezone(
+            new Date(remaining[remaining.length - 1].scheduledAt),
+            CANONICAL_TIMEZONE
+          )
+        : enrollment.startDate;
+    updateEnrollmentEndDate(enrollmentId, endDate);
+  }
+
+  return { removed: last };
+}
+
+export interface AdjustEnrollmentSessionsWithScheduleResult {
+  enrollment: StudentEnrollment;
+  lessons?: Lesson[];
+  action?: "added" | "removed";
+  appliedDelta?: number;
+  error?: string;
+}
+
+/**
+ * Admin free-session add/remove (batch): adjusts remaining + total together and syncs schedule.
+ * +N → append N lessons after the last scheduled slot.
+ * −N → delete the last N future scheduled lessons.
+ */
+export function adjustEnrollmentSessionsWithScheduleBatch(
+  enrollmentId: string,
+  delta: number,
+  input?: { reason?: string; adminName?: string }
+): AdjustEnrollmentSessionsWithScheduleResult | null {
+  if (delta === 0) {
+    const enrollment = getEnrollmentById(enrollmentId);
+    return enrollment ? { enrollment, appliedDelta: 0 } : null;
+  }
+
+  const enrollment = getEnrollmentById(enrollmentId);
+  if (!enrollment) return null;
+
+  if (delta > 0) {
+    const student = getStudent(enrollment.studentId);
+    const studentName = student
+      ? getStudentDisplayName(student)
+      : enrollment.studentId;
+
+    const future = futureLessonsForEnrollment(enrollmentId);
+    const todayKey = getDateKeyInTimezone(new Date(), CANONICAL_TIMEZONE);
+    const startFromDate =
+      future.length > 0
+        ? addDaysToDateKey(
+            getDateKeyInTimezone(
+              new Date(future[future.length - 1].scheduledAt),
+              CANONICAL_TIMEZONE
+            ),
+            1
+          )
+        : todayKey;
+
+    const result = generateEnrollmentLessons({
+      enrollment,
+      studentName,
+      count: delta,
+      startFromDate,
+      replaceExistingFuture: false,
+      operationNote: input?.reason?.trim() || "관리자 무료 수업 추가",
+    });
+
+    if (result.created.length < delta) {
+      for (const lesson of result.created) {
+        deleteLessonById(lesson.id);
+      }
+      return {
+        enrollment,
+        error: result.skipped[0] ?? "schedule_failed",
+      };
+    }
+
+    const scheduleDays = getEnrollmentScheduleDays(enrollment);
+    const contractEnd = computeContractEndDate(
+      enrollment.startDate,
+      enrollment.sessionsTotal + delta,
+      scheduleDays
+    );
+    updateEnrollmentEndDate(
+      enrollmentId,
+      result.endDate > contractEnd ? result.endDate : contractEnd
+    );
+
+    const updated = adjustEnrollmentSessions(enrollmentId, {
+      deltaRemaining: delta,
+      deltaTotal: delta,
+      reason: input?.reason,
+      adminName: input?.adminName,
+    });
+    if (!updated) return null;
+
+    return {
+      enrollment: updated,
+      lessons: result.created,
+      action: "added",
+      appliedDelta: delta,
+    };
+  }
+
+  const removeCount = Math.abs(delta);
+  if (enrollment.sessionsRemaining < removeCount) {
+    return { enrollment, error: "no_remaining_sessions" };
+  }
+
+  const future = futureLessonsForEnrollment(enrollmentId);
+  if (future.length < removeCount) {
+    return { enrollment, error: "no_future_lessons" };
+  }
+
+  const removed = future.slice(-removeCount);
+  for (const lesson of [...removed].reverse()) {
+    deleteLessonById(lesson.id);
+  }
+
+  const remaining = futureLessonsForEnrollment(enrollmentId);
+  const endDate =
+    remaining.length > 0
+      ? getDateKeyInTimezone(
+          new Date(remaining[remaining.length - 1].scheduledAt),
+          CANONICAL_TIMEZONE
+        )
+      : enrollment.startDate;
+  updateEnrollmentEndDate(enrollmentId, endDate);
+
+  const updated = adjustEnrollmentSessions(enrollmentId, {
+    deltaRemaining: delta,
+    deltaTotal: delta,
+    reason: input?.reason,
+    adminName: input?.adminName,
+  });
+  if (!updated) return null;
+
+  return {
+    enrollment: updated,
+    lessons: removed,
+    action: "removed",
+    appliedDelta: delta,
+  };
+}
+
+/** @deprecated Prefer adjustEnrollmentSessionsWithScheduleBatch */
+export function adjustEnrollmentSessionsWithSchedule(
+  enrollmentId: string,
+  delta: 1 | -1,
+  input?: { reason?: string; adminName?: string }
+): AdjustEnrollmentSessionsWithScheduleResult | null {
+  return adjustEnrollmentSessionsWithScheduleBatch(enrollmentId, delta, input);
 }

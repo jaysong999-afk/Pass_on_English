@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import {
   createTeacherProfileFromApplication,
   getAllTeachers,
-  getPublicTeachers,
 } from "@/lib/teacher-profile-store";
 import type { TeacherProfileInput } from "@/types";
 import { isTeacherSpecialty } from "@/lib/teacher-specialties";
@@ -18,14 +17,7 @@ function validateProfile(body: TeacherProfileInput & { applicationId?: string })
   return null;
 }
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const scope = searchParams.get("scope");
-
-  if (scope === "public") {
-    return NextResponse.json({ teachers: getPublicTeachers() });
-  }
-
+export async function GET() {
   return NextResponse.json({ teachers: getAllTeachers() });
 }
 

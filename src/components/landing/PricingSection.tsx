@@ -6,7 +6,7 @@ import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/landing/SectionHeading";
 import { usePricingPlans } from "@/hooks/usePricingPlans";
-import { formatPlanLabel, getPlanDisplayName } from "@/lib/pricing-plan-store";
+import { formatPlanLabel, getPlanDisplayName } from "@/lib/pricing-plan-display";
 import { LESSON_MINUTES } from "@/lib/availability/constants";
 import { formatScheduleDays } from "@/lib/teacher-availability";
 import type { Locale } from "@/lib/i18n/config";

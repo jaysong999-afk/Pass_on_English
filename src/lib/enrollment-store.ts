@@ -1,8 +1,6 @@
 import type { PaymentRecord, StudentEnrollment } from "@/types";
-import {
-  formatPlanLabel,
-  getPricingPlanById,
-} from "@/lib/pricing-plan-store";
+import { formatPlanLabel } from "@/lib/pricing-plan-display";
+import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
 import type { Locale } from "@/lib/i18n/config";
 import { getActiveLearner, updateLearnerEnrollmentMeta } from "@/lib/account-store";
 import { computeContractEndDate, addDaysToDateKey } from "@/lib/contract-schedule";
@@ -142,7 +140,7 @@ export interface CreateEnrollmentInput {
 }
 
 export function createEnrollment(input: CreateEnrollmentInput): StudentEnrollment {
-  const plan = getPricingPlanById(input.planId);
+  const plan = getCachedPricingPlanById(input.planId);
   if (!plan) {
     throw new Error("plan_not_found");
   }
@@ -223,7 +221,7 @@ export function createRenewalEnrollment(input: CreateRenewalEnrollmentInput): St
     throw new Error("not_renewable");
   }
 
-  const plan = getPricingPlanById(previous.planId);
+  const plan = getCachedPricingPlanById(previous.planId);
   if (!plan) {
     throw new Error("plan_not_found");
   }

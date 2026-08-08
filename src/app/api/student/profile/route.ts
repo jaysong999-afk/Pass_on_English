@@ -10,7 +10,7 @@ import {
 import { learnerToLegacyProfile } from "@/lib/student-profile-store";
 import { createTrialLesson } from "@/lib/teacher-lesson-store";
 import { getStudentDisplayName } from "@/lib/student-display-name";
-import { getPricingPlanById } from "@/lib/pricing-plan-store";
+import { getPricingPlanById } from "@/lib/pricing-plans/repository";
 import { reserveTeacherWeeklySlotsForPlan } from "@/lib/teacher-booked-slots";
 import type { DayLabel, SlotStartTime } from "@/lib/availability/types";
 import { lessonScheduledAtToKstSlot } from "@/lib/availability/timezone";
@@ -70,12 +70,12 @@ export async function PATCH(request: Request) {
     const teacherId = String(body.teacherId ?? "").trim();
     const teacherName = String(body.teacherName ?? "").trim();
     const planId = body.planId != null ? String(body.planId).trim() : "";
-    const sessionMinutes =
-      body.sessionMinutes != null
-        ? Number(body.sessionMinutes)
-        : planId
-          ? getPricingPlanById(planId)?.sessionMinutes
-          : undefined;
+    let sessionMinutes =
+      body.sessionMinutes != null ? Number(body.sessionMinutes) : undefined;
+    if (sessionMinutes == null && planId) {
+      const planForMinutes = await getPricingPlanById(planId);
+      sessionMinutes = planForMinutes?.sessionMinutes;
+    }
 
     if (!scheduledAt || !teacherId || !teacherName) {
       return NextResponse.json({ error: "missing_trial_fields" }, { status: 400 });
@@ -87,7 +87,7 @@ export async function PATCH(request: Request) {
     }
 
     const durationMinutes = sessionMinutes && sessionMinutes > 0 ? sessionMinutes : 20;
-    const plan = planId ? getPricingPlanById(planId) : undefined;
+    const plan = planId ? await getPricingPlanById(planId) : undefined;
 
     const lesson = createTrialLesson({
       teacherId,

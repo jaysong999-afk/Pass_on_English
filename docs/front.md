@@ -13,7 +13,9 @@
 | **관리자 검토 센터** | ✅ | `/admin/reschedule` — 4탭 + 처리 로그 |
 | 관리자 포털 | ✅ | teacher-profiles, pricing, teacher-salary, FAQ |
 | **학생 모바일 헤더** | ✅ | `StudentAppShell` 2-row 레이아웃 |
-| 데이터 | in-memory | Supabase 연동 전 Route Handler + store |
+| **관리자 수업 횟수 관리** | ✅ | `EnrollmentSessionEditor` — ± draft → 확인 → batch 적용 |
+| **요금제 (`pricing_plans`)** | ✅ | Supabase CRUD — `/api/pricing-plans`, `usePricingPlans` |
+| 나머지 도메인 데이터 | in-memory | enrollments·lessons 등 — Supabase 이전 예정 |
 | PWA / Push | ✅ | manifest, subscribe API |
 
 ---
@@ -163,14 +165,16 @@
 | FAQ | 자주 묻는 질문 |
 | Footer | 이용약관, 개인정보, 연락처, 언어 전환 |
 
-**요금표 (UI 표시용 — API `/api/pricing-plans` 와 동기)**
+**요금표 (Supabase `pricing_plans` — `GET /api/pricing-plans?active=true`)**
 
-| 플랜 | 한국 | 중국 | 회차 |
-|------|------|------|------|
-| 주5회(월~금) 20분 | 87,000원 | 480위안 | 20 |
-| 월·수·금 20분 | 90,000원 | 490위안 | 12 |
-| 화·목 20분 | 64,000원 | 340위안 | 8 |
-| 주말(토·일) 20분 | 64,000원 | 340위안 | 8 |
+| plan_type (시드) | 한국 | 중국 | 회차 |
+|------------------|------|------|------|
+| weekday5_20min | 87,000원 | 480위안 | 20 |
+| mwf_20min | 90,000원 | 490위안 | 12 |
+| tuth_20min | 64,000원 | 340위안 | 8 |
+| weekend_20min | 64,000원 | 340위안 | 8 |
+
+> 관리자 `/admin/pricing`에서 40분·60분 등 추가 플랜 CRUD 가능. 랜딩·수강 UI는 API 응답 UUID를 `planId`로 사용.
 
 > 수업 시간: **20분 세션**, **20분 슬롯** (:00·:20·:40). 휴식은 선생님이 `WeeklyAvailabilityGrid`에서 슬롯 Off. `EnrollmentFlow` 공통.
 
@@ -324,7 +328,8 @@
 - **학생 현황**: 수강 중/과거 수강자 필터, 입금 여부, 입금 확인 버튼
 - **선생님 현황**: 프로필, 진행 수업, 시급 설정
 - **선생님 프로필 관리** (`/admin/teacher-profiles`): displayName, bio, specialties, hourlyRatePhp CRUD
-- **요금제** (`/admin/pricing`): PricingPlan CRUD (`sessionMinutes`, `scheduleDays`)
+- **요금제** (`/admin/pricing`): PricingPlan CRUD — Supabase `pricing_plans` (`sessionMinutes`, `scheduleDays`, i18n name)
+- **학생 상세** (`/admin/students/[id]`): **수업 횟수 관리** — `EnrollmentSessionEditor` (± draft → 확인 Dialog → `adjust_sessions`)
 - **검토 센터** (`/admin/reschedule`): `AdminReviewCenter` — 4탭 + 하단 처리 로그
 - **수업 운영 센터** (`/admin/operations`): `AdminOperationsCenter` — 아래 §5.4.1
 - **강사 급여** (`/admin/teacher-salary`): 월별 명세, live estimate → processing 확정, paid 처리
@@ -410,11 +415,12 @@ Shadcn UI 기준 설치: Button, Card, Dialog, Form, Input, Select, Tabs, Toast,
 
 ## 7. 상태 관리·데이터 fetching
 
-- **MVP**: `fetch` + React `useState`/`useEffect`, in-memory store Route Handlers
-- **목표**: TanStack Query (React Query) + Supabase client
+- **요금제**: `usePricingPlans` → `GET /api/pricing-plans` → Supabase PostgreSQL
+- **MVP (기타)**: `fetch` + React `useState`/`useEffect`, in-memory store Route Handlers
+- **목표**: TanStack Query (React Query) + Supabase client (도메인별 점진 이전)
 - **폼**: React Hook Form + Zod (점진 적용)
 - **실시간**: Supabase Realtime (채팅, 알림) — 추후
-- **인증 세션**: `@supabase/ssr` — middleware에서 세션 갱신, 역할별 라우트 가드
+- **인증 세션**: `@supabase/ssr` — middleware에서 세션 갱신, 역할별 라우트 가드 (미연동)
 
 ---
 
@@ -498,11 +504,21 @@ src/
 │   ├── admin/
 │   └── shared/
 ├── lib/
-│   ├── *-store.ts            # MVP in-memory stores
+│   ├── pricing-plans/
+│   │   └── repository.ts     # Supabase CRUD (server-only)
+│   ├── pricing-plan-cache.ts   # scheduler·enrollment sync cache
+│   ├── pricing-plan-display.ts # 클라이언트 표시 유틸
+│   ├── pricing-plan-store.ts   # re-export (하위 호환)
+│   ├── lesson-scheduler-bootstrap.ts  # server: cache warm + schedule
 │   ├── supabase/
+│   │   ├── server.ts           # @supabase/ssr createClient
+│   │   ├── client.ts
+│   │   └── admin.ts
+│   ├── *-store.ts              # MVP in-memory stores (enrollments, lessons, …)
 │   ├── i18n/
 │   └── push/
 ├── hooks/
+│   ├── usePricingPlans.ts      # pricing API hook
 ├── types/
 └── messages/
     ├── ko.json

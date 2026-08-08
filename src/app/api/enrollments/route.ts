@@ -8,16 +8,16 @@ import {
   getEnrollmentById,
   getEnrollmentsByStudent,
 } from "@/lib/enrollment-store";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { getAccountHolder, getActiveLearner, getLearnerById } from "@/lib/account-store";
-import { getPricingPlanById } from "@/lib/pricing-plan-store";
+import { warmPricingPlanCache, getPricingPlanById } from "@/lib/pricing-plans/repository";
 import { learnerToLegacyProfile } from "@/lib/student-profile-store";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { getStudent } from "@/lib/mock-data";
 import { reserveTeacherWeeklySlotsForPlan } from "@/lib/teacher-booked-slots";
 
 export async function GET(request: Request) {
-  ensureSchedulesBootstrapped();
+  await ensureSchedulesBootstrapped();
   const { searchParams } = new URL(request.url);
   const studentId = searchParams.get("studentId");
 
@@ -45,6 +45,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
+  try {
+    await warmPricingPlanCache();
+  } catch (error) {
+    console.error("[enrollments POST] pricing plan cache", error);
+    return NextResponse.json({ error: "plan_fetch_failed" }, { status: 500 });
+  }
+
   const account = getAccountHolder();
   const activeLearner = body.learnerId
     ? getLearnerById(String(body.learnerId))
@@ -67,7 +74,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    const plan = getPricingPlanById(previous.planId);
+    const plan = await getPricingPlanById(previous.planId);
     if (!plan) {
       return NextResponse.json({ error: "plan_not_found" }, { status: 404 });
     }
@@ -122,7 +129,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
-  const plan = getPricingPlanById(planId);
+  const plan = await getPricingPlanById(planId);
   if (!plan) {
     return NextResponse.json({ error: "plan_not_found" }, { status: 404 });
   }

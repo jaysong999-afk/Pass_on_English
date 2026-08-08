@@ -3,10 +3,10 @@ import {
   getUpcomingLessonsForAdmin,
   findAvailableTeachersAt,
 } from "@/lib/admin/lesson-operations-store";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
-  ensureSchedulesBootstrapped();
+  await ensureSchedulesBootstrapped();
   const { searchParams } = new URL(request.url);
   const teacherId = searchParams.get("teacherId") ?? undefined;
   const studentId = searchParams.get("studentId") ?? undefined;

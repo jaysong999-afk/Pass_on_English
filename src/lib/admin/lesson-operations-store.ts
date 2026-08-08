@@ -16,7 +16,7 @@ import {
 } from "@/lib/enrollment-store";
 import { getStudent } from "@/lib/mock-data";
 import { getStudentDisplayName } from "@/lib/student-display-name";
-import { getPricingPlanById } from "@/lib/pricing-plan-store";
+import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
 import {
   formatEnrollmentSlotLabel,
   futureLessonsForEnrollment,
@@ -89,7 +89,7 @@ export function getBulkEnrollmentTransferPreview(
     const studentName = student
       ? getStudentDisplayName(student)
       : enrollment.studentId;
-    const plan = getPricingPlanById(enrollment.planId);
+    const plan = getCachedPricingPlanById(enrollment.planId);
     const upcoming = futureLessonsForEnrollment(enrollment.id, fromTeacherId);
 
     return {

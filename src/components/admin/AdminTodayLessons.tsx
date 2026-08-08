@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Lesson } from "@/types";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
-import { formatDate, formatTime } from "@/lib/utils";
+import { formatDate, formatLessonTimeRange } from "@/lib/utils";
 import { AdminLessonDualModal } from "@/components/admin/operations/AdminLessonDualModal";
 import { useAdminLessonModal } from "@/components/admin/operations/useAdminLessonModal";
 import {
@@ -74,7 +74,12 @@ export function AdminTodayLessons() {
             >
               <div className="min-w-0">
                 <p className="font-medium text-ink">
-                  {formatTime(lesson.scheduledAt, "ko", CANONICAL_TIMEZONE)}{" "}
+                  {formatLessonTimeRange(
+                    lesson.scheduledAt,
+                    lesson.durationMinutes,
+                    "ko",
+                    CANONICAL_TIMEZONE
+                  )}{" "}
                   <span className="font-normal text-gray-500">KST</span>
                 </p>
                 <p className="mt-0.5 truncate text-sm text-gray-600">

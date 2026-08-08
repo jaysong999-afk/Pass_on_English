@@ -4,9 +4,10 @@ import {
   deletePricingPlan,
   getPricingPlanById,
   isPricingPlanInUse,
+  isPricingPlanInUseIds,
   updatePricingPlan,
   type UpsertPricingPlanInput,
-} from "@/lib/pricing-plan-store";
+} from "@/lib/pricing-plans/repository";
 
 const VALID_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -32,11 +33,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const plan = getPricingPlanById(id);
-  if (!plan) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  try {
+    const plan = await getPricingPlanById(id);
+    if (!plan) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    return NextResponse.json({ plan });
+  } catch (error) {
+    console.error("[pricing-plans/:id GET]", error);
+    return NextResponse.json({ error: "fetch_failed" }, { status: 500 });
   }
-  return NextResponse.json({ plan });
 }
 
 export async function PATCH(
@@ -50,11 +57,16 @@ export async function PATCH(
     return NextResponse.json({ error }, { status: 400 });
   }
 
-  const updated = updatePricingPlan(id, body);
-  if (!updated) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  try {
+    const updated = await updatePricingPlan(id, body);
+    if (!updated) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    return NextResponse.json({ plan: updated });
+  } catch (err) {
+    console.error("[pricing-plans/:id PATCH]", err);
+    return NextResponse.json({ error: "update_failed" }, { status: 500 });
   }
-  return NextResponse.json({ plan: updated });
 }
 
 export async function DELETE(
@@ -62,19 +74,31 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const plan = getPricingPlanById(id);
-  if (!plan) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  try {
+    const plan = await getPricingPlanById(id);
+    if (!plan) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+
+    const inUseInDb = await isPricingPlanInUse(id);
+    const enrollmentPlanIds = getAllEnrollments()
+      .map((e) => e.planId)
+      .filter(Boolean) as string[];
+    const inUseInMemory = isPricingPlanInUseIds(id, enrollmentPlanIds);
+
+    if (inUseInDb || inUseInMemory) {
+      return NextResponse.json({ error: "plan_in_use" }, { status: 409 });
+    }
+
+    const deleted = await deletePricingPlan(id);
+    if (!deleted) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[pricing-plans/:id DELETE]", err);
+    return NextResponse.json({ error: "delete_failed" }, { status: 500 });
   }
-
-  const enrollmentPlanIds = getAllEnrollments()
-    .map((e) => e.planId)
-    .filter(Boolean) as string[];
-
-  if (isPricingPlanInUse(id, enrollmentPlanIds)) {
-    return NextResponse.json({ error: "plan_in_use" }, { status: 409 });
-  }
-
-  deletePricingPlan(id);
-  return NextResponse.json({ ok: true });
 }

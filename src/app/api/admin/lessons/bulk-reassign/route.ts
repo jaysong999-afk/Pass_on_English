@@ -4,10 +4,10 @@ import {
   getBulkEnrollmentTransferPreview,
   previewEnrollmentTransferSlots,
 } from "@/lib/admin/lesson-operations-store";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
-  ensureSchedulesBootstrapped();
+  await ensureSchedulesBootstrapped();
   const { searchParams } = new URL(request.url);
   const fromTeacherId = searchParams.get("fromTeacherId");
   if (!fromTeacherId) {

@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import type { PricingPlan, StudentEnrollment, Teacher } from "@/types";
 import type { SlotStartTime } from "@/lib/availability/types";
 import { sessionEndTime, slotsForSessionMinutes } from "@/lib/availability/time-utils";
-import { formatPlanLabel } from "@/lib/pricing-plan-store";
+import { formatPlanLabel } from "@/lib/pricing-plan-display";
 import type { Locale } from "@/lib/i18n/config";
 import { usePricingPlans } from "@/hooks/usePricingPlans";
 import {

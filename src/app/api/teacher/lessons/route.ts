@@ -9,10 +9,10 @@ import {
   getTeacherLessons,
   getTodayLessons,
 } from "@/lib/teacher-lesson-store";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
-  ensureSchedulesBootstrapped();
+  await ensureSchedulesBootstrapped();
   const { searchParams } = new URL(request.url);
   const teacherId = searchParams.get("teacherId") ?? CURRENT_TEACHER_ID;
   const timeZone = searchParams.get("timeZone") ?? TEACHER_TIMEZONE;

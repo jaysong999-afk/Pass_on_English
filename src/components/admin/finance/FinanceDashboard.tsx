@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ManualTransactionModal } from "@/components/admin/finance/ManualTransactionModal";
+import { usePricingPlans } from "@/hooks/usePricingPlans";
 import {
   buildAutoTransactions,
   buildTrendData,
@@ -81,6 +82,7 @@ function monthDateRange(monthKey: string) {
 }
 
 export function FinanceDashboard() {
+  const { plans: activePlans } = usePricingPlans(true);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
   const [rates, setRates] = useState<ExchangeRates>(FALLBACK_RATES);
   const [ratesLoading, setRatesLoading] = useState(false);
@@ -105,9 +107,9 @@ export function FinanceDashboard() {
   }, [refreshRates]);
 
   useEffect(() => {
-    const auto = buildAutoTransactions(rates);
+    const auto = buildAutoTransactions(rates, activePlans);
     setTransactions([...auto, ...SEED_MANUAL_TRANSACTIONS]);
-  }, [rates]);
+  }, [rates, activePlans]);
 
   const availableMonths = useMemo(
     () => getFinanceMonthOptions(transactions),

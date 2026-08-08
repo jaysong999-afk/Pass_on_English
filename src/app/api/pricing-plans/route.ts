@@ -4,7 +4,7 @@ import {
   getActivePricingPlans,
   getAllPricingPlans,
   type UpsertPricingPlanInput,
-} from "@/lib/pricing-plan-store";
+} from "@/lib/pricing-plans/repository";
 
 const VALID_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -26,10 +26,15 @@ function validateInput(body: UpsertPricingPlanInput) {
 }
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const activeOnly = searchParams.get("active") === "true";
-  const data = activeOnly ? getActivePricingPlans() : getAllPricingPlans();
-  return NextResponse.json({ plans: data });
+  try {
+    const { searchParams } = new URL(request.url);
+    const activeOnly = searchParams.get("active") === "true";
+    const data = activeOnly ? await getActivePricingPlans() : await getAllPricingPlans();
+    return NextResponse.json({ plans: data });
+  } catch (error) {
+    console.error("[pricing-plans GET]", error);
+    return NextResponse.json({ error: "fetch_failed" }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -39,6 +44,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error }, { status: 400 });
   }
 
-  const plan = createPricingPlan(body);
-  return NextResponse.json({ plan }, { status: 201 });
+  try {
+    const plan = await createPricingPlan(body);
+    return NextResponse.json({ plan }, { status: 201 });
+  } catch (err) {
+    console.error("[pricing-plans POST]", err);
+    return NextResponse.json({ error: "create_failed" }, { status: 500 });
+  }
 }
