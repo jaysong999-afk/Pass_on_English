@@ -3,8 +3,10 @@ import { getTranslations } from "next-intl/server";
 import { EnrollmentFlow } from "@/components/student/EnrollmentFlow";
 import { Button } from "@/components/ui/button";
 import { studentPath } from "@/lib/student-paths";
-import { getEnrollment } from "@/lib/mock-data";
+import { getEnrollmentById } from "@/lib/enrollment-store-sync";
+import { decorateEnrollmentRenewal } from "@/lib/enrollments/renewal-window";
 import { getPublicTeachers } from "@/lib/teacher-profile-store";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export default async function RenewEnrollmentPage({
   params,
@@ -13,9 +15,11 @@ export default async function RenewEnrollmentPage({
 }) {
   const { locale, id } = await params;
   const t = await getTranslations("studentPortal.enrollment");
-  const enrollment = getEnrollment(id);
+  await ensureSchedulesBootstrapped();
+  const enrollment = getEnrollmentById(id);
+  const decorated = enrollment ? decorateEnrollmentRenewal(enrollment) : undefined;
 
-  if (!enrollment) {
+  if (!decorated) {
     return (
       <div className="py-16 text-center">
         <p className="text-ink-muted">{t("notFound")}</p>
@@ -26,5 +30,5 @@ export default async function RenewEnrollmentPage({
     );
   }
 
-  return <EnrollmentFlow mode="renew" teachers={getPublicTeachers()} enrollment={enrollment} />;
+  return <EnrollmentFlow mode="renew" teachers={getPublicTeachers()} enrollment={decorated} />;
 }

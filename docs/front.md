@@ -15,8 +15,13 @@
 | **학생 모바일 헤더** | ✅ | `StudentAppShell` 2-row 레이아웃 |
 | **관리자 수업 횟수 관리** | ✅ | `EnrollmentSessionEditor` — ± draft → 확인 → batch 적용 |
 | **요금제 (`pricing_plans`)** | ✅ | Supabase CRUD — `/api/pricing-plans`, `usePricingPlans` |
-| 나머지 도메인 데이터 | in-memory | enrollments·lessons 등 — Supabase 이전 예정 |
-| PWA / Push | ✅ | manifest, subscribe API |
+| **MVP store → Supabase** | ✅ | chat·finance 포함 전 도메인 — repository + sync cache |
+| **채팅 (Realtime)** | ✅ | `ChatThread` + `useChatRealtime` — `/api/chat/messages` |
+| **재무 대시보드** | ✅ | `/api/admin/finance/transactions` |
+| **Auth (teacher/admin)** | ✅ | `/teacher/login`, `/admin/login` → `/api/auth/login`; `LogoutButton` |
+| **Auth (student)** | ⚠️ | Supabase client 직접 로그인; logout UI 없음 |
+| **선생님 세션 바인딩** | ⏳ | `CURRENT_TEACHER_ID = "teacher-1"` 하드코딩 (~18곳) |
+| PWA / Push | ⚠️ | manifest, subscribe API ✅; install prompt stub, 수동 `public/sw.js` |
 
 ---
 
@@ -28,8 +33,8 @@
 | 프레임워크 | Next.js 14+ (App Router, TypeScript) |
 | UI | Tailwind CSS + Shadcn UI |
 | 다국어 | next-intl |
-| PWA | @ducanh2912/next-pwa + Web Push API |
-| 인증 | Supabase Auth (클라이언트 SDK) |
+| PWA | 수동 `public/sw.js` + Web Push API (명세: `@ducanh2912/next-pwa` — 미적용) |
+| 인증 | Supabase Auth + `/api/auth/*` (teacher/admin); student는 client SDK 직접 |
 
 본 문서는 학생·선생님·관리자 웹 UI 및 랜딩페이지의 화면 구성, 라우팅, 컴포넌트, 상태 관리, i18n, PWA 요구사항을 정의한다.
 
@@ -335,7 +340,24 @@
 - **강사 급여** (`/admin/teacher-salary`): 월별 명세, live estimate → processing 확정, paid 처리
 - **FAQ** (`/admin/faq`): FAQ CRUD
 - **재무**: 수입·지출 차트 (mock + accounting 데이터)
-- **메시지**: 전체 또는 특정 사용자에게 푸시/채팅 발송
+- **메시지 · CS 센터** (`/admin/messages`): `AdminMessagesHub` — §5.4.3
+
+#### 5.4.3 메시지 · CS 센터 (`AdminMessagesHub`)
+
+**경로**: `/admin/messages`  
+**상태**: 프론트엔드 프로토타입 ✅ · 발송/저장 API ⏳
+
+| 탭 | 컴포넌트 | 설명 |
+|----|----------|------|
+| CS · 1:1 | `CsManagerPanel` | 채팅 모니터링 + 관리자 1:1 + Quick Replies |
+| 단체 발송 | `BroadcastPanel` | 세그먼트·필터·채널·예약 발송 UI |
+| Push · 알림 | `PushNotificationsPanel` | KPI·발송 내역(샘플) + **자동 시스템 알림 UI 미리보기 (향후 구축 예정)** |
+
+**채팅 모니터링**: `GET /api/chat/rooms?role=admin` · `ChatMonitorThread` · `/admin/chat/[roomId]` 참여  
+**관리자 1:1**: students/teachers API로 대상 선택 · 전송은 로컬 프로토타입  
+**Quick Replies**: `messages-mock-data.ts`  
+**단체 발송**: 전체·학생(KR/CN)·선생님 + 수강 상태 필터  
+상세: `docs/원어민 화상영어 플랫폼 서비스 앱 개발 요구사항 정리.md` §6
 
 #### 5.4.1 수업 운영 센터 (`AdminOperationsCenter`)
 
@@ -416,8 +438,9 @@ Shadcn UI 기준 설치: Button, Card, Dialog, Form, Input, Select, Tabs, Toast,
 ## 7. 상태 관리·데이터 fetching
 
 - **요금제**: `usePricingPlans` → `GET /api/pricing-plans` → Supabase PostgreSQL
-- **MVP (기타)**: `fetch` + React `useState`/`useEffect`, in-memory store Route Handlers
-- **목표**: TanStack Query (React Query) + Supabase client (도메인별 점진 이전)
+- **핵심 도메인**: Route Handler → `*/repository.ts` → Supabase; 클라이언트·RSC는 `*-store-sync.ts` (cache) 읽기
+- **Bootstrap**: 서버 페이지·API는 `ensureSchedulesBootstrapped()` / `ensurePublicContentBootstrapped()` 선행
+- **목표**: TanStack Query (React Query) + Supabase client (Auth 연동 후)
 - **폼**: React Hook Form + Zod (점진 적용)
 - **실시간**: Supabase Realtime (채팅, 알림) — 추후
 - **인증 세션**: `@supabase/ssr` — middleware에서 세션 갱신, 역할별 라우트 가드 (미연동)
@@ -443,11 +466,11 @@ Shadcn UI 기준 설치: Button, Card, Dialog, Form, Input, Select, Tabs, Toast,
 
 ## 9. 인증·권한 (클라이언트)
 
-| 역할 | 로그인 URL | 접근 경로 |
-|------|------------|-----------|
-| `student` | `/[locale]/login` | `/student/*`, `/[locale]/*` (공개) |
-| `teacher` | `/teacher/login` | `/teacher/*` (login 제외) |
-| `admin` | `/admin/login` | `/admin/*` (login 제외) |
+| 역할 | 로그인 URL | 접근 경로 | 로그아웃 |
+|------|------------|-----------|----------|
+| `student` | `/[locale]/login` | `/student/*`, `/[locale]/*` (공개) | ⏳ UI 없음 |
+| `teacher` | `/teacher/login` | `/teacher/*` (login 제외) | ✅ `LogoutButton` |
+| `admin` | `/admin/login` | `/admin/*` (login 제외) | ✅ `LogoutButton` |
 
 - middleware: 미인증 → **역할별 로그인 URL**로 리다이렉트
   - `/student/*` → `/[locale]/login`
@@ -456,6 +479,14 @@ Shadcn UI 기준 설치: Button, Card, Dialog, Form, Input, Select, Tabs, Toast,
 - 역할 불일치 → 403
 - `/teacher/login`, `/admin/login`은 AppShell·랜딩 레이아웃 미적용
 - RLS는 Supabase에서 enforcement — UI는 UX 차원의 가드
+
+### 9.1 잔여 (Auth 2차)
+
+| 항목 | 현재 | 목표 |
+|------|------|------|
+| 선생님 ID | `CURRENT_TEACHER_ID` 상수 | `GET /api/auth/session` → `teacherId` |
+| 학생 로그인 | Supabase client `signInWithPassword` | `/api/auth/login` + role 검증 통일 |
+| 학생 logout | 없음 | `StudentAppShell`에 `LogoutButton` |
 
 ---
 
@@ -504,21 +535,31 @@ src/
 │   ├── admin/
 │   └── shared/
 ├── lib/
-│   ├── pricing-plans/
-│   │   └── repository.ts     # Supabase CRUD (server-only)
-│   ├── pricing-plan-cache.ts   # scheduler·enrollment sync cache
-│   ├── pricing-plan-display.ts # 클라이언트 표시 유틸
-│   ├── pricing-plan-store.ts   # re-export (하위 호환)
-│   ├── lesson-scheduler-bootstrap.ts  # server: cache warm + schedule
+│   ├── pricing-plans/repository.ts   # Supabase CRUD (server-only)
+│   ├── enrollments/repository.ts
+│   ├── lessons/repository.ts
+│   ├── accounts/repository.ts
+│   ├── teachers/repository.ts
+│   ├── faq/repository.ts
+│   ├── chat/repository.ts
+│   ├── chat/chat-store-sync.ts
+│   ├── finance/repository.ts
+│   ├── finance/finance-store-sync.ts
+│   ├── chat-store.ts                 # href helpers (client-safe)
+│   ├── …/repository.ts             # 도메인별 Supabase CRUD
+│   ├── *-cache.ts                    # warm*Cache 대상 in-memory cache
+│   ├── *-store-sync.ts              # 클라이언트 안전 sync 읽기
+│   ├── *-store.ts                    # re-export (하위 호환)
+│   ├── lesson-scheduler-bootstrap.ts # ensureSchedulesBootstrapped
 │   ├── supabase/
-│   │   ├── server.ts           # @supabase/ssr createClient
-│   │   ├── client.ts
+│   │   ├── server.ts                 # @supabase/ssr createClient
+│   │   ├── client.ts                 # browser + Realtime
 │   │   └── admin.ts
-│   ├── *-store.ts              # MVP in-memory stores (enrollments, lessons, …)
 │   ├── i18n/
 │   └── push/
 ├── hooks/
-│   ├── usePricingPlans.ts      # pricing API hook
+│   ├── usePricingPlans.ts
+│   ├── useChatRealtime.ts            # chat_messages Realtime 구독
 ├── types/
 └── messages/
     ├── ko.json

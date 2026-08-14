@@ -11,7 +11,7 @@
 | **DB 상세** | 컬럼·ENUM·인덱스는 [`db.md`](./db.md)를 SSOT로 따른다. 본 문서는 **UI가 실제로 쓰는 테이블·필드**만 강조한다 |
 | **목표 스택** | Next.js Route Handlers + Supabase PostgreSQL + Auth + (선택) Realtime |
 
-> **현재 (2026-08)**: Route Handler + **혼합 데이터 레이어** — `pricing_plans`는 Supabase PostgreSQL CRUD 완료, 나머지 도메인은 in-memory store. Auth·RLS·Realtime은 **미연동** (로그인 UI만 존재).
+> **현재 (2026-08)**: Route Handler **57+**개 + **Supabase PostgreSQL 데이터 레이어** — UI 연동 MVP store **전부** repository + sync cache 패턴으로 이전 완료. **Auth·RLS 1차 연동** (middleware, `/api/auth/*`, migration 017~021, `npm run test:rls` 16/16). **잔여**: 선생님 `CURRENT_TEACHER_ID` 하드코딩, 학생 logout·API 전면 보호, pricing admin middleware.
 
 ---
 
@@ -23,42 +23,51 @@
 |------|-----------|------------|
 | **학생** | `/[locale]/student/*` | `/api/student/*`, `/api/enrollments`, `/api/learning/*`, `/api/lessons/reschedule`, `/api/chat/rooms` |
 | **선생님** | `/teacher/*` | `/api/teacher/*`, `/api/learning/*`, `/api/lessons/reschedule`, `/api/chat/rooms` |
-| **관리자** | `/admin/*` | `/api/admin/*`, `/api/enrollments/*`, `/api/teachers/profile`, `/api/pricing-plans` |
+| **관리자** | `/admin/*` | `/api/admin/*`, `/api/enrollments/*`, `/api/teachers/profile`, `/api/pricing-plans`, `/api/admin/finance/transactions` |
 | **공개** | `/[locale]`, `/[locale]/pricing` | `/api/teachers/public`, `/api/pricing-plans`, `/api/faq` |
 
-### 1.2 Store → DB 이전 대상
+### 1.2 Store → DB 이전 현황
+
+**패턴**: `*/repository.ts` (server-only Supabase CRUD + `warm*Cache`) → `*-cache.ts` → `*-store-sync.ts` (클라이언트 안전 읽기) → `*-store.ts` (re-export). API Route는 `ensureSchedulesBootstrapped()` 후 `*InDb` / sync store 사용.
 
 | store / 모듈 | DB 테이블 (목표) | 연동 상태 | UI에서 쓰는 기능 |
 |--------------|------------------|-----------|------------------|
 | `pricing-plans/repository.ts` | `pricing_plans` | **✅ Supabase** | 랜딩·수강신청·관리자 CRUD (20/40/60분 등) |
 | `pricing-plan-cache.ts` | (in-memory cache) | ✅ | scheduler·enrollment sync 읽기 |
 | `pricing-plan-display.ts` | — | ✅ | 클라이언트 표시 유틸 (DB 미참조) |
-| `account-store.ts` | `profiles`, `students` | ⏳ | 가입, learner 전환, 설문, 체험 예약 |
-| `enrollment-store.ts` | `enrollments`, `payments` | ⏳ | 수강·입금·재수강·회차 조정 |
-| `teacher-profile-store.ts` | `teachers` | ⏳ | 공개 목록·관리자 프로필·가입 Step2 |
-| `teacher-lesson-store.ts` | `lessons` | ⏳ | My Lessons, Schedule, 상세, 완료 |
-| `teacher-availability-store.ts` | `teachers_weekly_availability` | ⏳ | Availability 그리드 |
-| `teacher-booked-slots.ts` | (lessons + reservations) | ⏳ | 슬롯 마감·연속 블록 |
-| `lesson-scheduler.ts` | (lessons 생성 로직) | ⏳ | 결제 확정·회차 조정 시 스케줄 |
-| `lesson-scheduler-bootstrap.ts` | — | ✅ | 서버: pricing cache warm → schedule sync |
+| `accounts/repository.ts` | `profiles`, `students` | **✅ Supabase** | 가입, learner 전환, 설문, 체험 예약 |
+| `account-store-sync.ts` | ↑ (cache) | ✅ | 클라이언트·RSC sync 읽기 |
+| `enrollments/repository.ts` | `enrollments`, `payments` | **✅ Supabase** | 수강·입금·재수강·회차 조정 |
+| `enrollment-store-sync.ts` | ↑ (cache) | ✅ | |
+| `teachers/repository.ts` | `teachers`, `profiles` | **✅ Supabase** | 공개 목록·관리자 프로필·가입 Step2 |
+| `teacher-profile-store-sync.ts` | ↑ (cache) | ✅ | `teacher-pending-*`는 Auth 전 임시 overlay |
+| `lessons/repository.ts` | `lessons` | **✅ Supabase** | My Lessons, Schedule, 상세, 완료 |
+| `teacher-lesson-store-sync.ts` | ↑ (cache) | ✅ | |
+| `teacher-availability/repository.ts` | `teachers_weekly_availability` | **✅ Supabase** | Availability 그리드 |
+| `teacher-booked-slots.ts` | (lessons + reservations) | ✅ | 슬롯 마감·연속 블록 (cache 기반) |
+| `lesson-scheduler.ts` | (lessons 생성 로직) | **✅ Supabase** | 결제 확정·회차 조정 시 스케줄 |
+| `lesson-scheduler-bootstrap.ts` | — | ✅ | 서버: 전 도메인 cache warm → schedule sync |
 | `slot-continuity.ts` | (로직 only) | ✅ | 20분 그리드·연속 N블록 검증 |
-| `reschedule-store.ts` | `lesson_reschedule_requests` | ⏳ | 보강 요청·승인·거절·취소 |
-| `learning-store.ts` | `lesson_feedbacks`, `monthly_growth_reports` | ⏳ | Learning 탭·피드백·레포트 |
-| `teacher-student-context-store.ts` | `teacher_student_context` | ⏳ | 교재·Special Notes·ZOOM/VOOV |
-| `teacher-salary-store.ts` + adj/policy | `teacher_salary_statements`, … | ⏳ | 급여 명세·관리자 정산 |
-| `teacher-payroll-penalty-store.ts` | `teacher_payroll_penalties` | ⏳ | 노쇼 패널티 |
-| `chat-store.ts` | `chat_rooms` (+ `chat_messages` Phase 2) | ⏳ | 방 목록·unread·ensure room |
-| `faq-store.ts` | `faq_items` | ⏳ | FAQ CRUD·공개 조회 |
-| `admin/lesson-operations-store.ts` | `lessons`, `enrollments` | ⏳ | 운영 센터 조치 |
-| `admin/admin-lesson-operation-log-store.ts` | `admin_lesson_operation_logs` | ⏳ | 주간 로그·undo |
-| `admin/admin-review-store.ts` | (여러 큐) | ⏳ | 검토 센터 4탭 |
-| `admin/admin-review-log-store.ts` | `admin_review_logs` | ⏳ | 검토 처리 로그 |
-| `admin/teacher-application-store.ts` | `teacher_applications` | ⏳ | 선생님 가입 검토 |
-| `admin/student-registration-store.ts` | `student_registration_reviews` | ⏳ | 학생 가입 검토 |
-| `admin/dashboard-settings-store.ts` | `dashboard_settings` | ⏳ | 대시보드 슬로건 |
-| `finance/payroll-finance-store.ts` | `finance_transactions`* | ⏳ | 급여 확정 시 지출 기록 |
-
-\* `session_adjustments`, `finance_transactions` 등은 [`db.md`](./db.md) §4 또는 JSONB(`enrollments.adjustments`)로 흡수 가능.
+| `reschedule/repository.ts` | `lesson_reschedule_requests` | **✅ Supabase** | 보강 요청·승인·거절·취소 |
+| `learning/repository.ts` | `lesson_feedbacks`, `monthly_growth_reports` | **✅ Supabase** | Learning 탭·피드백·레포트 |
+| `teacher-student-context-repository.ts` | `teacher_student_context` | **✅ Supabase** | 교재·Special Notes·ZOOM/VOOV |
+| `teacher-salary/repository.ts` + adj/policy | `teacher_salary_statements`, `salary_settings`, `teacher_bonuses`, `teacher_payroll_penalties` | **✅ Supabase** | 급여 명세·관리자 정산 |
+| `faq/repository.ts` | `faq_items` | **✅ Supabase** | FAQ CRUD·공개 조회 |
+| `admin/dashboard-settings/repository.ts` | `dashboard_settings` | **✅ Supabase** | 대시보드 슬로건 |
+| `teacher-applications/repository.ts` | `teacher_applications` | **✅ Supabase** | 선생님 가입 검토 |
+| `admin/lesson-operations-store.ts` | `lessons`, `enrollments` | **✅ Supabase** | 운영 센터 조치 (repository writes) |
+| `admin/admin-lesson-operation-log-repository.ts` | `admin_lesson_operation_logs` | **✅ Supabase** | 주간 로그·undo |
+| `admin/admin-review-store.ts` | (여러 큐) | **✅ Supabase** | 검토 센터 4탭 (reschedule·teacher_signup·student_signup·payment_activation) |
+| `admin/admin-review-log-repository.ts` | `admin_review_logs` | **✅ Supabase** | 검토 처리 로그 |
+| `student-registrations/repository.ts` | `student_registration_reviews` | **✅ Supabase** | 학생 가입 검토 큐·confirm/reject |
+| `admin/student-registration-store-sync.ts` | ↑ (cache) | ✅ | 클라이언트·API sync 읽기 |
+| `admin/student-registration-store.ts` | ↑ (re-export) | ✅ | 하위 호환 re-export |
+| `chat/repository.ts` | `chat_rooms`, `chat_messages` | **✅ Supabase** | 방 목록·unread·ensure room·메시지 CRUD |
+| `chat-store-sync.ts` | ↑ (cache) | ✅ | sync 읽기 |
+| `chat-store.ts` | — | ✅ | href helpers (클라이언트 안전) |
+| `finance/repository.ts` | `finance_transactions`, `finance_snapshots` | **✅ Supabase** | 급여 paid·입금 확인 시 정산 기록 |
+| `finance-store-sync.ts` | ↑ (cache) | ✅ | 재무 대시보드 sync 읽기 |
+| `finance/payroll-finance-store.ts` | ↑ (re-export) | ✅ | 하위 호환 re-export |
 
 ---
 
@@ -71,11 +80,12 @@
 | Zoom / VOOV / 화상 SDK | `videoPlatform` 필드만 | URL·미팅 생성 없음 |
 | PG·카드·위챗페이 | 입금 **신고** + 관리자 **수동 확인**만 | |
 | SMS OTP | 없음 | 이메일 Auth만 (연동 전) |
-| 채팅 **메시지 전송** | 스레드 UI + mock `chatMessages` | rooms/unread만 API ✅ |
-| 채팅 Realtime | 없음 | |
-| Web Push **발송** | `/api/push/send` stub | subscribe API만 존재, **UI 미연동** (TODO) |
-| 관리자 **메시지 방송** | `/admin/messages` UI shell | 버튼 미연동 |
-| `GET /api/admin/finance/summary` | Finance 페이지 client 집계 | 별도 API 없음 |
+| 채팅 Realtime | ✅ (migration 006) | `useChatRealtime` — `chat_messages` INSERT |
+| Web Push | subscribe ✅ · VAPID `/api/push/send` ✅ · SW `/public/sw.js` | CRON_SECRET · VAPID env |
+| **인앱 알림** | `/api/notifications` ✅ | GET·PATCH·click tracking |
+| 관리자 **메시지 · CS** | `/api/admin/messages/*` ✅ | direct·broadcast·campaigns·notification-rules(저장만) |
+| 관리자 **자동 시스템 알림** | 규칙 DB 저장 ✅ · **발송 엔진 제외** | cron/Edge 자동 발송 미구현 |
+| `GET /api/admin/finance/summary` | — | `/api/admin/finance/transactions` 사용 |
 | 선생님 **자기 프로필 수정** | `/teacher/profile` → redirect | 관리자만 CRUD |
 | `teacher_availability_exceptions` | UI 없음 | 휴무는 슬롯 Off로 대체 |
 | Edge Function cron (급여 자동 정산 등) | UI 수동 확정 | cron은 Phase 3 |
@@ -92,14 +102,15 @@
   └── Route Handlers (/api/*)  ← 본 명세 SSOT
         ↓
 [Supabase]
-  ├── PostgreSQL (+ migration 001·002 적용)
+  ├── PostgreSQL (migration 001~021)
   ├── `@supabase/ssr` createClient (Route Handler CRUD)
+  ├── repository + sync cache (ensureSchedulesBootstrapped)
   ├── Auth (profiles.role) — 미연동
-  └── (선택) Realtime — chat Phase 2
+  └── Realtime — `chat_messages` ✅
 ```
 
 - 별도 Express/Nest 서버 **없음**
-- `pricing_plans` CRUD: Route Handler → `pricing-plans/repository.ts` → Supabase (anon key, **RLS 미적용 시 주의**)
+- `pricing_plans` 및 핵심 도메인 CRUD: Route Handler → `*/repository.ts` → Supabase (anon key, **RLS 미적용 시 주의**)
 - Service Role Key: 향후 admin-only mutation·RLS bypass용 (현재 pricing CRUD는 `@supabase/ssr` 사용)
 
 ---
@@ -114,37 +125,55 @@
 | `/teacher/*` | `teacher` + `teachers.status=active` | en |
 | `/admin/*` | `admin` | ko |
 
-### 4.2 Supabase Auth (연동 시)
+### 4.2 Supabase Auth (연동 완료 — 1차)
+
+| 항목 | 구현 |
+|------|------|
+| 로그인 API | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session` |
+| OAuth callback | `GET /auth/callback` (`src/app/auth/callback/route.ts`) |
+| Middleware | `src/middleware.ts` — Supabase 세션 refresh + `/teacher/*`, `/admin/*` role 가드 |
+| Auth lib | `src/lib/auth/` — `session.ts`, `api-guard.ts`, `errors.ts`, `constants.ts` |
+| Demo 계정 | `demo-student@example.org`, `demo-teacher@example.org`, `demo-admin@example.org` / `DemoPass123!` (migration 016, 020) |
 
 - `profiles.role`: `student` | `teacher` | `admin`
 - **학생**: `account_type` (`self` | `guardian`) — 1 account : N `students`(learners)
-- **선생님 가입**: UI 2단계 → `POST /api/teacher/applications` → `POST /api/teachers/profile` → 검토 센터 `teacher_signup`
-- **pending 선생님**: `/teacher/*` 차단, `/teacher/signup/complete` 안내
+- **선생님 가입**: Step1 `POST /api/teacher/applications` (signUp) → Step2 `POST /api/teachers/profile` (teacher auth) → 검토 센터 `teacher_signup`
+- **pending 선생님**: `/teacher/*` 차단, login `teacher_not_active`, `/teacher/signup/complete` 안내
 
-### 4.3 API 인증 (연동 시)
+### 4.3 API 인증 (1차 — middleware + 선택적 guard)
 
-- Public: `/api/health`, `/api/teachers/public`, `/api/pricing-plans`(GET), `/api/faq`, teacher signup Step1·2
-- 그 외: session 필수 + role 검증 (Route Handler에서 `profiles.role` 확인)
+| 구분 | 경로 / 동작 |
+|------|-------------|
+| Public | `/api/health`, `/api/teachers/public`, `/api/pricing-plans`(GET), `/api/faq`, `POST /api/teacher/applications`, `/api/auth/login` |
+| Teacher signup step2 | `POST /api/teachers/profile` — teacher role Bearer |
+| Teacher application read | `GET /api/teacher/applications?id=` — teacher (본인) 또는 admin |
+| Middleware 보호 | `/api/admin/*`, `/api/teacher/*` (대부분) — session + role |
+| Route Handler guard | `guardApiRole('admin')` 등 — `confirm_payment`, admin messages 등 일부 |
+| **미보호 (잔여)** | `/api/enrollments`(GET), `/api/learning/*`, `/api/pricing-plans`(POST/PATCH/DELETE) — middleware 미적용 |
+
+> **DB 클라이언트**: 요청 컨텍스트는 `createRequestDbClient()` (RLS 적용). bootstrap cache warm·admin mutation은 `createBootstrapDbClient()` / `createServiceDbClient()` (`src/lib/supabase/db-client.ts`).
 
 ---
 
 ## 5. API 명세 (UI 검증 반영 · 2026-08)
 
-> **범례**: ✅ Route Handler 구현 · 🗄️ Supabase 연동 · ⚠️ DDL 001 미포함(in-memory) · 🔇 UI 미호출
+> **범례**: ✅ Route Handler 구현 · 🗄️ Supabase 연동 · ⚠️ DDL 미포함(in-memory) · 🔇 UI 미호출
 
-**집계**: Route Handler **39**개 · 프론트 `fetch('/api/…')` **고유 경로 ~35** · DDL 001 테이블 **27**개 중 API 직접 매핑 **24** (+ in-memory 전용 3)
+**집계**: Route Handler **57+**개 · 프론트 `fetch('/api/…')` **고유 경로 ~40** · DDL migration **001~021** · **MVP store 전부 Supabase**
 
 ### 5.1 Public · 공통
 
 | Method | Path | UI | DB | Query / Response |
 |--------|------|-----|-----|------------------|
 | GET | `/api/health` | — | — | `{ ok }` — §5.7 |
-| GET | `/api/teachers/public` | 🔇 SSR 대체 | `teachers` | `{ teachers[] }` — 랜딩은 RSC `getPublicTeachers()` |
+| GET | `/api/teachers/public` | 🔇 SSR 대체 | 🗄️ `teachers` | `{ teachers[] }` — 랜딩은 RSC + `ensurePublicContentBootstrapped()` |
 | GET | `/api/pricing-plans` | `PricingSection`, `usePricingPlans` | 🗄️ `pricing_plans` | `active=true?` → `{ plans[] }` |
 | POST | `/api/pricing-plans` | `/admin/pricing` | 🗄️ | Upsert fields → `{ plan }` |
 | GET/PATCH/DELETE | `/api/pricing-plans/[id]` | admin pricing | 🗄️ | PATCH/DELETE; GET 🔇 |
-| GET | `/api/faq` | `StudentFaqPage` | ⚠️ `faq_items` | `{ items[] }` published |
-| POST | `/api/push/subscribe` | 🔇 TODO | `push_subscriptions` | stub — §5.7 |
+| GET | `/api/faq` | `StudentFaqPage` | 🗄️ `faq_items` | `{ items[] }` published |
+| POST | `/api/push/subscribe` | PWA | `push_subscriptions` | VAPID + `/public/sw.js` |
+| GET/PATCH | `/api/notifications` | student/teacher | `notifications` | Bearer/cookie session |
+| POST | `/api/notifications/[id]/click` | SW·client | `notifications`, `admin_broadcasts` | CTR 집계 |
 
 > **제거·통합 후보** (프론트 미사용)
 >
@@ -178,7 +207,7 @@
 }
 ```
 
-> `planId` = Supabase `pricing_plans.id`. in-memory enrollment 시드 `plan-1` 등과 **불일치**.
+> `planId` = Supabase `pricing_plans.id`. API·DB 연동 후 mock ID(`plan-1` 등)와 **불일치** — 시드/Auth 연동 시 정리.
 
 - DB: `lessons` 1건 (`is_trial`, `duration_minutes`, `student_id`, `teacher_id`, `scheduled_at`)
 - 슬롯: `teachers_weekly_availability` + in-memory reserve (`teacher-booked-slots`)
@@ -227,13 +256,12 @@
 | GET/PUT | `/api/teacher/student-context` | `TeacherLessonDetailCard` | `teacher_student_context` | `studentId`, `teacherId`; PUT: textbook, videoPlatform, specialNotes |
 | GET | `/api/teacher/salary` | `TeacherSalaryDashboard` | `teacher_salary_statements`, `salary_settings` | `teacherId`; `month` → 단월 명세 |
 | GET | `/api/teacher/feedback` | `TeacherFeedbackHistory` | `lesson_feedbacks` | `teacherId`, `studentId?`, `month?`; `format=csv` |
-| GET | `/api/teacher/applications` | signup profile, admin application detail | *(in-memory)* `teacher_applications`† | `?id=` → 단건; 목록은 UI 미사용 |
-| POST | `/api/teacher/applications` | signup Step1 | ↑ | 개인정보 필드 |
-| GET/PATCH | `/api/chat/rooms` | chat list, bells | `chat_rooms` | `role`; PATCH: `action=read`\|`readAll`, `id` |
+| GET | `/api/teacher/applications` | signup profile, admin | 🗄️ `teacher_applications` | `?id=` → teacher/admin; 목록 admin only |
+| POST | `/api/teacher/applications` | signup Step1 | 🗄️ | signUp + application |
+| GET/PATCH | `/api/chat/rooms` | chat list, bells | 🗄️ `chat_rooms` | `role`; PATCH: `action=read`\|`readAll`, `id` |
+| GET/POST | `/api/chat/messages` | `ChatThread` | 🗄️ `chat_messages` | GET: `roomId`; POST: body, senderRole |
 
-† `teacher_applications` — **DDL 001 미포함**, in-memory only. Supabase 이전 시 migration 추가 필요.
-
-**EnrollmentFlow 슬롯**: Step 2는 클라이언트 `useTeacherOpenSlots`(in-memory). Step 3 trial 후 `PUT … action=reserve`만 API 호출.
+**EnrollmentFlow 슬롯**: Step 2는 클라이언트 `useTeacherOpenSlots`(cache). Step 3 trial 후 `PUT … action=reserve` API 호출.
 
 ### 5.6 관리자
 
@@ -248,20 +276,26 @@
 | GET/PATCH | `/api/admin/teacher-salary` | `AdminTeacherSalaryOverview` | `teacher_salary_statements`, `teacher_bonuses`, `salary_settings`, `teachers` | § 아래 |
 | GET/PATCH | `/api/admin/teachers`, `[id]` | teachers list/detail | `teachers` | `[id]` PATCH: `status` only |
 | GET | `/api/admin/students/[id]` | student detail | `students`, `enrollments`, `lessons`, … | aggregate DTO |
-| GET/PATCH | `/api/admin/dashboard-settings` | `AdminDashboardSlogan` | *(in-memory)* `dashboard_settings`† | `{ slogan }` |
-| GET/POST | `/api/admin/faq` | `AdminFaqManager` | *(in-memory)* `faq_items`† | CRUD fields |
-| PATCH/DELETE | `/api/admin/faq/[id]` | FAQ edit/delete | ↑ | — |
-| GET/POST/PUT | `/api/teachers/profile`, `[id]` | teacher-profiles | `teachers` | admin list; POST signup step2; `[id]` PUT |
-
-† FAQ·dashboard·teacher_applications — **migration 001에 없음**. Phase 1b DDL 또는 JSONB 확장 필요.
+| GET/PATCH | `/api/admin/dashboard-settings` | `AdminDashboardSlogan` | 🗄️ `dashboard_settings` | `{ slogan }` |
+| GET/POST | `/api/admin/faq` | `AdminFaqManager` | 🗄️ `faq_items` | CRUD fields |
+| PATCH/DELETE | `/api/admin/faq/[id]` | FAQ edit/delete | 🗄️ | — |
+| GET/POST | `/api/admin/messages/direct` | CS 1:1 thread list/create | 🗄️ `admin_direct_threads` | POST: `{ targetType, targetId }` |
+| GET/POST/PATCH | `/api/admin/messages/direct/[threadId]` | CS messages | 🗄️ `admin_direct_messages` | POST send; PATCH mark read |
+| GET | `/api/admin/messages/broadcast/preview` | BroadcastPanel | DB segment query | `audience`, `filter[]` |
+| POST | `/api/admin/messages/broadcast` | BroadcastPanel | 🗄️ `admin_broadcasts`, `notifications` | `{ title, body, audience, filters, channel }` |
+| GET | `/api/admin/messages/campaigns` | Push tab history | 🗄️ `admin_broadcasts` | `{ campaigns, totals }` |
+| GET/PATCH | `/api/admin/messages/notification-rules` | Push tab rules | 🗄️ `system_notification_rules` | PATCH: `{ rules: [{ id, enabled }] }` |
+| GET | `/api/admin/messages/quick-replies` | Quick reply templates | constants | — |
+| GET/POST | `/api/cron/process-scheduled-broadcasts` | Vercel Cron | 🗄️ `admin_broadcasts` | CRON_SECRET · 예약 발송 처리 |
+| GET/POST/PUT | `/api/teachers/profile`, `[id]` | teacher-profiles | 🗄️ `teachers` | GET public list; **POST signup step2 (teacher auth)**; `[id]` PUT |
 
 **PATCH `/api/admin/reviews`**
 
 | category | action | UI | DB side-effects |
 |----------|--------|-----|-----------------|
 | `reschedule` | `approve` / `reject` | 보강 검토 | `lesson_reschedule_requests`, `lessons.scheduled_at` |
-| `teacher_signup` | `approve` / `reject` | 선생님 가입 | `teachers.status`, application store |
-| `student_signup` | `confirm` / `reject` | 학생 가입 | registration review store |
+| `teacher_signup` | `approve` / `reject` | 선생님 가입 | `teacher_applications.teacher_id` → `teachers.status` active/inactive |
+| `student_signup` | `confirm` / `reject` | 학생 가입 | `student_registration_reviews` status update |
 | `payment_activation` | `activate` / `reject` | 입금 확인 | `enrollments`, `payments`, `lessons` schedule |
 
 **PATCH `/api/admin/teacher-salary` actions** (UI 사용)
@@ -286,33 +320,34 @@
 |--------|------|------|
 | GET | `/api/health` | 배포·모니터링 |
 | POST | `/api/push/subscribe` | PWA (stub, UI TODO) |
-| POST | `/api/push/send` | 발송 stub — **구현 범위 밖** |
+| POST | `/api/push/send` | cron/내부 | `push_subscriptions` | CRON_SECRET · VAPID 필수 |
 
 ---
 
 ## 5.8 API ↔ DB 매핑 검증 (2026-08)
 
-| API 영역 | Primary tables | DDL 001 | 런타임 |
-|----------|----------------|---------|--------|
-| pricing-plans | `pricing_plans` | ✅ | Supabase |
-| student/account | `profiles`, `students` | ✅ | in-memory |
-| enrollments | `enrollments`, `payments` | ✅ | in-memory |
-| lessons (all portals) | `lessons` | ✅ | in-memory |
-| availability | `teachers_weekly_availability` | ✅ | in-memory |
-| student-context | `teacher_student_context` | ✅ | in-memory |
-| learning | `lesson_feedbacks`, `monthly_growth_reports` | ✅ | in-memory |
-| reschedule | `lesson_reschedule_requests` | ✅ | in-memory |
-| salary | `teacher_salary_statements`, `salary_settings`, `teacher_bonuses`, `teacher_payroll_penalties` | ✅ | in-memory |
-| chat rooms | `chat_rooms` | ✅ | in-memory (messages mock) |
-| admin ops logs | `admin_lesson_operation_logs` | ✅ | in-memory |
-| admin reviews | `admin_review_logs` | ✅ | in-memory |
-| teachers profile | `teachers` | ✅ | in-memory |
-| **faq** | `faq_items` | ✅ 003 | in-memory |
-| **dashboard slogan** | `dashboard_settings` | ✅ 003 | in-memory |
-| **teacher applications** | `teacher_applications` | ✅ 003 | in-memory |
-| **student registration review** | `student_registration_reviews` | ❌ | in-memory |
+| API 영역 | Primary tables | DDL | 런타임 |
+|----------|----------------|-----|--------|
+| pricing-plans | `pricing_plans` | ✅ 001 | **Supabase** |
+| student/account | `profiles`, `students` | ✅ 001·004 | **Supabase** |
+| enrollments | `enrollments`, `payments` | ✅ 001 | **Supabase** |
+| lessons (all portals) | `lessons` | ✅ 001 | **Supabase** |
+| availability | `teachers_weekly_availability` | ✅ 001 | **Supabase** |
+| student-context | `teacher_student_context` | ✅ 001 | **Supabase** |
+| learning | `lesson_feedbacks`, `monthly_growth_reports` | ✅ 001 | **Supabase** |
+| reschedule | `lesson_reschedule_requests` | ✅ 001 | **Supabase** |
+| salary | `teacher_salary_statements`, `salary_settings`, `teacher_bonuses`, `teacher_payroll_penalties` | ✅ 001 | **Supabase** |
+| chat | `chat_rooms`, `chat_messages` | ✅ 001·006 | **Supabase** + Realtime |
+| finance | `finance_transactions`, `finance_snapshots` | ✅ 001·006 | **Supabase** |
+| admin ops logs | `admin_lesson_operation_logs` | ✅ 001 | **Supabase** |
+| admin reviews | `admin_review_logs` | ✅ 001 | **Supabase** |
+| teachers profile | `teachers` | ✅ 001 | **Supabase** |
+| **faq** | `faq_items` | ✅ 003 | **Supabase** |
+| **dashboard slogan** | `dashboard_settings` | ✅ 003 | **Supabase** |
+| **teacher applications** | `teacher_applications` | ✅ 003 | **Supabase** |
+| **student registration review** | `student_registration_reviews` | ✅ 005 | **Supabase** |
 
-**공개 선생님 목록**: 랜딩·수강신청·`/teachers` 페이지는 **Server Component**에서 `getPublicTeachers()` 직접 호출. `GET /api/teachers/public`은 Route Handler로 존재하나 **클라이언트 fetch 미사용** — 모바일/PWA 전환 시 사용.
+**공개 선생님 목록**: 랜딩·수강신청·`/teachers` 페이지는 **Server Component**에서 `ensurePublicContentBootstrapped()` → `getPublicTeachers()` 호출. `GET /api/teachers/public`은 Route Handler로 존재하나 **클라이언트 fetch 미사용** — 모바일/PWA 전환 시 사용.
 
 ---
 
@@ -381,11 +416,15 @@
 - **mark_student_absent** → `student_absent=true`, completed, 피드백 생략
 - **급여**: `estimated` → `processing` → `paid` — 관리자 `/admin/teacher-salary`
 
-### 6.6 선생님 가입 (UI 2단계)
+### 6.6 선생님 가입 (UI 2단계 · E2E 완료)
 
-1. `POST /api/teacher/applications` — 개인정보 (UI에서 password 수집, **Auth 연동 전 미저장**)
-2. `POST /api/teachers/profile` — `applicationId`, 공개 프로필
-3. 검토 센터 `teacher_signup` → `approve` → `teachers.status=active`
+1. `POST /api/teacher/applications` — 개인정보 + **password** → Supabase `signUp(role=teacher)` + `teacher_applications` insert
+2. `POST /api/teachers/profile` — **teacher Bearer 세션** 필수; `teachers.id = auth.uid()`, `status=pending`, `teacher_applications.teacher_id` 연결
+3. 승인 전 `POST /api/auth/login` → `403 teacher_not_active`
+4. 검토 센터 `teacher_signup` → `approve` — `teacher_applications.teacher_id` 기준 `teachers.status=active` (프로필 미완료 시 `profile_incomplete`)
+5. 거절 시 `teachers.status=inactive` (연결된 경우) + application `rejected`
+
+자동 검증: `npm run test:api:e2e` teacher signup 블록 · `npm run test:rls` migration 022
 
 ---
 
@@ -408,7 +447,7 @@
 | `lesson_reschedule_requests` | Reschedule | `/api/lessons/reschedule` |
 | `teacher_salary_statements`, `salary_settings`, `teacher_bonuses`, `teacher_payroll_penalties` | Salary | `/api/teacher/salary`, `/api/admin/teacher-salary` |
 | `admin_lesson_operation_logs`, `admin_review_logs` | Operations, Review | `/api/admin/lessons/operation-logs*`, `/api/admin/reviews` |
-| `chat_rooms` | Chat list | `/api/chat/rooms` (messages mock) |
+| `chat_rooms`, `chat_messages` | Chat list, thread | `/api/chat/rooms`, `/api/chat/messages` |
 
 ### 7.2 UI 사용 · DDL 003 포함 (✅ migration 003)
 
@@ -418,30 +457,47 @@
 | `dashboard_settings` | Admin slogan | `/api/admin/dashboard-settings` |
 | `teacher_applications` | Signup, review | `/api/teacher/applications`, reviews |
 
-### 7.3 UI 사용 · DDL 미포함 (⚠️ migration 후보)
+### 7.3 UI 사용 · DDL 005 포함 (✅ migration 005)
 
-| 테이블 (목표) | UI | API |
-|---------------|-----|-----|
-| `student_registration_reviews` | Review center | `/api/admin/reviews` student_signup |
+| 테이블 | UI | API |
+|--------|-----|-----|
+| `student_registration_reviews` | Review center student_signup | `/api/admin/reviews` student_signup |
 
-### 7.4 선택 · Phase 2 (UI stub)
+### 7.4 UI 사용 · DDL 006 포함 (✅ migration 006)
 
-| 테이블 | 조건 |
-|--------|------|
-| `chat_messages` | 채팅 **전송** UI 구현 시 |
-| `push_subscriptions` | Push subscribe UI 연동 시 |
+| 테이블 / API | UI | API |
+|--------------|-----|-----|
+| `finance_transactions` | Finance dashboard | `/api/admin/finance/transactions` |
+| `chat_messages` (+ Realtime) | Chat thread | `/api/chat/messages`, `useChatRealtime` |
 
-### 7.4 구현하지 않음
+### 7.5 Push · 알림 (✅)
+
+| 테이블 | UI | API |
+|--------|-----|-----|
+| `push_subscriptions` | PWA subscribe | `/api/push/subscribe`, `/api/push/send` |
+| `notifications` | (in-app, SW) | `/api/notifications`, click tracking |
+| `admin_broadcasts` | `/admin/messages` | broadcast + cron + CTR |
+
+### 7.6 구현하지 않음
 
 - `teacher_availability_exceptions` — UI 없음
-- `admin_broadcasts` — `/admin/messages` 미연동
-- `GET /api/admin/finance/summary` — Finance client 집계
-- PG·카드 결제 테이블
-- `POST /api/push/send` — 발송 stub
+- `admin_broadcasts` — `/admin/messages` ✅
+- `GET /api/admin/finance/summary` — `/api/admin/finance/transactions`로 대체
+- **자동 시스템 알림 발송 엔진** — 규칙 저장만 (`system_notification_rules`)
 
 ---
 
-## 8. RLS 요약 (연동 시)
+## 8. RLS (production — migration 017~021)
+
+| Migration | 내용 |
+|-----------|------|
+| `017_production_rls.sql` | 역할 기반 RLS, demo policy 제거 |
+| `018_fix_rls_auth.sql` | SECURITY DEFINER helpers, profiles 정책 |
+| `019_fix_rls_recursion.sql` | students↔lessons 재귀 차단 |
+| `020_fix_demo_admin_auth.sql` | demo-admin 로그인 수정 |
+| `021_admin_direct_notification_type.sql` | `admin_direct` notification enum |
+
+**적용·검증**: `npm run apply:rls` · `npm run test:rls` (16/16)
 
 | 테이블 | student | teacher | admin |
 |--------|---------|---------|-------|
@@ -454,25 +510,35 @@
 | chat_rooms | member | member | read |
 | teacher_salary_statements | — | own | all |
 
+> bootstrap cache warm은 service role 경로 사용 — production hardening 시 최소화 검토.
+
 ---
 
 ## 9. Supabase 이전 체크리스트
 
 | # | 작업 | 상태 | 검증 (UI) |
 |---|------|------|-----------|
-| 0 | 통합 DDL migration (`001`·`002`) | ✅ | Supabase SQL Editor / `db push` |
-| 1 | Auth + `profiles.role` | ⏳ | student/teacher/admin 로그인 |
-| 2 | `students` + activeLearner | ⏳ | StudentSwitcher |
+| 0 | 통합 DDL migration (`001`~`004`) | ✅ | `supabase db push` 또는 SQL Editor |
+| 1 | Auth + `profiles.role` | ⚠️ **1차** | teacher/admin login ✅; student logout·API 전면 보호 ⏳ |
+| 2 | `students` + activeLearner (`profiles.active_student_id`) | **✅** | StudentSwitcher |
 | 3 | **`pricing_plans` + `session_minutes`** | **✅** | 랜딩·`/admin/pricing` CRUD·40/60분 |
-| 4 | availability + slot continuity | ⏳ | TeacherSlotPicker |
-| 5 | enrollments + payments flow | ⏳ | confirm → lessons 생성 |
-| 6 | `adjust_sessions` batch | ⏳ | 학생상세 수업 횟수 관리 |
-| 7 | lesson operations + logs + undo | ⏳ | `/admin/operations` |
-| 8 | admin reviews 4 categories | ⏳ | `/admin/reschedule` |
-| 9 | salary statements | ⏳ | teacher + admin salary |
-| 10 | FAQ | ⏳ | student + admin |
-| 11 | `pricing_plans` RLS + admin auth | ⏳ | mutation 보호 |
+| 4 | availability + slot continuity | **✅** | TeacherSlotPicker |
+| 5 | enrollments + payments flow | **✅** | confirm → lessons 생성 |
+| 6 | `adjust_sessions` batch | **✅** | 학생상세 수업 횟수 관리 |
+| 7 | lesson operations + logs + undo | **✅** | `/admin/operations` |
+| 8 | admin reviews 4 categories | **✅** | `/admin/reschedule` — 전 카테고리 Supabase |
+| 9 | salary statements | **✅** | teacher + admin salary |
+| 10 | FAQ | **✅** | student + admin |
+| 11 | `pricing_plans` RLS + admin auth | ⚠️ | RLS ✅; middleware mutation 보호 ⏳ |
 | 12 | migration **003**: faq, dashboard_settings, teacher_applications | ✅ | `003_*.sql` |
+| 12b | migration **005**: student_registration_reviews | ✅ | `005_*.sql` |
+| 12c | migration **006**: finance_transactions + chat Realtime | ✅ | `006_*.sql` |
+| 13 | teachers profile + student context | **✅** | 랜딩·수업 상세 |
+| 14 | admin review logs + operation logs | **✅** | 검토·운영 센터 로그 |
+| 15 | payroll penalties + salary adjustments | **✅** | 노쇼·수기 가감 |
+| 16 | **chat** rooms + messages → Supabase | ✅ | `/api/chat/rooms`, `/api/chat/messages`, Realtime |
+| 17 | **student_registration_reviews** DDL + migration | ✅ | 검토 센터 student_signup |
+| 18 | **finance_transactions** + snapshots | ✅ | `/api/admin/finance/transactions`, paid·입금 확인 hook |
 
 ---
 
@@ -482,17 +548,20 @@
 # Supabase (pricing_plans 연동 — anon key 필수)
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=   # RLS·admin mutation 연동 시
+SUPABASE_SERVICE_ROLE_KEY=   # bootstrap cache warm, admin mutation, RLS 테스트 (필수)
 
 # App
 NEXT_PUBLIC_APP_URL=
 BANK_ACCOUNT_KR=
 BANK_ACCOUNT_CN=
 
-# Web Push (Phase 2 — UI subscribe only today)
+# Web Push (Phase 2)
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:admin@passonenglish.com
+
+# Cron (Vercel Cron → /api/cron/*)
+CRON_SECRET=
 ```
 
 ---
@@ -515,9 +584,10 @@ VAPID_SUBJECT=mailto:admin@passonenglish.com
 | `AdminFaqManager`, `StudentFaqPage` | admin/faq*, faq |
 | `AdminDashboardSlogan` | admin/dashboard-settings |
 | teacher-profiles pages | teachers/profile* |
-| Chat pages, `ChatNotificationBell` | chat/rooms |
+| Chat pages, `ChatNotificationBell`, `ChatThread` | chat/rooms, chat/messages |
+| `FinanceDashboard` | `/api/admin/finance/transactions` |
 | teacher signup | teacher/applications, teachers/profile |
-| `[locale]/page`, enrollment/new | **SSR** teachers (not `/api/teachers/public`) |
+| `[locale]/page`, enrollment/new | **SSR** `ensurePublicContentBootstrapped()` + `getPublicTeachers()` |
 
 ---
 

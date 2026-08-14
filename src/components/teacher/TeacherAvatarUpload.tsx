@@ -107,11 +107,12 @@ export function TeacherAvatarUpload({
 
   useEffect(() => {
     return () => {
-      if (localPreview?.startsWith("blob:") && localPreview !== value) {
-        URL.revokeObjectURL(localPreview);
+      if (cropSourceUrlRef.current) {
+        URL.revokeObjectURL(cropSourceUrlRef.current);
+        cropSourceUrlRef.current = null;
       }
     };
-  }, [localPreview, value]);
+  }, []);
 
   const resetCropState = useCallback(() => {
     setStep("preview");
@@ -152,16 +153,11 @@ export function TeacherAvatarUpload({
     setError("");
     try {
       const blob = await cropImageToBlob(sourceImage, cropTransform);
-      const objectUrl = URL.createObjectURL(blob);
       const dataUrl = await blobToDataUrl(blob);
       const file = new File([blob], avatarFilename(displayName), { type: "image/jpeg" });
 
-      if (localPreview?.startsWith("blob:") && localPreview !== value) {
-        URL.revokeObjectURL(localPreview);
-      }
-
-      setLocalPreview(objectUrl);
-      onChange({ previewUrl: objectUrl, file, dataUrl });
+      setLocalPreview(dataUrl);
+      onChange({ previewUrl: dataUrl, file, dataUrl });
       resetCropState();
     } catch {
       setError("Failed to crop image. Please try again.");
@@ -171,9 +167,6 @@ export function TeacherAvatarUpload({
   };
 
   const handleRemove = () => {
-    if (localPreview?.startsWith("blob:") && localPreview !== value) {
-      URL.revokeObjectURL(localPreview);
-    }
     setLocalPreview(undefined);
     onChange(null);
     resetCropState();
@@ -233,8 +226,13 @@ export function TeacherAvatarUpload({
       {step === "preview" && (
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <Avatar className="h-24 w-24 rounded-2xl border-2 border-gray-100 shadow-sm">
-            {previewUrl ? (
-              <AvatarImage src={previewUrl} alt={displayName} className="object-cover" />
+            {previewUrl && !previewUrl.startsWith("blob:") ? (
+              <AvatarImage
+                key={previewUrl}
+                src={previewUrl}
+                alt={displayName}
+                className="object-cover"
+              />
             ) : null}
             <AvatarFallback className="rounded-2xl text-lg">{initials}</AvatarFallback>
           </Avatar>

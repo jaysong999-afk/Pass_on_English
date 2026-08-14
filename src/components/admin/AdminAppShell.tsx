@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   CalendarClock,
@@ -14,10 +15,12 @@ import {
   PieChart,
   Send,
   HelpCircle,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatNotificationBell } from "@/components/shared/ChatNotificationBell";
+import { LogoutButton } from "@/components/shared/LogoutButton";
 
 interface NavItem {
   href: string;
@@ -140,6 +143,18 @@ const NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
+  {
+    title: "계정",
+    items: [
+      {
+        href: "/admin/settings",
+        matchPath: "/admin/settings",
+        label: "설정",
+        description: "비밀번호 변경",
+        icon: Settings,
+      },
+    ],
+  },
 ];
 
 const PAGE_TITLES: { prefix: string; title: string; subtitle?: string }[] = [
@@ -155,6 +170,7 @@ const PAGE_TITLES: { prefix: string; title: string; subtitle?: string }[] = [
   { prefix: "/admin/finance", title: "재무", subtitle: "수입·지출 대시보드" },
   { prefix: "/admin/messages", title: "메시지", subtitle: "채팅함" },
   { prefix: "/admin/chat", title: "채팅", subtitle: "대화" },
+  { prefix: "/admin/settings", title: "설정", subtitle: "계정 보안" },
   { prefix: "/admin", title: "대시보드", subtitle: "Pass on English 관리자" },
 ];
 
@@ -184,7 +200,45 @@ interface AdminAppShellProps {
 
 export function AdminAppShell({ children }: AdminAppShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const header = resolvePageHeader(pathname);
+  const [sessionReady, setSessionReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/auth/session")
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return res.json() as Promise<{ profile?: { role?: string } }>;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.profile?.role !== "admin") {
+          const next = encodeURIComponent(pathname);
+          router.replace(`/admin/login?next=${next}`);
+          return;
+        }
+        setSessionReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          router.replace("/admin/login");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, router]);
+
+  if (!sessionReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f4f5f7] text-sm text-gray-500">
+        세션 확인 중…
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen min-w-[1280px] bg-[#f4f5f7]">
@@ -248,16 +302,19 @@ export function AdminAppShell({ children }: AdminAppShellProps) {
               <p className="text-sm text-gray-500">{header.subtitle}</p>
             )}
           </div>
-          <ChatNotificationBell
-            role="admin"
-            variant="onLight"
-            copy={{
-              title: "메시지",
-              viewAll: "메시지함 전체",
-              empty: "새 메시지가 없습니다",
-              unreadLabel: (count) => `${count}건 미읽음`,
-            }}
-          />
+          <div className="flex items-center gap-3">
+            <LogoutButton redirectTo="/admin/login" label="로그아웃" variant="outline" />
+            <ChatNotificationBell
+              role="admin"
+              variant="onLight"
+              copy={{
+                title: "CS 메시지",
+                viewAll: "CS 1:1 전체 보기",
+                empty: "학생·선생님 메시지가 없습니다",
+                unreadLabel: (count) => `${count}건 미읽음`,
+              }}
+            />
+          </div>
         </header>
 
         <main className="flex-1 px-8 py-6">{children}</main>

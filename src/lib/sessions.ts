@@ -26,6 +26,13 @@ export function sumSessionBalance(enrollments: StudentEnrollment[]) {
   return { remaining, total };
 }
 
+/** Only active courses with generated schedules — excludes payment holds. */
+export function sumActiveSessionBalance(enrollments: StudentEnrollment[]) {
+  return sumSessionBalance(
+    enrollments.filter((e) => e.status === "active" || e.status === "expiring_soon")
+  );
+}
+
 export function formatAdjustmentLine(adj: SessionAdjustment) {
   const delta = adj.deltaRemaining;
   const sign = delta > 0 ? `+${delta}` : String(delta);

@@ -6,8 +6,8 @@ import type {
   TaxTreatment,
   TransactionCategory,
 } from "@/types";
-import { getPayrollFinanceTransactions } from "@/lib/finance/payroll-finance-store";
-import { students } from "@/lib/mock-data";
+import { getPayrollFinanceTransactions } from "@/lib/finance/finance-store-sync";
+import type { StudentDirectoryEntry } from "@/lib/students/student-directory-cache";
 
 /** Fallback when live rate API unavailable */
 export const FALLBACK_RATES: ExchangeRates = {
@@ -60,17 +60,23 @@ function planAmountForStudent(
   return country === "CN" ? plan.priceCny : plan.priceKrw;
 }
 
-/** Auto-generate transactions from students (revenue) and teachers (last month payroll) */
+/** Auto-generate transactions from student directory (revenue) and teachers (last month payroll) */
 export function buildAutoTransactions(
   rates: ExchangeRates,
-  activePlans: PricingPlan[] = []
+  activePlans: PricingPlan[] = [],
+  directoryEntries: StudentDirectoryEntry[] = []
 ): FinanceTransaction[] {
   const txs: FinanceTransaction[] = [];
   const now = new Date();
 
-  students
-    .filter((s) => s.paymentStatus === "confirmed" || s.paymentStatus === "reported")
-    .forEach((s, i) => {
+  directoryEntries
+    .filter(
+      (entry) =>
+        entry.student.paymentStatus === "confirmed" ||
+        entry.student.paymentStatus === "reported"
+    )
+    .forEach((entry, i) => {
+      const s = entry.student;
       const isKr = s.country !== "CN";
       const amount = planAmountForStudent(s.country, i, activePlans);
       const currency = isKr ? "KRW" : "CNY";

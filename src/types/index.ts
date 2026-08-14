@@ -42,7 +42,7 @@ export type TeacherSpecialty =
   | "Academic"
   | "Interview Prep";
 
-export type EnrollmentStatus = "active" | "expiring_soon" | "completed" | "pending_payment";
+export type EnrollmentStatus = "active" | "expiring_soon" | "completed" | "pending_payment" | "cancelled";
 
 export interface SessionAdjustment {
   id: string;
@@ -61,6 +61,7 @@ export interface StudentEnrollment {
   studentId: string;
   teacherId: string;
   teacherName: string;
+  teacherAvatarUrl?: string;
   planId: string;
   planLabel: string;
   curriculum: string;
@@ -77,8 +78,28 @@ export interface StudentEnrollment {
   /** 수강 신청 시 선택한 주간 시간 (플랜 요일 모두 동일 시간) */
   preferredSlotTime?: string;
   preferredSlotDay?: string;
+  /** Copied from the pricing plan for student-facing schedule display */
+  scheduleDays?: string[];
+  sessionMinutes?: number;
   /** 재수강 시 이전 수강 계약 ID */
   renewedFromEnrollmentId?: string;
+  /** Student confirmed application (hold starts) */
+  confirmedAt?: string;
+  /** Server deadline for payment (15h from confirm, trial end, or last-lesson end) */
+  paymentDeadlineAt?: string;
+  /** Student may apply for renewal (lessons exist through last-lesson-end + 12h). API-computed. */
+  canStudentRenew?: boolean;
+  renewalWindowStatus?: "ineligible" | "not_open" | "open" | "student_closed" | "expired";
+  renewalLastLessonEndedAt?: string;
+  renewalStudentDeadlineAt?: string;
+  renewalHoldDeadlineAt?: string;
+  /** True when this pending renewal is the post-last-lesson 12h/15h occupancy hold. */
+  renewalIsLastLessonHold?: boolean;
+  /** True when the hold was auto-created at last-lesson end (student has not applied yet). */
+  renewalIsSystemAutoOffer?: boolean;
+  cancelReason?: string;
+  /** True when this enrollment was created with a free trial lesson (paid sessions start after trial). */
+  includesTrial?: boolean;
 }
 
 export interface PaymentRecord {
@@ -173,6 +194,8 @@ export interface TeacherApplication {
   email: string;
   status: "pending" | "approved" | "rejected";
   submittedAt: string;
+  /** Linked teachers.id after signup profile step (Package B) */
+  teacherId?: string | null;
 }
 
 export interface TeacherSignupInput {
@@ -246,6 +269,7 @@ export interface Learner {
   trialUsed: boolean;
   trialScheduledAt?: string;
   trialLessonId?: string;
+  trialDurationMinutes?: number;
   paymentStatus: PaymentStatus;
   /** Admin review after account signup — defaults to confirmed for legacy rows */
   registrationStatus?: RegistrationStatus;
@@ -421,6 +445,10 @@ export interface ChatRoom {
   studentName?: string;
   /** 알림·목록에 표시할 상대방 이름 */
   displayName: string;
+  /** Inbox counterpart avatar (teacher for students, student for teachers) */
+  avatarUrl?: string;
+  teacherAvatarUrl?: string;
+  studentAvatarUrl?: string;
   lastMessage: string;
   lastMessageAt: string;
   unread: number;
@@ -430,6 +458,7 @@ export interface ChatMessage {
   id: string;
   senderId: string;
   senderName: string;
+  senderAvatarUrl?: string;
   senderRole: UserRole;
   body: string;
   createdAt: string;

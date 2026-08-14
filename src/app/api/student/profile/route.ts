@@ -2,22 +2,28 @@ import { NextResponse } from "next/server";
 import type { AccountType, CefrLevel, CountryCode, CoursePurpose } from "@/types";
 import {
   bookTrialForLearner,
+  ensureAccountSession,
   getAccountSession,
   getActiveLearner,
   registerAccount,
   updateLearnerSurvey,
 } from "@/lib/account-store";
 import { learnerToLegacyProfile } from "@/lib/student-profile-store";
-import { createTrialLesson } from "@/lib/teacher-lesson-store";
+import { createTrialLessonInDb } from "@/lib/lessons/repository";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { getPricingPlanById } from "@/lib/pricing-plans/repository";
-import { reserveTeacherWeeklySlotsForPlan } from "@/lib/teacher-booked-slots";
+import { reserveTeacherWeeklySlotsInDb } from "@/lib/teacher-availability/repository";
 import type { DayLabel, SlotStartTime } from "@/lib/availability/types";
 import { lessonScheduledAtToKstSlot } from "@/lib/availability/timezone";
 import { VALID_CEFR_LEVELS, VALID_COURSE_PURPOSES } from "@/lib/student-survey-labels";
 
 /** @deprecated Prefer GET /api/student/account */
 export async function GET() {
+  const session = await ensureAccountSession();
+  if (!session) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const activeLearner = getActiveLearner();
   return NextResponse.json({
     profile: learnerToLegacyProfile(activeLearner),
@@ -33,6 +39,7 @@ export async function POST(request: Request) {
   const fullName = String(body.fullName ?? "").trim();
   const englishName = String(body.englishName ?? "").trim();
   const email = String(body.email ?? "").trim();
+  const password = String(body.password ?? "").trim();
   const country = body.country as CountryCode;
   const dateOfBirth = String(body.dateOfBirth ?? "").trim();
   const phone = String(body.phone ?? "").trim();
@@ -40,7 +47,15 @@ export async function POST(request: Request) {
   const learnerEnglishName = String(body.learnerEnglishName ?? englishName).trim();
   const learnerDateOfBirth = String(body.learnerDateOfBirth ?? dateOfBirth).trim();
 
-  if (!fullName || !email || !phone || !learnerFullName || !learnerEnglishName || !learnerDateOfBirth) {
+  if (
+    !fullName ||
+    !email ||
+    !phone ||
+    !password ||
+    !learnerFullName ||
+    !learnerEnglishName ||
+    !learnerDateOfBirth
+  ) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
@@ -48,21 +63,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_country" }, { status: 400 });
   }
 
-  registerAccount({
-    accountType,
-    fullName,
-    email,
-    phone,
-    country,
-    learnerFullName,
-    learnerEnglishName,
-    learnerDateOfBirth,
-  });
+  try {
+    await registerAccount({
+      accountType,
+      fullName,
+      email,
+      phone,
+      password,
+      country,
+      learnerFullName,
+      learnerEnglishName,
+      learnerDateOfBirth,
+    });
+  } catch {
+    return NextResponse.json({ error: "signup_failed" }, { status: 500 });
+  }
 
   return NextResponse.json({ profile: learnerToLegacyProfile(getActiveLearner()) });
 }
 
 export async function PATCH(request: Request) {
+  const session = await ensureAccountSession();
+  if (!session) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json();
 
   if (body.action === "book_trial") {
@@ -89,7 +114,7 @@ export async function PATCH(request: Request) {
     const durationMinutes = sessionMinutes && sessionMinutes > 0 ? sessionMinutes : 20;
     const plan = planId ? await getPricingPlanById(planId) : undefined;
 
-    const lesson = createTrialLesson({
+    const lesson = await createTrialLessonInDb({
       teacherId,
       teacherName,
       studentId: learner.id,
@@ -100,18 +125,19 @@ export async function PATCH(request: Request) {
 
     if (plan?.scheduleDays?.length) {
       const { start } = lessonScheduledAtToKstSlot(scheduledAt);
-      reserveTeacherWeeklySlotsForPlan(
-        teacherId,
-        plan.scheduleDays as DayLabel[],
-        start as SlotStartTime,
-        getStudentDisplayName(learner),
-        durationMinutes
-      );
+      await reserveTeacherWeeklySlotsInDb(teacherId, {
+        planDays: plan.scheduleDays as DayLabel[],
+        startTime: start as SlotStartTime,
+        sessionMinutes: durationMinutes,
+        studentName: getStudentDisplayName(learner),
+        studentId: learner.id,
+      });
     }
 
-    const updated = bookTrialForLearner(learner.id, {
+    const updated = await bookTrialForLearner(learner.id, {
       scheduledAt,
       trialLessonId: lesson.id,
+      durationMinutes,
     });
 
     return NextResponse.json({
@@ -137,7 +163,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "invalid_purposes" }, { status: 400 });
   }
 
-  const updated = updateLearnerSurvey(learnerId, { englishLevel, purposes, surveyNotes });
+  const updated = await updateLearnerSurvey(learnerId, { englishLevel, purposes, surveyNotes });
   if (!updated) {
     return NextResponse.json({ error: "learner_not_found" }, { status: 404 });
   }

@@ -9,7 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { submitTeacherApplication } from "@/lib/teacher-applications";
+import {
+  submitTeacherApplication,
+  teacherApplicationErrorMessage,
+} from "@/lib/teacher-applications";
 
 export default function TeacherSignupPage() {
   const router = useRouter();
@@ -47,7 +50,7 @@ export default function TeacherSignupPage() {
 
     setSubmitting(true);
     try {
-      const application = await submitTeacherApplication({
+      const result = await submitTeacherApplication({
         fullName: fullName.trim(),
         dateOfBirth,
         phone: phone.trim(),
@@ -55,12 +58,13 @@ export default function TeacherSignupPage() {
         facebookMessengerId: facebookMessengerId.trim(),
         address: address.trim(),
         email: email.trim(),
+        password,
       });
-      if (!application) {
-        setError("Something went wrong. Please try again.");
+      if (!result.ok) {
+        setError(teacherApplicationErrorMessage(result.error));
         return;
       }
-      router.push(`/teacher/signup/profile?applicationId=${application.id}`);
+      router.push(`/teacher/signup/profile?applicationId=${result.application.id}`);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

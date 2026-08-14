@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PersonAvatar } from "@/components/shared/PersonAvatar";
 import type { Teacher } from "@/types";
 
 interface TeacherCardProps {
@@ -13,12 +13,6 @@ interface TeacherCardProps {
 }
 
 export function TeacherCard({ teacher, href, showSelect = false, locale = "ko" }: TeacherCardProps) {
-  const initials = teacher.displayName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2);
-
   const selectLabel = locale === "en" ? "Select" : locale === "zh" ? "选择" : "선택하기";
   const yearsLabel = locale === "en" ? "yrs exp" : locale === "zh" ? "年经验" : "년 경력";
 
@@ -26,9 +20,12 @@ export function TeacherCard({ teacher, href, showSelect = false, locale = "ko" }
     <Card className="overflow-hidden transition-shadow hover:shadow-md">
       <CardContent className="p-5">
         <div className="flex gap-4">
-          <Avatar className="h-14 w-14">
-            <AvatarFallback className="text-lg">{initials}</AvatarFallback>
-          </Avatar>
+          <PersonAvatar
+            name={teacher.displayName}
+            avatarUrl={teacher.avatarUrl}
+            className="h-14 w-14"
+            fallbackClassName="text-lg"
+          />
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <h3 className="font-bold text-gray-900">{teacher.displayName}</h3>

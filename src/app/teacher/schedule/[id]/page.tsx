@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,13 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { LessonStatusBadge } from "@/components/shared/LessonStatusBadge";
-import { getLesson } from "@/lib/mock-data";
 import { TEACHER_TIMEZONE } from "@/lib/availability/timezone";
 import { formatDate, formatTime } from "@/lib/utils";
+import type { Lesson } from "@/types";
 
 export default function TeacherLessonDetailPage() {
   const params = useParams();
-  const lesson = getLesson(params.id as string);
+  const lessonId = params.id as string;
+  const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -24,6 +26,29 @@ export default function TeacherLessonDetailPage() {
   const [progressPages, setProgressPages] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const loadLesson = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/teacher/lessons/${lessonId}`);
+      if (!res.ok) {
+        setLesson(null);
+        return;
+      }
+      const data = await res.json();
+      setLesson(data.lesson ?? null);
+    } finally {
+      setLoading(false);
+    }
+  }, [lessonId]);
+
+  useEffect(() => {
+    void loadLesson();
+  }, [loadLesson]);
+
+  if (loading) {
+    return <p className="text-gray-500">Loading lesson...</p>;
+  }
 
   if (!lesson) {
     return <p className="text-gray-500">Lesson not found.</p>;
@@ -73,7 +98,8 @@ export default function TeacherLessonDetailPage() {
           <div>
             <p className="text-sm text-gray-500">Date & Time</p>
             <p className="font-semibold">
-              {formatDate(lesson.scheduledAt, "en")} {formatTime(lesson.scheduledAt, "en", TEACHER_TIMEZONE)}
+              {formatDate(lesson.scheduledAt, "en")}{" "}
+              {formatTime(lesson.scheduledAt, "en", TEACHER_TIMEZONE)}
             </p>
           </div>
         </CardContent>

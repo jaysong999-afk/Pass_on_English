@@ -1,6 +1,8 @@
 "use client";
 
+import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +10,49 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function TeacherLoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          role: "teacher",
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(
+          data.error === "invalid_credentials"
+            ? "Invalid email or password."
+            : data.error === "teacher_not_active"
+              ? "Your teacher account is not active yet."
+              : "Sign in failed. Please try again."
+        );
+        return;
+      }
+
+      router.push("/teacher");
+      router.refresh();
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700">
       <header className="px-6 py-5">
@@ -33,31 +78,57 @@ export default function TeacherLoginPage() {
               Access your schedule, students, and salary dashboard.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="teacher-email">Email</Label>
-              <Input id="teacher-email" type="email" placeholder="teacher@passonenglish.com" autoComplete="email" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="teacher-password">Password</Label>
-              <Input id="teacher-password" type="password" autoComplete="current-password" />
-            </div>
-            <Button asChild className="h-12 w-full rounded-xl bg-emerald-600 text-base hover:bg-emerald-700">
-              <Link href="/teacher">Sign In</Link>
-            </Button>
-            <p className="pt-2 text-center text-sm text-gray-500">
-              New teacher?{" "}
-              <Link href="/teacher/signup" className="font-semibold text-emerald-700 hover:underline">
-                Apply to join
-              </Link>
-            </p>
-            <p className="text-center text-xs leading-relaxed text-gray-500">
-              For teachers only. Students please use the{" "}
-              <Link href="/ko/login" className="font-semibold text-emerald-700 hover:underline">
-                student login
-              </Link>
-              .
-            </p>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="teacher-email">Email</Label>
+                <Input
+                  id="teacher-email"
+                  type="email"
+                  placeholder="teacher@passonenglish.com"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="teacher-password">Password</Label>
+                <Input
+                  id="teacher-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              {error ? (
+                <p className="text-sm text-red-600" role="alert">
+                  {error}
+                </p>
+              ) : null}
+              <Button
+                type="submit"
+                className="h-12 w-full rounded-xl bg-emerald-600 text-base hover:bg-emerald-700"
+                disabled={submitting}
+              >
+                {submitting ? "Signing in…" : "Sign In"}
+              </Button>
+              <p className="pt-2 text-center text-sm text-gray-500">
+                New teacher?{" "}
+                <Link href="/teacher/signup" className="font-semibold text-emerald-700 hover:underline">
+                  Apply to join
+                </Link>
+              </p>
+              <p className="text-center text-xs leading-relaxed text-gray-500">
+                For teachers only. Students please use the{" "}
+                <Link href="/ko/login" className="font-semibold text-emerald-700 hover:underline">
+                  student login
+                </Link>
+                .
+              </p>
+            </form>
           </CardContent>
         </Card>
       </main>

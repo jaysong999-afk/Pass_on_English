@@ -10,7 +10,7 @@ import {
   slotKey,
 } from "@/lib/availability/time-utils";
 import { getValidSessionStartTimes, canBookSessionAt } from "@/lib/availability/slot-continuity";
-import { getTeacherWeeklyAvailability, isSlotEnabled } from "@/lib/teacher-availability-store";
+import { getTeacherWeeklyAvailability, isSlotEnabled } from "@/lib/teacher-availability-store-sync";
 import { getBookedSlotsForTeacher } from "@/lib/teacher-booked-slots";
 import {
   formatGridTimeLabel,
@@ -198,18 +198,18 @@ export function nextOccurrenceIso(dayOfWeek: number, startTime: string): string 
   return nextKstSlotOccurrenceIso(dayOfWeek, startTime as SlotStartTime);
 }
 
-/** Earliest upcoming KST slot among plan days at the given weekly time. */
+/** Earliest KST slot among plan days at the given weekly time, strictly after `after`. */
 export function nextPlanSlotOccurrenceIso(
   scheduleDays: string[],
-  startTime: SlotStartTime
+  startTime: SlotStartTime,
+  after: Date = new Date()
 ): string {
   const days = scheduleDays as DayLabel[];
-  const now = new Date();
   let best: Date | null = null;
 
   for (const day of days) {
     let candidate = kstSlotToDate(day, startTime);
-    while (candidate <= now) {
+    while (candidate <= after) {
       candidate = new Date(candidate.getTime() + 7 * 24 * 60 * 60 * 1000);
     }
     if (!best || candidate < best) {
@@ -222,6 +222,31 @@ export function nextPlanSlotOccurrenceIso(
   }
 
   return best!.toISOString();
+}
+
+/** e.g. 8월 13일 목요일 10:20~10:40 */
+export function formatOccurrenceDateTimeRange(
+  scheduledAt: string,
+  durationMinutes: number,
+  locale: Locale
+): string {
+  const tz = getStudentTimezone(locale);
+  const start = new Date(scheduledAt);
+  const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+  const tag = locale === "zh-CN" ? "zh-CN" : "ko-KR";
+  const datePart = new Intl.DateTimeFormat(tag, {
+    timeZone: tz,
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(start);
+  const timeFmt = new Intl.DateTimeFormat(tag, {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  return `${datePart} ${timeFmt.format(start)}~${timeFmt.format(end)}`;
 }
 
 export function groupSlotsByDay(slots: TeacherScheduleSlot[]): Map<string, TeacherScheduleSlot[]> {

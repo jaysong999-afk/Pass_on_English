@@ -34,6 +34,7 @@ interface RescheduleProgressPanelProps {
     reject: string;
     cancel: string;
     processing: string;
+    slotUnavailable?: string;
   };
 }
 
@@ -50,11 +51,29 @@ export function RescheduleProgressPanel({
   const [requests, setRequests] = useState<LessonRescheduleRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const slotBusyMessage =
+    labels.slotUnavailable ??
+    (locale === "ko"
+      ? "해당 시간은 다른 수업이 있어 선택할 수 없습니다."
+      : locale === "zh"
+        ? "该时间已有其他课程，无法选择。"
+        : "That time is already occupied by another class.");
 
   const load = useCallback(async () => {
+    if (!fetchUrl || /[?&]studentId=$/.test(fetchUrl) || /[?&]teacherId=$/.test(fetchUrl)) {
+      setRequests([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(fetchUrl);
+      if (!res.ok) {
+        setRequests([]);
+        return;
+      }
       const data = await res.json();
       setRequests(data.requests ?? []);
     } finally {
@@ -69,6 +88,7 @@ export function RescheduleProgressPanel({
   const handleAction = async (id: string, action: "approve" | "reject" | "cancel") => {
     if (role === "admin") return;
     setActingId(id);
+    setActionError(null);
     try {
       const res = await fetch("/api/lessons/reschedule", {
         method: "PATCH",
@@ -78,7 +98,12 @@ export function RescheduleProgressPanel({
       if (res.ok) {
         await load();
         onUpdated?.();
+        return;
       }
+      const data = (await res.json()) as { error?: string };
+      setActionError(
+        data.error === "slot_unavailable" ? slotBusyMessage : (data.error ?? "Request failed")
+      );
     } finally {
       setActingId(null);
     }
@@ -100,7 +125,9 @@ export function RescheduleProgressPanel({
         ) : requests.length === 0 ? (
           <p className="py-4 text-center text-sm text-gray-400">{emptyMessage}</p>
         ) : (
-          requests.map((req) => {
+          <>
+            {actionError && <p className="text-sm text-red-600">{actionError}</p>}
+            {requests.map((req) => {
             const showApproveReject = role !== "admin" && canApprove(req, role);
             const showCancel = role !== "admin" && canCancel(req, role);
             const isPending =
@@ -195,7 +222,8 @@ export function RescheduleProgressPanel({
                 )}
               </div>
             );
-          })
+          })}
+          </>
         )}
       </CardContent>
     </Card>

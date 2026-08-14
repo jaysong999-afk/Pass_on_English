@@ -7,7 +7,7 @@ import {
   SaveAvailabilityBar,
   WeeklyAvailabilityGrid,
 } from "@/components/teacher/WeeklyAvailabilityGrid";
-import { CURRENT_TEACHER_ID } from "@/lib/availability/constants";
+import { useTeacherSession } from "@/contexts/TeacherSessionContext";
 import { TEACHER_TIMEZONE } from "@/lib/availability/timezone";
 import type { DayLabel, WeeklySlotMap } from "@/lib/availability/types";
 import { emptyWeeklySlotMap } from "@/lib/availability/time-utils";
@@ -21,6 +21,7 @@ function cloneSlots(slots: WeeklySlotMap): WeeklySlotMap {
 }
 
 export default function TeacherAvailabilityPage() {
+  const { teacherId, loading: sessionLoading } = useTeacherSession();
   const [slots, setSlots] = useState<WeeklySlotMap>(() => emptyWeeklySlotMap());
   const [savedSlots, setSavedSlots] = useState<WeeklySlotMap>(() => emptyWeeklySlotMap());
   const [loading, setLoading] = useState(true);
@@ -30,9 +31,10 @@ export default function TeacherAvailabilityPage() {
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
+    if (!teacherId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/teacher/availability?teacherId=${CURRENT_TEACHER_ID}`);
+      const res = await fetch(`/api/teacher/availability?teacherId=${teacherId}`);
       const data = await res.json();
       const next = cloneSlots(data.availability.slots);
       setSlots(next);
@@ -40,11 +42,11 @@ export default function TeacherAvailabilityPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [teacherId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (teacherId) load();
+  }, [load, teacherId]);
 
   const dirty = useMemo(
     () => JSON.stringify(slots) !== JSON.stringify(savedSlots),
@@ -52,16 +54,27 @@ export default function TeacherAvailabilityPage() {
   );
 
   async function handleSave() {
+    if (!teacherId) return;
     setSaving(true);
     setError("");
     try {
       const res = await fetch("/api/teacher/availability", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teacherId: CURRENT_TEACHER_ID, slots }),
+        body: JSON.stringify({ teacherId, slots }),
       });
       if (!res.ok) {
-        setError("Failed to save. Please try again.");
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          hint?: string;
+        };
+        if (data.error === "availability_rls_blocked") {
+          setError(
+            "Save blocked by database permissions. Configure SUPABASE_SERVICE_ROLE_KEY or apply the latest Supabase migration."
+          );
+        } else {
+          setError("Failed to save. Please try again.");
+        }
         return;
       }
       const data = await res.json();
@@ -91,7 +104,7 @@ export default function TeacherAvailabilityPage() {
     });
   }
 
-  if (loading) {
+  if (sessionLoading || loading || !teacherId) {
     return <p className="py-12 text-center text-sm text-gray-500">Loading availability…</p>;
   }
 

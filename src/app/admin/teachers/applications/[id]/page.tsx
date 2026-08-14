@@ -27,8 +27,8 @@ export default function AdminTeacherApplicationPage() {
 
   useEffect(() => {
     const id = String(params.id ?? "");
-    fetchTeacherApplicationById(id).then((app) => {
-      setApplication(app);
+    fetchTeacherApplicationById(id).then((result) => {
+      setApplication(result.ok ? result.application : null);
       setLoading(false);
     });
   }, [params.id]);

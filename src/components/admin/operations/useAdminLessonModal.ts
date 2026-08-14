@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import type { Lesson } from "@/types";
+import type { LessonDisplayContext } from "@/lib/teacher-lesson-context";
 import {
   fromDatetimeLocalValue,
   toDatetimeLocalValue,
@@ -15,6 +16,7 @@ interface AvailableTeacher {
 
 export function useAdminLessonModal(onComplete?: () => void) {
   const [selected, setSelected] = useState<Lesson | null>(null);
+  const [display, setDisplay] = useState<LessonDisplayContext | null>(null);
   const [available, setAvailable] = useState<AvailableTeacher[]>([]);
   const [substituteId, setSubstituteId] = useState("");
   const [newTime, setNewTime] = useState("");
@@ -25,6 +27,7 @@ export function useAdminLessonModal(onComplete?: () => void) {
 
   const openLesson = useCallback(async (lesson: Lesson) => {
     setSelected(lesson);
+    setDisplay(null);
     setSubstituteId("");
     setNote("");
     setNewTime(toDatetimeLocalValue(lesson.scheduledAt));
@@ -33,10 +36,12 @@ export function useAdminLessonModal(onComplete?: () => void) {
     const res = await fetch(`/api/admin/lessons/${lesson.id}`);
     const data = await res.json();
     setAvailable(data.availableTeachers ?? []);
+    setDisplay(data.display ?? null);
   }, []);
 
   const closeLesson = useCallback(() => {
     setSelected(null);
+    setDisplay(null);
     setAvailable([]);
     setMessage("");
   }, []);
@@ -62,7 +67,11 @@ export function useAdminLessonModal(onComplete?: () => void) {
         });
         const data = await res.json();
         if (!res.ok) {
-          setMessage(data.error ?? "처리 실패");
+          const errorLabels: Record<string, string> = {
+            slot_unavailable: "해당 시간은 다른 수업이 있어 선택할 수 없습니다.",
+            substitute_slot_unavailable: "해당 시간은 다른 수업이 있어 선택할 수 없습니다.",
+          };
+          setMessage(errorLabels[data.error] ?? data.error ?? "처리 실패");
           return;
         }
         setMessage("처리되었습니다.");
@@ -77,6 +86,7 @@ export function useAdminLessonModal(onComplete?: () => void) {
 
   return {
     selected,
+    display,
     openLesson,
     closeLesson,
     available,

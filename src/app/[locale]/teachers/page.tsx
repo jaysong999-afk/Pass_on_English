@@ -1,6 +1,7 @@
 import { LandingHeader, LandingFooter } from "@/components/landing/LandingSections";
 import { TeachersSection } from "@/components/landing/TeachersSection";
 import { getPublicTeachers } from "@/lib/teacher-profile-store";
+import { ensurePublicContentBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export default async function PublicTeachersPage({
   params,
@@ -8,6 +9,7 @@ export default async function PublicTeachersPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  await ensurePublicContentBootstrapped();
   const teachers = getPublicTeachers();
 
   return (

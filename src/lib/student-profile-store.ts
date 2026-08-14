@@ -1,12 +1,9 @@
 import type { CefrLevel, CountryCode, CoursePurpose, PaymentStatus } from "@/types";
 import {
-  bookTrialForLearner,
   getAccountHolder,
   getActiveLearner,
-  registerAccount,
   updateLearnerEnrollmentMeta,
-  updateLearnerSurvey,
-} from "@/lib/account-store";
+} from "@/lib/account-store-sync";
 
 /**
  * @deprecated Use AccountHolder + Learner from account-store.
@@ -61,8 +58,19 @@ export function getCurrentStudentProfile(): StudentProfile {
   return learnerToLegacyProfile();
 }
 
+export interface StudentSurveyInput {
+  englishLevel: CefrLevel;
+  purposes: CoursePurpose[];
+  surveyNotes?: string;
+}
+
+export interface BookTrialInput {
+  scheduledAt: string;
+  trialLessonId: string;
+}
+
 export function registerStudentProfile(
-  input: Omit<
+  _input: Omit<
     StudentProfile,
     | "id"
     | "englishLevel"
@@ -78,40 +86,15 @@ export function registerStudentProfile(
     | "accountHolderName"
   > & { id?: string; accountType?: "self" | "guardian" }
 ): StudentProfile {
-  registerAccount({
-    accountType: input.accountType ?? "self",
-    fullName: input.fullName,
-    email: input.email,
-    phone: input.phone,
-    country: input.country,
-    learnerFullName: input.fullName,
-    learnerEnglishName: input.englishName,
-    learnerDateOfBirth: input.dateOfBirth,
-  });
-  return getCurrentStudentProfile();
+  throw new Error("deprecated: use POST /api/student/account");
 }
 
-export interface StudentSurveyInput {
-  englishLevel: CefrLevel;
-  purposes: CoursePurpose[];
-  surveyNotes?: string;
+export function updateStudentSurvey(_input: StudentSurveyInput): StudentProfile {
+  throw new Error("deprecated: use PATCH /api/student/account");
 }
 
-export function updateStudentSurvey(input: StudentSurveyInput): StudentProfile {
-  const learner = getActiveLearner();
-  updateLearnerSurvey(learner.id, input);
-  return getCurrentStudentProfile();
-}
-
-export interface BookTrialInput {
-  scheduledAt: string;
-  trialLessonId: string;
-}
-
-export function bookTrialLesson(input: BookTrialInput): StudentProfile {
-  const learner = getActiveLearner();
-  bookTrialForLearner(learner.id, input);
-  return getCurrentStudentProfile();
+export function bookTrialLesson(_input: BookTrialInput): StudentProfile {
+  throw new Error("deprecated: use PATCH /api/student/account book_trial");
 }
 
 export function updateStudentEnrollmentMeta(input: {
@@ -124,4 +107,4 @@ export function updateStudentEnrollmentMeta(input: {
   return getCurrentStudentProfile();
 }
 
-export { getAccountSession } from "@/lib/account-store";
+export { getAccountSession } from "@/lib/account-store-sync";

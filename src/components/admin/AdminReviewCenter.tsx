@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   CalendarClock,
   Check,
@@ -41,11 +42,19 @@ import type {
   TeacherApplication,
 } from "@/types";
 
+interface PaymentReviewEnrollment extends StudentEnrollment {
+  studentName: string;
+  studentLegalName?: string;
+  depositorName?: string;
+  accountHolderName?: string;
+  renewalUnapplied?: boolean;
+}
+
 interface ReviewSnapshot {
   reschedule: LessonRescheduleRequest[];
   teacherApplications: TeacherApplication[];
   studentRegistrations: StudentRegistrationReview[];
-  paymentEnrollments: StudentEnrollment[];
+  paymentEnrollments: PaymentReviewEnrollment[];
   logs: AdminReviewLogsByCategory;
 }
 
@@ -63,6 +72,7 @@ export function AdminReviewCenter() {
   const [snapshot, setSnapshot] = useState<ReviewSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [actingKey, setActingKey] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,6 +108,7 @@ export function AdminReviewCenter() {
   }) => {
     const key = `${input.category}:${input.action}:${input.targetId}`;
     setActingKey(key);
+    setActionError(null);
     try {
       const res = await fetch("/api/admin/reviews", {
         method: "PATCH",
@@ -107,7 +118,18 @@ export function AdminReviewCenter() {
       if (res.ok) {
         const data = (await res.json()) as { snapshot: ReviewSnapshot };
         setSnapshot(data.snapshot);
+        return;
       }
+
+      const data = (await res.json()) as { error?: string };
+      const messages: Record<string, string> = {
+        profile_incomplete: "프로필(2단계) 미완료 지원서입니다. 선생님이 프로필을 제출한 뒤 승인해 주세요.",
+        teacher_not_found: "연결된 선생님 프로필을 찾을 수 없습니다.",
+        not_pending: "이미 처리된 지원서입니다.",
+        not_found: "대상을 찾을 수 없습니다.",
+        slot_unavailable: "해당 시간은 다른 수업이 있어 선택할 수 없습니다.",
+      };
+      setActionError(messages[data.error ?? ""] ?? "처리에 실패했습니다.");
     } finally {
       setActingKey(null);
     }
@@ -115,6 +137,11 @@ export function AdminReviewCenter() {
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {actionError}
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-gray-500">
@@ -249,12 +276,16 @@ export function AdminReviewCenter() {
             {snapshot?.teacherApplications.map((app) => {
               const keyApprove = `teacher_signup:approve:${app.id}`;
               const keyReject = `teacher_signup:reject:${app.id}`;
+              const profileReady = Boolean(app.teacherId);
               return (
                 <div key={app.id} className="rounded-xl border border-gray-100 bg-white p-4 text-sm">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-ink">{app.fullName}</span>
                     <Badge variant="warning" className="text-[10px]">
                       승인 대기
+                    </Badge>
+                    <Badge variant={profileReady ? "success" : "secondary"} className="text-[10px]">
+                      {profileReady ? "프로필 완료" : "프로필 미완료"}
                     </Badge>
                   </div>
                   <dl className="grid gap-1 text-xs text-gray-600 sm:grid-cols-2">
@@ -277,7 +308,12 @@ export function AdminReviewCenter() {
                     <Button
                       size="sm"
                       className="gap-1 bg-emerald-600 hover:bg-emerald-700"
-                      disabled={actingKey === keyApprove}
+                      disabled={actingKey === keyApprove || !profileReady}
+                      title={
+                        profileReady
+                          ? undefined
+                          : "선생님이 2단계 프로필을 제출해야 승인할 수 있습니다."
+                      }
                       onClick={() =>
                         runAction({
                           category: "teacher_signup",
@@ -402,7 +438,7 @@ export function AdminReviewCenter() {
 
         <TabsContent value="payment" className="mt-4 space-y-4">
           <ReviewQueueCard
-            title="입금 완료 신고 · 수업 활성화"
+            title="수강 신청 · 입금 확인"
             empty="입금 확인 대기 중인 수강 신청이 없습니다."
             loading={loading}
             isEmpty={!snapshot?.paymentEnrollments.length}
@@ -410,21 +446,65 @@ export function AdminReviewCenter() {
             {snapshot?.paymentEnrollments.map((enrollment) => {
               const keyActivate = `payment_activation:activate:${enrollment.id}`;
               const keyReject = `payment_activation:reject:${enrollment.id}`;
+              const awaitingDeposit = enrollment.paymentStatus === "pending";
+              const legalSuffix = enrollment.studentLegalName
+                ? ` (${enrollment.studentLegalName})`
+                : "";
+              const badgeLabel = enrollment.renewalUnapplied
+                ? "재수강 미신청"
+                : awaitingDeposit
+                  ? "입금 대기"
+                  : "입금 신고";
               return (
                 <div
                   key={enrollment.id}
                   className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm"
                 >
                   <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-ink">{enrollment.planLabel}</span>
-                    <Badge variant="warning" className="text-[10px]">
-                      입금 신고
+                    <Link
+                      href={`/admin/students/${enrollment.studentId}`}
+                      className="font-semibold text-ink hover:text-violet-700 hover:underline"
+                    >
+                      {enrollment.studentName}
+                      {legalSuffix}
+                    </Link>
+                    <span className="text-gray-400">·</span>
+                    <span className="text-gray-600">{enrollment.planLabel}</span>
+                    <Badge
+                      variant={
+                        enrollment.renewalUnapplied
+                          ? "warning"
+                          : awaitingDeposit
+                            ? "secondary"
+                            : "warning"
+                      }
+                      className="text-[10px]"
+                    >
+                      {badgeLabel}
                     </Badge>
+                    {enrollment.renewedFromEnrollmentId && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        재수강
+                      </Badge>
+                    )}
                   </div>
                   <dl className="grid gap-1 text-xs text-gray-600 sm:grid-cols-2">
                     <div>
-                      <span className="font-medium">학생 ID:</span> {enrollment.studentId}
+                      <span className="font-medium">학생:</span> {enrollment.studentName}
+                      {legalSuffix}
                     </div>
+                    <div>
+                      <span className="font-medium">입금자:</span>{" "}
+                      {enrollment.depositorName ?? (
+                        <span className="text-gray-400">아직 입금 신고 전</span>
+                      )}
+                    </div>
+                    {enrollment.accountHolderName && (
+                      <div>
+                        <span className="font-medium">계정(보호자):</span>{" "}
+                        {enrollment.accountHolderName}
+                      </div>
+                    )}
                     <div>
                       <span className="font-medium">선생님:</span> {enrollment.teacherName}
                     </div>
@@ -435,6 +515,36 @@ export function AdminReviewCenter() {
                     <div>
                       <span className="font-medium">수업:</span> {enrollment.sessionsTotal}회
                     </div>
+                    {enrollment.confirmedAt && (
+                      <div>
+                        <span className="font-medium">신청 확인:</span>{" "}
+                        {formatDate(enrollment.confirmedAt, "ko")}{" "}
+                        {formatTime(enrollment.confirmedAt, "ko", CANONICAL_TIMEZONE)}
+                      </div>
+                    )}
+                    {enrollment.renewalLastLessonEndedAt && (
+                      <div>
+                        <span className="font-medium">마지막 수업 종료:</span>{" "}
+                        {formatDate(enrollment.renewalLastLessonEndedAt, "ko")}{" "}
+                        {formatTime(enrollment.renewalLastLessonEndedAt, "ko", CANONICAL_TIMEZONE)}
+                      </div>
+                    )}
+                    {enrollment.renewalStudentDeadlineAt && (
+                      <div>
+                        <span className="font-medium">학생 입금 기한:</span>{" "}
+                        {formatDate(enrollment.renewalStudentDeadlineAt, "ko")}{" "}
+                        {formatTime(enrollment.renewalStudentDeadlineAt, "ko", CANONICAL_TIMEZONE)}
+                      </div>
+                    )}
+                    {enrollment.paymentDeadlineAt && (
+                      <div>
+                        <span className="font-medium">
+                          {enrollment.renewedFromEnrollmentId ? "슬롯 홀드 마감:" : "입금 마감:"}
+                        </span>{" "}
+                        {formatDate(enrollment.paymentDeadlineAt, "ko")}{" "}
+                        {formatTime(enrollment.paymentDeadlineAt, "ko", CANONICAL_TIMEZONE)}
+                      </div>
+                    )}
                     {enrollment.preferredSlotTime && (
                       <div>
                         <span className="font-medium">희망 시간:</span>{" "}
@@ -463,13 +573,17 @@ export function AdminReviewCenter() {
                       variant="outline"
                       className="gap-1 text-red-600"
                       disabled={actingKey === keyReject}
-                      onClick={() =>
-                        runAction({
+                      onClick={() => {
+                        const ok = window.confirm(
+                          `${enrollment.studentName} 건을 거절하면 수강 신청이 취소되고, 잡아 둔 수업 시간이 다시 열립니다. 계속할까요?`
+                        );
+                        if (!ok) return;
+                        void runAction({
                           category: "payment_activation",
                           action: "reject",
                           targetId: enrollment.id,
-                        })
-                      }
+                        });
+                      }}
                     >
                       <X className="h-3.5 w-3.5" />
                       거절

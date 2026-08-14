@@ -8,7 +8,6 @@ import {
   SalaryStatusBadge,
   formatSalaryMonth,
 } from "@/components/shared/SalaryStatusBadge";
-import { CURRENT_TEACHER_ID } from "@/lib/availability/constants";
 import { statementTotal } from "@/lib/teacher-salary-store";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { TeacherSalaryStatement } from "@/types";
@@ -28,9 +27,7 @@ export function TeacherSalaryDashboard() {
   const load = useCallback(async (month: string) => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/teacher/salary?teacherId=${CURRENT_TEACHER_ID}&month=${month}`
-      );
+      const res = await fetch(`/api/teacher/salary?month=${month}`);
       if (!res.ok) return;
       const data = await res.json();
       setStatement(data.statement);
@@ -42,7 +39,7 @@ export function TeacherSalaryDashboard() {
   }, []);
 
   useEffect(() => {
-    fetch(`/api/teacher/salary?teacherId=${CURRENT_TEACHER_ID}`)
+    fetch(`/api/teacher/salary`)
       .then((r) => r.json())
       .then((data) => {
         const months: string[] = data.availableMonths ?? [];

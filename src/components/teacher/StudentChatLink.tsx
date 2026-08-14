@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getTeacherStudentChatHref } from "@/lib/chat-store";
+import { useTeacherSession } from "@/contexts/TeacherSessionContext";
 
 interface StudentChatLinkProps {
   studentId: string;
-  teacherId: string;
+  teacherId?: string;
   teacherName: string;
   displayName: string;
   className?: string;
@@ -15,30 +15,48 @@ interface StudentChatLinkProps {
 
 export function StudentChatLink({
   studentId,
-  teacherId,
+  teacherId: teacherIdProp,
   teacherName,
   displayName,
   className,
 }: StudentChatLinkProps) {
-  const href = getTeacherStudentChatHref({
-    studentId,
-    teacherId,
-    teacherName,
-    displayName,
-  });
+  const router = useRouter();
+  const { teacherId: sessionTeacherId } = useTeacherSession();
+  const teacherId = teacherIdProp ?? sessionTeacherId;
+
+  async function openChat(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!teacherId) return;
+
+    const params = new URLSearchParams({
+      role: "teacher",
+      studentId,
+      teacherName,
+      displayName,
+    });
+
+    const res = await fetch(`/api/chat/rooms?${params.toString()}`);
+    const data = await res.json();
+    if (data.room?.id) {
+      router.push(`/teacher/chat/${data.room.id}`);
+    }
+  }
 
   return (
-    <Link
-      href={href}
+    <button
+      type="button"
       title={`Message ${displayName}`}
       aria-label={`Message ${displayName}`}
+      onClick={openChat}
+      disabled={!teacherId}
       className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-full text-emerald-600 transition-colors hover:bg-emerald-100 hover:text-emerald-700",
+        "inline-flex h-8 w-8 items-center justify-center rounded-full text-emerald-600 transition-colors hover:bg-emerald-100 hover:text-emerald-700 disabled:opacity-40",
         className
       )}
-      onClick={(e) => e.stopPropagation()}
     >
       <MessageCircle className="h-4 w-4" />
-    </Link>
+    </button>
   );
 }

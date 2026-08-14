@@ -13,7 +13,6 @@ import {
   getEnrollmentsByStudent,
   getPaymentRecordsByStudent,
 } from "@/lib/enrollment-store";
-import { getChatRooms } from "@/lib/chat-store";
 import {
   getAllTeachers,
   getPublicTeachers,
@@ -252,28 +251,9 @@ export const lessons: Lesson[] = [
   },
 ];
 
-export const chatRooms: ChatRoom[] = getChatRooms("student");
+export const chatRooms: ChatRoom[] = [];
 
-export const chatMessages: Record<string, ChatMessage[]> = {
-  "room-1": [
-    {
-      id: "m1",
-      senderId: "teacher-1",
-      senderName: "Sarah Mitchell",
-      senderRole: "teacher",
-      body: "Hi! Welcome to Pass on English. I'm excited to be your teacher!",
-      createdAt: "2026-07-25T10:00:00",
-    },
-    {
-      id: "m2",
-      senderId: "student-1",
-      senderName: "Minjun Kim",
-      senderRole: "student",
-      body: "Thank you! I'm looking forward to our first lesson.",
-      createdAt: "2026-07-25T10:05:00",
-    },
-  ],
-};
+export const chatMessages: Record<string, ChatMessage[]> = {};
 
 export const financeSummary: FinanceSummary = {
   revenueKrw: 177000,

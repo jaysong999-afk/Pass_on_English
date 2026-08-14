@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
 import {
   bulkTransferEnrollmentsFromTeacher,
   getBulkEnrollmentTransferPreview,
@@ -7,6 +8,9 @@ import {
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
   await ensureSchedulesBootstrapped();
   const { searchParams } = new URL(request.url);
   const fromTeacherId = searchParams.get("fromTeacherId");
@@ -31,6 +35,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
   let body: {
     fromTeacherId: string;
     transfers: { enrollmentId: string; toTeacherId: string }[];
@@ -46,7 +53,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = bulkTransferEnrollmentsFromTeacher(body);
+    const result = await bulkTransferEnrollmentsFromTeacher(body);
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : "bulk_transfer_failed";

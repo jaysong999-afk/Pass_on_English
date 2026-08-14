@@ -1,14 +1,24 @@
 import { NextResponse } from "next/server";
+import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
 import {
   getAdminReviewSnapshot,
   processAdminReviewAction,
 } from "@/lib/admin/admin-review-store";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET() {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
   return NextResponse.json(getAdminReviewSnapshot());
 }
 
 export async function PATCH(request: Request) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
   try {
     const body = await request.json();
     const category = body.category as
@@ -24,7 +34,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "invalid_body" }, { status: 400 });
     }
 
-    const result = processAdminReviewAction({
+    const result = await processAdminReviewAction({
       category,
       action,
       targetId,
@@ -32,7 +42,12 @@ export async function PATCH(request: Request) {
     });
 
     if (result.error) {
-      const status = result.error === "not_found" ? 404 : 400;
+      const status =
+        result.error === "not_found"
+          ? 404
+          : result.error === "slot_unavailable" || result.error === "hold_expired"
+            ? 409
+            : 400;
       return NextResponse.json({ error: result.error }, { status });
     }
 

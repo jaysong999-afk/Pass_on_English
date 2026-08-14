@@ -5,51 +5,55 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TeacherWeeklyScheduleCalendar } from "@/components/teacher/TeacherWeeklyScheduleCalendar";
-import { CURRENT_TEACHER_ID } from "@/lib/availability/constants";
+import { useTeacherSession } from "@/contexts/TeacherSessionContext";
 import { TEACHER_TIMEZONE } from "@/lib/availability/timezone";
 import type { WeeklySlotMap } from "@/lib/availability/types";
-import { formatDate, formatLessonTimeRange, formatTime } from "@/lib/utils";
+import { formatDate, formatLessonTimeRange } from "@/lib/utils";
 import type { Lesson } from "@/types";
 
 export function TeacherScheduleOverview() {
+  const { teacherId, loading: sessionLoading } = useTeacherSession();
   const [slots, setSlots] = useState<WeeklySlotMap | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
 
   useEffect(() => {
-    fetch(`/api/teacher/availability?teacherId=${CURRENT_TEACHER_ID}`)
+    if (!teacherId) return;
+    fetch(`/api/teacher/availability?teacherId=${teacherId}`)
       .then((r) => r.json())
       .then((data) => {
         setSlots(data.availability.slots);
       });
-  }, []);
+  }, [teacherId]);
 
   useEffect(() => {
-    fetch(`/api/teacher/lessons?teacherId=${CURRENT_TEACHER_ID}&scope=all`)
+    if (!teacherId) return;
+    fetch(`/api/teacher/lessons?scope=all`)
       .then((r) => r.json())
       .then((data) => {
         setLessons(data.lessons ?? []);
       });
-  }, []);
+  }, [teacherId]);
 
   const teacherLessons = useMemo(
     () =>
       lessons
-        .filter((l) => l.teacherId === CURRENT_TEACHER_ID)
+        .filter((l) => !teacherId || l.teacherId === teacherId)
         .filter((l) => l.status === "scheduled" || l.status === "reschedule_pending")
         .filter((l) => new Date(l.scheduledAt) >= new Date())
         .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)),
-    [lessons]
+    [lessons, teacherId]
   );
 
   const reloadLessons = useCallback(() => {
-    fetch(`/api/teacher/lessons?teacherId=${CURRENT_TEACHER_ID}&scope=all`)
+    if (!teacherId) return;
+    fetch(`/api/teacher/lessons?scope=all`)
       .then((r) => r.json())
       .then((data) => {
         setLessons(data.lessons ?? []);
       });
-  }, []);
+  }, [teacherId]);
 
-  if (!slots) {
+  if (sessionLoading || !teacherId || !slots) {
     return <p className="py-8 text-center text-sm text-gray-500">Loading schedule…</p>;
   }
 
@@ -60,7 +64,7 @@ export function TeacherScheduleOverview() {
           <TeacherWeeklyScheduleCalendar
             slots={slots}
             lessons={lessons}
-            teacherId={CURRENT_TEACHER_ID}
+            teacherId={teacherId}
             onLessonsChange={reloadLessons}
           />
         </CardContent>

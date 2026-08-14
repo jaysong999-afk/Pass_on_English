@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatNotificationBell } from "@/components/shared/ChatNotificationBell";
-import { useActiveLearnerDisplayName } from "@/contexts/ActiveLearnerContext";
+import { useActiveLearner, useActiveLearnerDisplayName } from "@/contexts/ActiveLearnerContext";
 import { LocaleSwitcher } from "@/components/shared/LocaleSwitcher";
+import { LogoutButton } from "@/components/shared/LogoutButton";
 import { StudentSwitcher } from "@/components/student/StudentSwitcher";
 import { studentBasePath } from "@/lib/student-paths";
 import type { Locale } from "@/lib/i18n/config";
@@ -34,6 +35,7 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
   const tShell = useTranslations("studentPortal.shell");
   const tChat = useTranslations("studentPortal.chat");
   const displayName = useActiveLearnerDisplayName();
+  const { activeLearnerId, loading: accountLoading } = useActiveLearner();
 
   const studentBase = studentBasePath(locale);
 
@@ -89,9 +91,16 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
     <>
       <StudentSwitcher />
       <LocaleSwitcher className="bg-white/10 p-0.5 [&_button]:text-white/90 [&_button.bg-white]:text-brand-700" />
+      <LogoutButton
+        redirectTo={`/${locale}/login`}
+        label={tShell("logout")}
+        className="hidden text-white/90 hover:bg-white/10 hover:text-white sm:inline-flex"
+      />
       <ChatNotificationBell
         role="student"
         locale={locale}
+        studentId={activeLearnerId ?? undefined}
+        enabled={!accountLoading && Boolean(activeLearnerId)}
         copy={{
           title: tChat("bellTitle"),
           viewAll: tChat("viewAll"),
@@ -125,6 +134,12 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
               <h1 className="truncate text-base font-bold leading-tight">{tShell("portalTitle")}</h1>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
+              <LogoutButton
+                redirectTo={`/${locale}/login`}
+                label={tShell("logout")}
+                variant="ghost"
+                className="text-white/90 hover:bg-white/10 hover:text-white"
+              />
               <LocaleSwitcher
                 compact
                 className="bg-white/10 p-0.5 [&_button]:text-white/90 [&_button.bg-white]:text-brand-700"
@@ -132,6 +147,9 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
               <ChatNotificationBell
                 role="student"
                 locale={locale}
+                studentId={activeLearnerId ?? undefined}
+                enabled={!accountLoading && Boolean(activeLearnerId)}
+                enableInboxSync={false}
                 copy={{
                   title: tChat("bellTitle"),
                   viewAll: tChat("viewAll"),

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { ArrowLeft, Check, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,8 +19,9 @@ import { usePricingPlans } from "@/hooks/usePricingPlans";
 import {
   formatScheduleDays,
   formatUnifiedSlotLabel,
+  formatOccurrenceDateTimeRange,
   nextPlanSlotOccurrenceIso,
-  sortTeachersByPlanAvailability,
+  type SortedTeachersForPlan,
   type TeacherScheduleSlot,
 } from "@/lib/teacher-availability";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -28,10 +29,18 @@ import { addDaysToDateKey } from "@/lib/contract-schedule";
 import { useStudentBasePath } from "@/lib/student-paths";
 import { getStudentTimezone, getTimezoneShortLabel } from "@/lib/availability/timezone";
 import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
-import { getStudentDisplayName } from "@/lib/student-display-name";
 import { TeacherProfileModal } from "@/components/student/TeacherProfileModal";
 import { TeacherSlotPicker } from "@/components/student/TeacherSlotPicker";
+import { PersonAvatar } from "@/components/shared/PersonAvatar";
+import { PaymentDeadlineCountdown } from "@/components/student/PaymentDeadlineCountdown";
+import { PAYMENT_DISPLAY_HOURS, paymentHoldStartsAt, studentFacingPaymentDeadlineAt } from "@/lib/enrollment-hold/constants";
 import { useTeacherOpenSlots } from "@/hooks/useTeacherOpenSlots";
+import {
+  resolveEnrollmentPath,
+  isUpcomingTrial,
+  trialLessonEndAt,
+  type EnrollmentPath,
+} from "@/lib/enrollments/trial-path";
 
 type FlowMode = "new" | "renew";
 
@@ -50,14 +59,13 @@ interface StudentProfileSummary {
 export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowProps) {
   const t = useTranslations("studentPortal.enrollment");
   const tCommon = useTranslations("studentPortal.common");
-  const tSurvey = useTranslations("studentPortal.survey");
   const base = useStudentBasePath();
 
   const { activeLearner, account } = useActiveLearner();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [profile, setProfile] = useState<StudentProfileSummary | null>(null);
-  const [initialTrialEligible, setInitialTrialEligible] = useState(false);
-  const [trialBookedThisSession, setTrialBookedThisSession] = useState(false);
+  const [trialScheduledAt, setTrialScheduledAt] = useState<string | null>(null);
+  const [trialDurationMinutes, setTrialDurationMinutes] = useState(20);
   const [profileLoading, setProfileLoading] = useState(mode === "new");
   const { plans, loading: plansLoading } = usePricingPlans(true);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(
@@ -67,8 +75,8 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
     enrollment?.teacherId ?? null
   );
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [renewHoldConfirmed, setRenewHoldConfirmed] = useState(false);
   const [timeError, setTimeError] = useState("");
-  const [timeSubmitting, setTimeSubmitting] = useState(false);
 
   const stepLabels = useMemo(
     () => [t("stepPlan"), t("stepTeacher"), t("stepTime"), t("stepPayment")],
@@ -82,15 +90,24 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
       .then((res) => res.json())
       .then((data) => {
         if (data.activeLearner) {
-          setInitialTrialEligible(mode === "new" && !data.activeLearner.trialUsed);
+          const pendingAt = data.activeLearner.trialScheduledAt as string | undefined;
+          const pendingUpcoming = isUpcomingTrial(pendingAt);
+          if (pendingUpcoming && pendingAt) {
+            setTrialScheduledAt(pendingAt);
+            setTrialDurationMinutes(data.activeLearner.trialDurationMinutes ?? 20);
+          }
           setProfile({
             fullName: data.activeLearner.fullName,
             englishName: data.activeLearner.englishName,
             trialUsed: Boolean(data.activeLearner.trialUsed),
           });
+        } else {
+          setProfile({ fullName: "", englishName: "", trialUsed: true });
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        setProfile({ fullName: "", englishName: "", trialUsed: true });
+      })
       .finally(() => setProfileLoading(false));
   }, [mode]);
 
@@ -103,16 +120,7 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
   const selectedTeacher = teachers.find((te) => te.id === selectedTeacherId);
   const depositorName = account?.fullName ?? profile?.fullName ?? tCommon("studentFallback");
 
-  const sortedTeachers = useMemo(() => {
-    if (!selectedPlan) return { available: [], closed: [] };
-    return sortTeachersByPlanAvailability(
-      teachers,
-      selectedPlan.scheduleDays,
-      selectedPlan.sessionMinutes
-    );
-  }, [teachers, selectedPlan]);
-
-  const { openSlots } = useTeacherOpenSlots(
+  const { sortedTeachers, openSlots, loadingTeachers, loadingSlots } = useTeacherOpenSlots(
     teachers,
     selectedPlan?.scheduleDays,
     selectedPlan?.sessionMinutes ?? 20,
@@ -121,11 +129,17 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
 
   const selectedSlot = openSlots.find((s) => s.id === selectedSlotId) ?? null;
 
+  const enrollmentPath: EnrollmentPath = resolveEnrollmentPath({
+    mode,
+    trialUsed: profile?.trialUsed ?? true,
+    pendingTrialScheduledAt: trialScheduledAt,
+  });
+
   const title = mode === "renew" ? t("renewTitle") : t("newTitle");
   const subtitle =
     mode === "renew"
       ? t("renewSubtitleKeep")
-      : initialTrialEligible
+      : enrollmentPath === "trial_first"
         ? t("newSubtitleTrial")
         : t("newSubtitle");
 
@@ -155,65 +169,14 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
       return;
     }
 
-    if (initialTrialEligible && !trialBookedThisSession) {
-      if (!selectedTeacher || !selectedPlan) {
-        setTimeError(t("selectTimeError"));
-        return;
-      }
-      setTimeSubmitting(true);
-      try {
-        const scheduledAt = nextPlanSlotOccurrenceIso(
+    if (enrollmentPath === "trial_first" && selectedPlan) {
+      setTrialScheduledAt(
+        nextPlanSlotOccurrenceIso(
           selectedPlan.scheduleDays,
           selectedSlot.startTime as SlotStartTime
-        );
-        const res = await fetch("/api/student/profile", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "book_trial",
-            scheduledAt,
-            teacherId: selectedTeacher.id,
-            teacherName: selectedTeacher.displayName,
-            planId: selectedPlan.id,
-            sessionMinutes: selectedPlan.sessionMinutes,
-          }),
-        });
-
-        if (!res.ok) {
-          setTimeError(t("trialBookFailed"));
-          return;
-        }
-
-        if (selectedTeacher && selectedPlan) {
-          await fetch("/api/teacher/availability", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "reserve",
-              teacherId: selectedTeacher.id,
-              startTime: selectedSlot.startTime,
-              studentName: profile
-                ? getStudentDisplayName(profile)
-                : getStudentDisplayName(activeLearner!),
-              planDays: selectedPlan.scheduleDays,
-              sessionMinutes: selectedPlan.sessionMinutes,
-            }),
-          });
-        }
-
-        const data = await res.json();
-        setTrialBookedThisSession(true);
-        setProfile({
-          fullName: data.profile.fullName,
-          englishName: data.profile.englishName,
-          trialUsed: true,
-        });
-      } catch {
-        setTimeError(tSurvey("errorNetwork"));
-        return;
-      } finally {
-        setTimeSubmitting(false);
-      }
+        )
+      );
+      setTrialDurationMinutes(selectedPlan.sessionMinutes);
     }
 
     setStep(4);
@@ -250,8 +213,23 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
             </Link>
           </Button>
           <h2 className="text-xl font-bold text-ink md:text-2xl">{title}</h2>
-          <p className="mt-1 text-sm text-ink-muted">{subtitle}</p>
+          <p className="mt-1 text-sm text-ink-muted">
+            {renewHoldConfirmed ? t("renewSubtitleKeepConfirmed") : t("renewSubtitleKeep")}
+          </p>
         </div>
+
+        {(enrollment.renewalWindowStatus === "expired" ||
+          enrollment.renewalWindowStatus === "student_closed") && (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {t("renewWindowClosed")}
+          </p>
+        )}
+        {(enrollment.renewalWindowStatus === "not_open" ||
+          enrollment.renewalWindowStatus === "ineligible") && (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {t("renewWindowNotOpen")}
+          </p>
+        )}
 
         <Card className="border-brand-100 bg-brand-50/40">
           <CardContent className="space-y-3 p-4 text-sm">
@@ -300,6 +278,8 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
           onBack={() => {}}
           enrollmentHref={`${base}/enrollment`}
           hideBack
+          renewApplyBlocked={!enrollment.canStudentRenew}
+          onConfirmedChange={setRenewHoldConfirmed}
         />
       </div>
     );
@@ -330,7 +310,7 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
           plans={plans}
           selectedPlanId={selectedPlanId}
           onSelect={handlePlanSelect}
-          trialEligible={initialTrialEligible}
+          trialEligible={enrollmentPath === "trial_first"}
           onNext={() => setStep(2)}
           enrollmentHref={`${base}/enrollment`}
         />
@@ -340,6 +320,7 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
         <TeacherStep
           plan={selectedPlan}
           sorted={sortedTeachers}
+          loading={loadingTeachers}
           selectedTeacherId={selectedTeacherId}
           onSelect={handleTeacherSelect}
           onBack={() => setStep(1)}
@@ -352,11 +333,12 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
           plan={selectedPlan}
           teacher={selectedTeacher}
           openSlots={openSlots}
+          loading={loadingSlots}
           selectedSlotId={selectedSlotId}
           onSelect={setSelectedSlotId}
-          trialEligible={initialTrialEligible}
+          trialEligible={enrollmentPath === "trial_first"}
           error={timeError}
-          submitting={timeSubmitting}
+          submitting={false}
           onBack={() => setStep(2)}
           onNext={handleProceedFromTime}
         />
@@ -370,7 +352,10 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
           slot={selectedSlot}
           depositorName={depositorName}
           learnerId={activeLearner?.id}
-          trialBooked={trialBookedThisSession}
+          trialBooked={enrollmentPath === "trial_first"}
+          trialAlreadyBooked={Boolean(profile?.trialUsed) && isUpcomingTrial(trialScheduledAt)}
+          trialScheduledAt={trialScheduledAt}
+          trialDurationMinutes={trialDurationMinutes}
           onBack={() => setStep(3)}
           enrollmentHref={`${base}/enrollment`}
         />
@@ -470,13 +455,15 @@ function PlanStep({
 function TeacherStep({
   plan,
   sorted,
+  loading = false,
   selectedTeacherId,
   onSelect,
   onBack,
   onNext,
 }: {
   plan: PricingPlan;
-  sorted: ReturnType<typeof sortTeachersByPlanAvailability>;
+  sorted: SortedTeachersForPlan;
+  loading?: boolean;
   selectedTeacherId: string | null;
   onSelect: (id: string) => void;
   onBack: () => void;
@@ -506,7 +493,13 @@ function TeacherStep({
 
       <p className="text-sm font-medium text-ink-muted">{t("teacherSortHint")}</p>
 
-      {sorted.available.length > 0 && (
+      {loading ? (
+        <p className="rounded-xl border border-dashed border-gray-200 py-8 text-center text-sm text-ink-muted">
+          {t("loadingFlow")}
+        </p>
+      ) : null}
+
+      {!loading && sorted.available.length > 0 && (
         <div className="grid gap-3">
           {sorted.available.map(({ teacher, openSlotCount }) => (
             <TeacherCard
@@ -524,7 +517,7 @@ function TeacherStep({
         </div>
       )}
 
-      {sorted.closed.length > 0 && (
+      {!loading && sorted.closed.length > 0 && (
         <div className="space-y-3">
           <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
             {t("closed")}
@@ -595,12 +588,6 @@ function TeacherCard({
 }) {
   const t = useTranslations("studentPortal.enrollment");
 
-  const initials = teacher.displayName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2);
-
   return (
     <div
       className={`flex w-full items-start gap-4 rounded-2xl border p-4 transition-all ${
@@ -617,15 +604,17 @@ function TeacherCard({
         className="group flex shrink-0 flex-col items-center gap-1 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
         aria-label={t("viewProfileAria", { name: teacher.displayName })}
       >
-        <div
-          className={`flex h-12 w-12 items-center justify-center rounded-xl text-sm font-bold text-white transition-transform group-hover:scale-105 ${
+        <PersonAvatar
+          name={teacher.displayName}
+          avatarUrl={teacher.avatarUrl}
+          className="h-12 w-12 rounded-xl transition-transform group-hover:scale-105"
+          imageClassName="rounded-xl"
+          fallbackClassName={`rounded-xl text-sm font-bold text-white ${
             closed
               ? "bg-gray-400"
               : "bg-gradient-to-br from-brand-600 to-brand-500"
           }`}
-        >
-          {initials}
-        </div>
+        />
         <span className="text-xs font-medium text-brand-600 group-hover:underline">
           {t("profile")}
         </span>
@@ -673,6 +662,7 @@ function TimeStep({
   plan,
   teacher,
   openSlots,
+  loading = false,
   selectedSlotId,
   onSelect,
   trialEligible,
@@ -684,6 +674,7 @@ function TimeStep({
   plan: PricingPlan;
   teacher: Teacher;
   openSlots: TeacherScheduleSlot[];
+  loading?: boolean;
   selectedSlotId: string | null;
   onSelect: (id: string) => void;
   trialEligible: boolean;
@@ -739,7 +730,11 @@ function TimeStep({
         </p>
       </div>
 
-      {openSlots.length === 0 ? (
+      {loading ? (
+        <p className="rounded-xl border border-dashed border-gray-200 py-8 text-center text-sm text-ink-muted">
+          {t("loadingFlow")}
+        </p>
+      ) : openSlots.length === 0 ? (
         <p className="rounded-xl border border-dashed border-gray-200 py-8 text-center text-sm text-ink-muted">
           {t("noTimeSlots")}
         </p>
@@ -763,11 +758,7 @@ function TimeStep({
           disabled={!selectedSlotId || submitting}
           onClick={onNext}
         >
-          {submitting
-            ? t("booking")
-            : trialEligible
-              ? t("bookTrialAndPay")
-              : t("nextPayment")}
+          {submitting ? t("booking") : t("nextPayment")}
         </Button>
       </div>
     </div>
@@ -783,9 +774,14 @@ function PaymentStep({
   learnerId,
   renewFromEnrollmentId,
   trialBooked,
+  trialAlreadyBooked = false,
+  trialScheduledAt,
+  trialDurationMinutes = 20,
   onBack,
   enrollmentHref,
   hideBack = false,
+  renewApplyBlocked = false,
+  onConfirmedChange,
 }: {
   mode: FlowMode;
   plan: PricingPlan;
@@ -795,51 +791,190 @@ function PaymentStep({
   learnerId?: string;
   renewFromEnrollmentId?: string;
   trialBooked: boolean;
+  trialAlreadyBooked?: boolean;
+  trialScheduledAt?: string | null;
+  trialDurationMinutes?: number;
   onBack: () => void;
   enrollmentHref: string;
   hideBack?: boolean;
+  renewApplyBlocked?: boolean;
+  onConfirmedChange?: (confirmed: boolean) => void;
 }) {
   const t = useTranslations("studentPortal.enrollment");
   const tCommon = useTranslations("studentPortal.common");
   const locale = useLocale() as Locale;
   const [depositor, setDepositor] = useState(depositorName);
+  const [holdEnrollment, setHoldEnrollment] = useState<StudentEnrollment | null>(null);
+  const [loadingHold, setLoadingHold] = useState(true);
+  const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [reported, setReported] = useState(false);
   const [error, setError] = useState("");
+  const autoAppliedRef = useRef(false);
 
-  async function handlePaymentReport() {
-    setError("");
-    setSubmitting(true);
+  const loadHold = useCallback(async () => {
+    if (!learnerId) {
+      setLoadingHold(false);
+      return;
+    }
+    setLoadingHold(true);
     try {
-      const res = await fetch("/api/enrollments", {
+      const res = await fetch(
+        `/api/enrollments?studentId=${encodeURIComponent(learnerId)}`
+      );
+      const data = await res.json();
+      const enrollments = (data.enrollments ?? []) as StudentEnrollment[];
+      const active = enrollments.find(
+        (e) =>
+          e.status === "pending_payment" &&
+          (e.paymentStatus === "pending" || e.paymentStatus === "reported") &&
+          (renewFromEnrollmentId
+            ? e.renewedFromEnrollmentId === renewFromEnrollmentId
+            : e.planId === plan.id &&
+              e.teacherId === teacher.id &&
+              e.preferredSlotTime === slot.startTime)
+      );
+      setHoldEnrollment(active ?? null);
+      setReported(active?.paymentStatus === "reported");
+    } catch {
+      setHoldEnrollment(null);
+    } finally {
+      setLoadingHold(false);
+    }
+  }, [learnerId, plan.id, renewFromEnrollmentId, slot.startTime, teacher.id]);
+
+  useEffect(() => {
+    void loadHold();
+  }, [loadHold]);
+
+  useEffect(() => {
+    onConfirmedChange?.(Boolean(holdEnrollment));
+  }, [holdEnrollment, onConfirmedChange]);
+
+  useEffect(() => {
+    if (
+      mode !== "renew" ||
+      !renewFromEnrollmentId ||
+      !learnerId ||
+      loadingHold ||
+      !holdEnrollment?.renewalIsSystemAutoOffer ||
+      autoAppliedRef.current
+    ) {
+      return;
+    }
+
+    autoAppliedRef.current = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/enrollments/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ renewFromEnrollmentId, learnerId, locale }),
+        });
+        const data = await res.json();
+        if (res.ok && data.enrollment) {
+          setHoldEnrollment(data.enrollment as StudentEnrollment);
+        }
+      } catch {
+        autoAppliedRef.current = false;
+      }
+    })();
+  }, [
+    mode,
+    renewFromEnrollmentId,
+    learnerId,
+    loadingHold,
+    holdEnrollment?.id,
+    holdEnrollment?.renewalIsSystemAutoOffer,
+    locale,
+  ]);
+
+  const confirmed = Boolean(holdEnrollment);
+  const reportDeadlineAt = holdEnrollment
+    ? studentFacingPaymentDeadlineAt(holdEnrollment)
+    : undefined;
+  const expired = reportDeadlineAt && new Date(reportDeadlineAt) <= new Date();
+  const trialPath = trialBooked || Boolean(holdEnrollment?.includesTrial);
+  const trialWhen =
+    trialScheduledAt && trialPath
+      ? formatOccurrenceDateTimeRange(trialScheduledAt, trialDurationMinutes, locale)
+      : null;
+  const paidStartIso =
+    trialScheduledAt && trialPath
+      ? nextPlanSlotOccurrenceIso(
+          plan.scheduleDays,
+          slot.startTime as SlotStartTime,
+          trialLessonEndAt(trialScheduledAt, trialDurationMinutes)
+        )
+      : nextPlanSlotOccurrenceIso(plan.scheduleDays, slot.startTime as SlotStartTime);
+  const paidStartLabel = formatOccurrenceDateTimeRange(
+    paidStartIso,
+    plan.sessionMinutes,
+    locale
+  );
+
+  async function handleConfirm() {
+    setError("");
+    setConfirming(true);
+    try {
+      const res = await fetch("/api/enrollments/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           renewFromEnrollmentId
-            ? {
-                renewFromEnrollmentId,
-                depositorName: depositor.trim() || depositorName,
-                learnerId,
-                locale,
-              }
+            ? { renewFromEnrollmentId, learnerId, locale }
             : {
                 planId: plan.id,
                 teacherId: teacher.id,
                 teacherName: teacher.displayName,
-                depositorName: depositor.trim() || depositorName,
                 learnerId,
                 locale,
                 preferredSlotTime: slot.startTime,
               }
         ),
       });
-
+      const data = await res.json();
       if (!res.ok) {
-        setError(t("paymentReportFailed"));
+        setError(
+          data.error === "slot_no_longer_available"
+            ? t("slotUnavailable")
+            : data.error === "renewal_window_not_open"
+              ? t("renewWindowNotOpen")
+              : data.error === "renewal_window_closed"
+                ? t("renewWindowClosed")
+                : t("confirmFailed")
+        );
         return;
       }
+      setHoldEnrollment(data.enrollment as StudentEnrollment);
+    } catch {
+      setError(tCommon("errorNetwork"));
+    } finally {
+      setConfirming(false);
+    }
+  }
 
-      setSubmitted(true);
+  async function handlePaymentReport() {
+    if (!holdEnrollment) return;
+    setError("");
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/enrollments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enrollmentId: holdEnrollment.id,
+          depositorName: depositor.trim() || depositorName,
+          learnerId,
+        }),
+      });
+      if (!res.ok) {
+        setError(res.status === 409 ? t("holdExpired") : t("paymentReportFailed"));
+        return;
+      }
+      setReported(true);
+      await loadHold();
     } catch {
       setError(tCommon("errorNetwork"));
     } finally {
@@ -847,63 +982,125 @@ function PaymentStep({
     }
   }
 
+  async function handleCancelHold() {
+    if (!holdEnrollment) return;
+    if (!window.confirm(t("cancelHoldConfirm"))) return;
+    setCancelling(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/enrollments/${holdEnrollment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel_hold" }),
+      });
+      if (!res.ok) {
+        setError(t("confirmFailed"));
+        return;
+      }
+      setHoldEnrollment(null);
+      setReported(false);
+    } catch {
+      setError(tCommon("errorNetwork"));
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  const summaryCard = (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t("summary")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <SummaryRow label={t("planLabel")} value={formatPlanLabel(plan, locale)} />
+        <SummaryRow label={t("teacherLabel")} value={teacher.displayName} />
+        <SummaryRow
+          label={t("stepTime")}
+          value={formatUnifiedSlotLabel(
+            plan.scheduleDays,
+            slot.startTime as SlotStartTime,
+            locale,
+            plan.sessionMinutes
+          )}
+        />
+        <SummaryRow
+          label={t("sessionCount")}
+          value={
+            trialPath
+              ? t("sessionCountAfterTrial", { count: plan.sessionsCount })
+              : `${plan.sessionsCount}${tCommon("sessions")} · ${plan.sessionMinutes}${tCommon("minutes")}`
+          }
+        />
+        {trialPath && trialWhen && (
+          <SummaryRow label={t("trialLessonWhen")} value={trialWhen} />
+        )}
+        <SummaryRow
+          label={trialPath ? t("paidStartLabel") : t("classStartLabel")}
+          value={paidStartLabel}
+        />
+        <SummaryRow
+          label={t("paymentAmountLabel")}
+          value={formatCurrency(plan.priceKrw, "KRW")}
+          highlight
+        />
+      </CardContent>
+    </Card>
+  );
+
+  if (loadingHold) {
+    return <div className="py-12 text-center text-ink-muted">{t("loadingFlow")}</div>;
+  }
+
   return (
     <div className="space-y-4">
-      {trialBooked && (
+      {trialPath && trialWhen && !confirmed && (
         <div className="rounded-xl border border-brand-100 bg-brand-50/40 px-4 py-3 text-sm text-ink-muted">
-          {t("trialBooked", {
-            slot: formatUnifiedSlotLabel(
-              plan.scheduleDays,
-              slot.startTime as SlotStartTime,
-              locale,
-              plan.sessionMinutes
-            ),
-          })}
+          {t(trialAlreadyBooked ? "trialBooked" : "trialWillBook", { when: trialWhen })}
         </div>
       )}
 
-      {!trialBooked && mode === "new" && (
+      {trialPath && trialWhen && confirmed && (
+        <div className="rounded-xl border border-brand-100 bg-brand-50/40 px-4 py-3 text-sm text-ink-muted">
+          {t("trialBooked", { when: trialWhen })}
+        </div>
+      )}
+
+      {trialPath && !trialWhen && !confirmed && (
         <div className="rounded-xl border border-brand-100 bg-brand-50/40 px-4 py-3 text-sm text-ink-muted">
           {t("paymentAfterTrialHint")}
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("summary")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <SummaryRow label={t("planLabel")} value={formatPlanLabel(plan, locale)} />
-          <SummaryRow label={t("teacherLabel")} value={teacher.displayName} />
-          <SummaryRow
-            label={t("stepTime")}
-            value={formatUnifiedSlotLabel(
-              plan.scheduleDays,
-              slot.startTime as SlotStartTime,
-              locale,
-              plan.sessionMinutes
-            )}
-          />
-          <SummaryRow
-            label={t("sessionCount")}
-            value={`${plan.sessionsCount}${tCommon("sessions")} · ${plan.sessionMinutes}${tCommon("minutes")}`}
-          />
-          <SummaryRow
-            label={t("paymentAmountLabel")}
-            value={formatCurrency(plan.priceKrw, "KRW")}
-            highlight
-          />
-        </CardContent>
-      </Card>
+      {summaryCard}
 
-      <PaymentInfoPanel
-        amount={plan.priceKrw}
-        currency="KRW"
-        bankAccount={tCommon("bankAccount")}
-        depositorHint={depositor}
-      />
-
-      {submitted ? (
+      {!confirmed ? (
+        <Card className="border-brand-200">
+          <CardHeader>
+            <CardTitle className="text-base">{t("enrollmentConfirmTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-ink-muted">
+              {trialPath
+                ? t("enrollmentConfirmDescTrial", { hours: PAYMENT_DISPLAY_HOURS })
+                : t("enrollmentConfirmDesc", { hours: PAYMENT_DISPLAY_HOURS })}
+            </p>
+            <ul className="space-y-1 text-sm text-ink-muted">
+              <li>{t("paymentStep1")}</li>
+              <li>{t("paymentStep2")}</li>
+              <li>{t("paymentStep3")}</li>
+              <li>{t("paymentStep4")}</li>
+            </ul>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <Button
+              className="h-11 w-full rounded-xl"
+              disabled={confirming || renewApplyBlocked}
+              onClick={handleConfirm}
+            >
+              {confirming ? t("confirmingEnrollment") : t("enrollmentConfirmButton")}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : reported ? (
         <Card className="border-brand-200 bg-brand-50/30">
           <CardContent className="space-y-3 py-6 text-center">
             <p className="font-semibold text-ink">{t("paymentReportedTitle")}</p>
@@ -914,40 +1111,95 @@ function PaymentStep({
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("paymentReport")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="flow-depositor">{t("depositor")}</Label>
-              <Input
-                id="flow-depositor"
-                value={depositor}
-                onChange={(e) => setDepositor(e.target.value)}
-                className="h-11 rounded-xl"
-              />
-            </div>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button
-              className="h-11 w-full rounded-xl"
-              disabled={submitting}
-              onClick={handlePaymentReport}
-            >
-              {submitting
-                ? t("submittingPayment")
-                : mode === "renew"
-                  ? t("renewPaymentReport")
-                  : t("enrollmentPaymentReport")}
-            </Button>
-            <p className="text-center text-xs text-ink-muted">
-              {mode === "renew" ? t("paymentActivateRenew") : t("paymentActivateNew")}
-            </p>
-          </CardContent>
-        </Card>
+        <>
+          {mode !== "renew" && (
+            <Card className="border-emerald-200 bg-emerald-50/40">
+              <CardContent className="space-y-3 p-4">
+                <p className="font-semibold text-emerald-900">{t("holdConfirmedTitle")}</p>
+                <p className="text-sm text-emerald-800">
+                  {trialPath ? t("holdConfirmedDescTrial") : t("holdConfirmedDesc")}
+                </p>
+                {holdEnrollment?.paymentDeadlineAt && (
+                  <div className="rounded-xl bg-white/80 p-3">
+                    <p className="text-xs font-medium text-ink-muted">{t("holdCountdownLabel")}</p>
+                    <PaymentDeadlineCountdown
+                      deadlineAt={
+                        studentFacingPaymentDeadlineAt(holdEnrollment) ??
+                        holdEnrollment.paymentDeadlineAt
+                      }
+                      expiredLabel={t("holdExpired")}
+                      holdStartsAt={
+                        trialPath
+                          ? paymentHoldStartsAt(holdEnrollment.paymentDeadlineAt).toISOString()
+                          : undefined
+                      }
+                      waitingLabel={t("holdWaitingForTrial")}
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <PaymentInfoPanel
+            amount={plan.priceKrw}
+            currency="KRW"
+            bankAccount={tCommon("bankAccount")}
+            depositorHint={depositor}
+            deadlineNotice={t(
+              trialPath
+                ? "paymentDeadlineNoticeTrial"
+                : holdEnrollment?.renewedFromEnrollmentId || mode === "renew"
+                  ? "paymentDeadlineNoticeRenew"
+                  : "paymentDeadlineNotice",
+              { hours: PAYMENT_DISPLAY_HOURS }
+            )}
+          />
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("paymentStepsTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-ink-muted">{t("paymentWithoutReport")}</p>
+              <div className="space-y-2">
+                <Label htmlFor="flow-depositor">{t("depositor")}</Label>
+                <Input
+                  id="flow-depositor"
+                  value={depositor}
+                  onChange={(e) => setDepositor(e.target.value)}
+                  className="h-11 rounded-xl"
+                  disabled={Boolean(expired)}
+                />
+              </div>
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              <Button
+                className="h-11 w-full rounded-xl"
+                disabled={submitting || Boolean(expired)}
+                onClick={handlePaymentReport}
+              >
+                {submitting ? t("submittingPayment") : t("paymentReport")}
+              </Button>
+              <p className="text-center text-xs text-ink-muted">
+                {mode === "renew" ? t("paymentActivateRenew") : t("paymentActivateNew")}
+              </p>
+              {holdEnrollment?.paymentStatus === "pending" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-10 w-full text-sm text-ink-muted"
+                  disabled={cancelling}
+                  onClick={handleCancelHold}
+                >
+                  {cancelling ? t("cancellingHold") : t("cancelHold")}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
 
-      {!submitted && !hideBack && (
+      {!hideBack && !confirmed && (
         <div className="flex gap-3">
           <Button variant="secondary" className="h-11 flex-1 rounded-xl" onClick={onBack}>
             {tCommon("back")}

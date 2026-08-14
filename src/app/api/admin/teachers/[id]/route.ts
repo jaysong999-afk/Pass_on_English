@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
+import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
 import type { Teacher } from "@/types";
 import { getAdminTeacherDetail } from "@/lib/admin/teacher-detail-store";
-import { updateTeacherStatus } from "@/lib/teacher-profile-store";
+import { updateTeacherStatusInDb } from "@/lib/teachers/repository";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
   const { id } = await params;
   const detail = getAdminTeacherDetail(id);
   if (!detail) {
@@ -19,6 +25,10 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
   const { id } = await params;
   let body: { status?: Teacher["status"] };
   try {
@@ -36,7 +46,7 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid_status" }, { status: 400 });
   }
 
-  const updated = updateTeacherStatus(id, body.status);
+  const updated = await updateTeacherStatusInDb(id, body.status);
   if (!updated) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }

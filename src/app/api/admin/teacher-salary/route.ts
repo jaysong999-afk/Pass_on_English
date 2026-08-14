@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
+import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
 import {
-  confirmSalaryStatement,
-  completeSalaryStatement,
-  getSalaryStatement,
+  confirmSalaryStatementInDb,
+  completeSalaryStatementInDb,
+  getSalaryStatementInDb,
+  markSalaryPhpPaidInDb,
+  markSalaryProcessingInDb,
+  updateSalaryStatementStatusInDb,
+  warmSalaryCache,
+} from "@/lib/teacher-salary/repository";
+import {
   getVerificationLessons,
-  markSalaryPhpPaid,
-  markSalaryProcessing,
   previewBulkHourlyRateUpdate,
   applyBulkHourlyRateUpdate,
-  updateTeacherHourlyRate,
-  updateSalaryStatementStatus,
 } from "@/lib/teacher-salary-store";
-import { getAdjustmentsForTeacherMonth, addSalaryAdjustment } from "@/lib/teacher-salary-adjustment-store";
-import {
-  getSalaryBonusPolicy,
-  updateSalaryBonusPolicy,
-} from "@/lib/teacher-salary-policy-store";
+import { getAdjustmentsForTeacherMonth } from "@/lib/teacher-salary-adjustment-store";
+import { addSalaryAdjustmentInDb } from "@/lib/teacher-salary-adjustment-repository";
+import { getSalaryBonusPolicy } from "@/lib/teacher-salary-policy-store";
+import { updateSalaryBonusPolicyInDb } from "@/lib/teacher-salary-policy-repository";
 import {
   currentSalaryMonth,
   finalizeAllEstimatesForMonth,
@@ -26,8 +28,19 @@ import {
   buildSalaryOverviewCsvRows,
   salaryCsvFilename,
 } from "@/lib/teacher-salary-csv";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
+  try {
+    await warmSalaryCache();
+  } catch (error) {
+    console.error("[admin/teacher-salary GET] warm cache", error);
+  }
+
   const { searchParams } = new URL(request.url);
   const month = searchParams.get("month") ?? currentSalaryMonth();
   const teacherId = searchParams.get("teacherId");
@@ -45,7 +58,7 @@ export async function GET(request: Request) {
   }
 
   if (teacherId) {
-    const statement = getSalaryStatement(teacherId, month);
+    const statement = await getSalaryStatementInDb(teacherId, month);
     const verificationLessons = getVerificationLessons(teacherId, month);
     const adjustments = getAdjustmentsForTeacherMonth(teacherId, month);
     return NextResponse.json({
@@ -64,7 +77,13 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
   try {
+    await ensureSchedulesBootstrapped();
+    await warmSalaryCache();
+
     const body = await request.json();
     const action = body.action as string;
 
@@ -73,7 +92,7 @@ export async function PATCH(request: Request) {
       if (!id || !status) {
         return NextResponse.json({ error: "invalid_body" }, { status: 400 });
       }
-      const statement = updateSalaryStatementStatus(id, status, { paymentDate });
+      const statement = await updateSalaryStatementStatusInDb(id, status, { paymentDate });
       if (!statement) {
         return NextResponse.json({ error: "not_found" }, { status: 404 });
       }
@@ -85,7 +104,7 @@ export async function PATCH(request: Request) {
       if (!teacherId || !month) {
         return NextResponse.json({ error: "invalid_body" }, { status: 400 });
       }
-      const statement = confirmSalaryStatement(teacherId, month, body.adminConfirmedBy);
+      const statement = await confirmSalaryStatementInDb(teacherId, month, body.adminConfirmedBy);
       if (!statement) {
         return NextResponse.json({ error: "month_not_ended_or_not_found" }, { status: 400 });
       }
@@ -97,14 +116,14 @@ export async function PATCH(request: Request) {
       if (!month) {
         return NextResponse.json({ error: "invalid_body" }, { status: 400 });
       }
-      const statements = finalizeAllEstimatesForMonth(month);
+      const statements = await finalizeAllEstimatesForMonth(month);
       return NextResponse.json({ statements, count: statements.length });
     }
 
     if (action === "mark_processing") {
       const { id } = body;
       if (!id) return NextResponse.json({ error: "invalid_body" }, { status: 400 });
-      const statement = markSalaryProcessing(id);
+      const statement = await markSalaryProcessingInDb(id);
       if (!statement) return NextResponse.json({ error: "not_found" }, { status: 404 });
       return NextResponse.json({ statement });
     }
@@ -112,7 +131,7 @@ export async function PATCH(request: Request) {
     if (action === "mark_php_paid") {
       const { id, phpPaidAt } = body;
       if (!id) return NextResponse.json({ error: "invalid_body" }, { status: 400 });
-      const statement = markSalaryPhpPaid(id, phpPaidAt);
+      const statement = await markSalaryPhpPaidInDb(id, phpPaidAt);
       if (!statement) return NextResponse.json({ error: "not_found" }, { status: 404 });
       return NextResponse.json({ statement });
     }
@@ -122,7 +141,7 @@ export async function PATCH(request: Request) {
       if (!id || !krwTransferAmount) {
         return NextResponse.json({ error: "invalid_body" }, { status: 400 });
       }
-      const statement = completeSalaryStatement(id, Number(krwTransferAmount));
+      const statement = await completeSalaryStatementInDb(id, Number(krwTransferAmount));
       if (!statement) {
         return NextResponse.json({ error: "invalid_state" }, { status: 400 });
       }
@@ -134,7 +153,7 @@ export async function PATCH(request: Request) {
       if (!teacherId || !month || !type || !amountPhp || !reason) {
         return NextResponse.json({ error: "invalid_body" }, { status: 400 });
       }
-      const adjustment = addSalaryAdjustment({
+      const adjustment = await addSalaryAdjustmentInDb({
         teacherId,
         month,
         type,
@@ -146,7 +165,7 @@ export async function PATCH(request: Request) {
     }
 
     if (action === "update_bonus_policy") {
-      const policy = updateSalaryBonusPolicy(body.policy ?? body);
+      const policy = await updateSalaryBonusPolicyInDb(body.policy ?? body);
       return NextResponse.json({ policy });
     }
 
@@ -155,7 +174,8 @@ export async function PATCH(request: Request) {
       if (!teacherId || hourlyRatePhp == null) {
         return NextResponse.json({ error: "invalid_body" }, { status: 400 });
       }
-      const teacher = updateTeacherHourlyRate(teacherId, Number(hourlyRatePhp));
+      const { updateTeacherHourlyRatePhpInDb } = await import("@/lib/teachers/repository");
+      const teacher = await updateTeacherHourlyRatePhpInDb(teacherId, Number(hourlyRatePhp));
       if (!teacher) return NextResponse.json({ error: "not_found" }, { status: 404 });
       return NextResponse.json({ teacher });
     }

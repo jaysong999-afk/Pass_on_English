@@ -1,21 +1,34 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { ChatThread } from "@/components/shared/ChatThread";
-import { chatMessages } from "@/lib/mock-data";
-import { getChatRoom } from "@/lib/chat-store";
+import { notifyChatInboxChanged } from "@/lib/chat-inbox-events";
+import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
+import type { ChatRoom } from "@/types";
 
 export default function StudentChatRoomPage() {
   const params = useParams();
   const t = useTranslations("studentPortal.chat");
   const roomId = params.roomId as string;
-  const room = getChatRoom("student", roomId);
-  const messages = chatMessages[roomId] ?? chatMessages["room-1"] ?? [];
+  const { account, activeLearnerId } = useActiveLearner();
+  const [room, setRoom] = useState<ChatRoom | null>(null);
 
   useEffect(() => {
-    fetch(`/api/chat/rooms?role=student&id=${roomId}&action=read`, { method: "PATCH" });
+    if (!activeLearnerId) return;
+    fetch(`/api/chat/rooms?role=student&studentId=${encodeURIComponent(activeLearnerId)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const found = (d.rooms as ChatRoom[] | undefined)?.find((r) => r.id === roomId);
+        if (found) setRoom(found);
+      });
+  }, [roomId, activeLearnerId]);
+
+  useEffect(() => {
+    fetch(`/api/chat/rooms?role=student&id=${roomId}&action=read`, { method: "PATCH" }).then(
+      () => notifyChatInboxChanged()
+    );
   }, [roomId]);
 
   return (
@@ -25,7 +38,13 @@ export default function StudentChatRoomPage() {
           {room?.displayName ?? room?.teacherName ?? t("fallbackTitle")}
         </h2>
       </div>
-      <ChatThread messages={messages} placeholder={t("messagePlaceholder")} />
+      <ChatThread
+        roomId={roomId}
+        senderRole="student"
+        studentId={activeLearnerId ?? undefined}
+        currentUserId={account?.id}
+        placeholder={t("messagePlaceholder")}
+      />
     </div>
   );
 }

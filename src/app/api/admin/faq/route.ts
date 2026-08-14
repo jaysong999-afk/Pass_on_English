@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { createFaqItem, getAllFaqItems } from "@/lib/faq-store";
+import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
+import { createFaqItemInDb, getAllFaqItemsInDb } from "@/lib/faq/repository";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import type { UpsertFaqInput } from "@/types";
 
 function validateInput(body: UpsertFaqInput): string | null {
@@ -10,17 +12,26 @@ function validateInput(body: UpsertFaqInput): string | null {
 }
 
 export async function GET() {
-  return NextResponse.json({ items: getAllFaqItems() });
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
+  const items = await getAllFaqItemsInDb();
+  return NextResponse.json({ items });
 }
 
 export async function POST(request: Request) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
   try {
     const body = (await request.json()) as UpsertFaqInput;
     const error = validateInput(body);
     if (error) {
       return NextResponse.json({ error }, { status: 400 });
     }
-    const item = createFaqItem(body);
+    const item = await createFaqItemInDb(body);
     return NextResponse.json({ item }, { status: 201 });
   } catch {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });

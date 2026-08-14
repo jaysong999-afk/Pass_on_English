@@ -6,8 +6,40 @@
 |------|------|------|
 | 스키마 설계 | ✅ | 본 문서 + `supabase/migrations/` |
 | 통합 DDL | ✅ | `001_initial_schema.sql` — ENUM·테이블 27개·인덱스·FK·트리거·시드 |
+| 추가 migration | ✅ | `002`~`024` — plan_type, FAQ, finance, chat Realtime, **production RLS**, demo seed, **teacher applicant RLS**, **E2E rich seed** |
 | `pricing_plans` 런타임 | ✅ | `@supabase/ssr` + `pricing-plans/repository.ts` |
-| 나머지 store | ⏳ | TypeScript in-memory (`src/lib/*-store.ts`) |
+| **핵심 도메인 store → Supabase** | **✅** | repository + sync cache 패턴 — **MVP store 전부 이전 완료** (§0.1) |
+| Auth · RLS | ⚠️ **1차** | migration 017~021 production RLS; middleware + login API; bootstrap service role |
+| Realtime (채팅) | ✅ | `chat_messages` INSERT 구독 — migration 006 |
+
+### 0.1 Supabase 연동 완료 (repository + cache)
+
+| repository / 모듈 | sync store | DB 테이블 |
+|-------------------|------------|-----------|
+| `pricing-plans/repository.ts` | `pricing-plan-cache.ts` | `pricing_plans` |
+| `accounts/repository.ts` | `account-store-sync.ts` | `profiles`, `students` |
+| `enrollments/repository.ts` | `enrollment-store-sync.ts` | `enrollments`, `payments` |
+| `lessons/repository.ts` | `teacher-lesson-store-sync.ts` | `lessons` |
+| `teacher-availability/repository.ts` | `teacher-availability-store-sync.ts` | `teachers_weekly_availability` |
+| `reschedule/repository.ts` | `reschedule-store-sync.ts` | `lesson_reschedule_requests` |
+| `learning/repository.ts` | `learning-store-sync.ts` | `lesson_feedbacks`, `monthly_growth_reports` |
+| `teacher-salary/repository.ts` | `teacher-salary-store-sync.ts` | `teacher_salary_statements` |
+| `teacher-salary-policy-repository.ts` | `teacher-salary-policy-store-sync.ts` | `salary_settings` |
+| `teacher-salary-adjustment-repository.ts` | `teacher-salary-adjustment-store-sync.ts` | `teacher_bonuses` (음수=패널티) |
+| `teacher-payroll-penalty-repository.ts` | `teacher-payroll-penalty-store-sync.ts` | `teacher_payroll_penalties` |
+| `teachers/repository.ts` | `teacher-profile-store-sync.ts` | `teachers`, `profiles.avatar_url` |
+| `teacher-student-context-repository.ts` | `teacher-student-context-store-sync.ts` | `teacher_student_context` |
+| `faq/repository.ts` | `faq-store-sync.ts` | `faq_items` |
+| `admin/dashboard-settings/repository.ts` | `dashboard-settings-store-sync.ts` | `dashboard_settings` |
+| `teacher-applications/repository.ts` | `teacher-application-store-sync.ts` | `teacher_applications` |
+| `admin/admin-review-log-repository.ts` | `admin-review-log-store-sync.ts` | `admin_review_logs` |
+| `admin/admin-lesson-operation-log-repository.ts` | `admin-lesson-operation-log-store-sync.ts` | `admin_lesson_operation_logs` |
+| `student-registrations/repository.ts` | `student-registration-store-sync.ts` | `student_registration_reviews` |
+| `chat/repository.ts` | `chat-store-sync.ts` | `chat_rooms`, `chat_messages` |
+| `finance/repository.ts` | `finance-store-sync.ts` | `finance_transactions`, `finance_snapshots` |
+
+- **Bootstrap**: `ensureSchedulesBootstrapped()` — API Route 진입 시 `warm*Cache()` 일괄 호출 후 sync store 읽기
+- **공개 페이지**: `ensurePublicContentBootstrapped()` — FAQ·선생님·availability·pricing cache만 warm
 
 **Supabase migration 파일**
 
@@ -15,24 +47,38 @@
 |------|------|
 | `supabase/migrations/001_initial_schema.sql` | 전체 스키마 + `pricing_plans`·`salary_settings` 시드 |
 | `supabase/migrations/002_pricing_plans_plan_type_text.sql` | `plan_type` ENUM → `text` (관리자 커스텀 플랜 CRUD) |
+| `supabase/migrations/003_faq_dashboard_teacher_applications.sql` | `faq_items`, `dashboard_settings`, `teacher_applications` + 시드 |
+| `supabase/migrations/004_profiles_active_student_id.sql` | `profiles.active_student_id` FK → `students` |
+| `supabase/migrations/005_student_registration_reviews.sql` | `student_registration_reviews` + `registration_status` ENUM |
+| `supabase/migrations/006_finance_transactions_chat_realtime.sql` | `finance_transactions` + `chat_messages` Realtime publication |
 
 store → DB 이전 시 본 문서의 컬럼·ENUM을 migration 기준으로 사용한다.
 
 | store / 모듈 | 대응 테이블 | DB 연동 |
 |--------------|-------------|---------|
 | `pricing-plans/repository.ts` | `pricing_plans` | ✅ Supabase |
-| `pricing-plan-cache.ts` | (캐시) | scheduler·enrollment용 sync 읽기 |
-| `teacher-lesson-store.ts` | `lessons` | ⏳ |
-| `teacher-student-context-store.ts` | `teacher_student_context` | ⏳ |
-| `reschedule-store.ts` | `lesson_reschedule_requests` | ⏳ |
-| `learning-store.ts` | `lesson_feedbacks`, `monthly_growth_reports` | ⏳ |
-| `teacher-salary-store.ts` | `teacher_salary_statements` | ⏳ |
-| `teacher-availability-store.ts` | `teachers_weekly_availability` | ⏳ |
-| `admin-lesson-operation-log-store.ts` | `admin_lesson_operation_logs` | ⏳ |
-| `admin-review-log-store.ts` | `admin_review_logs` | ⏳ |
-| `teacher-payroll-penalty-store.ts` | `teacher_payroll_penalties` | ⏳ |
-| `lesson-scheduler.ts` | (lessons 생성 로직) | ⏳ |
-| `lesson-operations-store.ts` | (lessons·enrollments 조치) | ⏳ |
+| `accounts/repository.ts` | `profiles`, `students` | ✅ Supabase |
+| `enrollments/repository.ts` | `enrollments`, `payments` | ✅ Supabase |
+| `lessons/repository.ts` | `lessons` | ✅ Supabase |
+| `teacher-availability/repository.ts` | `teachers_weekly_availability` | ✅ Supabase |
+| `reschedule/repository.ts` | `lesson_reschedule_requests` | ✅ Supabase |
+| `learning/repository.ts` | `lesson_feedbacks`, `monthly_growth_reports` | ✅ Supabase |
+| `teacher-salary/repository.ts` | `teacher_salary_statements` | ✅ Supabase |
+| `teacher-salary-policy-repository.ts` | `salary_settings` | ✅ Supabase |
+| `teacher-salary-adjustment-repository.ts` | `teacher_bonuses` | ✅ Supabase |
+| `teacher-payroll-penalty-repository.ts` | `teacher_payroll_penalties` | ✅ Supabase |
+| `teachers/repository.ts` | `teachers` | ✅ Supabase |
+| `teacher-student-context-repository.ts` | `teacher_student_context` | ✅ Supabase |
+| `faq/repository.ts` | `faq_items` | ✅ Supabase |
+| `admin/dashboard-settings/repository.ts` | `dashboard_settings` | ✅ Supabase |
+| `teacher-applications/repository.ts` | `teacher_applications` | ✅ Supabase |
+| `admin/admin-review-log-repository.ts` | `admin_review_logs` | ✅ Supabase |
+| `admin/admin-lesson-operation-log-repository.ts` | `admin_lesson_operation_logs` | ✅ Supabase |
+| `student-registrations/repository.ts` | `student_registration_reviews` | ✅ Supabase |
+| `chat/repository.ts` | `chat_rooms`, `chat_messages` | ✅ Supabase |
+| `finance/repository.ts` | `finance_transactions`, `finance_snapshots` | ✅ Supabase |
+| `chat-store.ts` | (re-export) | ✅ href helpers only |
+| `finance/payroll-finance-store.ts` | (re-export) | ✅ sync re-export |
 
 ---
 
@@ -442,6 +488,31 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 
 ---
 
+### 4.18a finance_transactions (migration 006)
+
+개별 정산·거래 원장. UI `FinanceDashboard`는 `/api/admin/finance/transactions`로 조회.
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | uuid PK | |
+| transaction_date | date | 거래일 |
+| type | text | income \| expense |
+| category | text | student_payment_kr, teacher_payroll, … |
+| description | text | |
+| currency | text | KRW, CNY, PHP |
+| amount | numeric | 원화/외화 원금 |
+| amount_krw | numeric | KRW 환산 |
+| supply_amount, vat_amount | numeric | 세무 분리 |
+| tax_treatment | text | |
+| source | text | auto \| manual |
+| teacher_id | uuid FK | nullable |
+| teacher_name, student_name | text | nullable |
+| enrollment_id | uuid FK | 입금 확인 시 (UNIQUE per income) |
+| salary_statement_id | uuid FK | 급여 paid 시 (UNIQUE) |
+| created_at | timestamptz | |
+
+---
+
 ### 4.18 finance_snapshots
 
 | 컬럼 | 타입 | 설명 |
@@ -664,7 +735,22 @@ Trigger before INSERT on `lesson_reschedule_requests`:
 
 ---
 
-## 6. RLS 정책 (예시)
+## 6. RLS (production — migration 017~022)
+
+> §6 예시 SQL은 개발 참고용. **실제 적용 정책**은 `017_production_rls.sql` ~ `022_teacher_application_applicant_read.sql`.
+
+| Migration | 내용 |
+|-----------|------|
+| `017_production_rls.sql` | 역할 기반 RLS, demo policy 제거 |
+| `018_fix_rls_auth.sql` | SECURITY DEFINER helpers (`auth.uid()`, role check) |
+| `019_fix_rls_recursion.sql` | students↔lessons 정책 재귀 차단 |
+| `020_fix_demo_admin_auth.sql` | demo-admin auth.users 수정 |
+| `021_admin_direct_notification_type.sql` | `notification_type` enum `admin_direct` |
+| `022_teacher_application_applicant_read.sql` | `teacher_applications` SELECT — admin · `teacher_id=auth.uid()` · JWT email match |
+
+**검증**: `npm run apply:rls` · `npm run test:rls`
+
+### 6.1 예시 (개념)
 
 ```sql
 -- students: own row
@@ -722,6 +808,27 @@ supabase db push
 | 1 | `001_initial_schema.sql` | ENUM, 테이블 27개, 인덱스, FK, auth→profiles 트리거, 비즈니스 트리거, `v_teacher_completed_hours`, 시드 |
 | 2 | `002_pricing_plans_plan_type_text.sql` | `plan_type` text 변환 (커스텀 요금제) |
 | 3 | `003_faq_dashboard_teacher_applications.sql` | `faq_items`, `dashboard_settings`, `teacher_applications` + 시드 |
+| 4 | `004_profiles_active_student_id.sql` | `profiles.active_student_id` FK → `students` |
+| 5 | `005_student_registration_reviews.sql` | `registration_status` ENUM, `student_registration_reviews` |
+| 6 | `006_finance_transactions_chat_realtime.sql` | `finance_transactions`, `chat_messages` Realtime publication |
+| 7 | `007_demo_seed.sql` | demo 학생·선생님·수업 시드 |
+| 8 | `008_demo_seed_fix.sql` | demo 시드 수정 |
+| 9 | `009_demo_rls_read_policies.sql` | demo RLS read 정책 |
+| 10 | `010_demo_auth_fix.sql` | demo auth.users 수정 |
+| 11 | `011_demo_rls_write_policies.sql` | demo RLS write 정책 |
+| 12 | `012_admin_messaging.sql` | admin broadcasts, CS 메시징 |
+| 13 | `013_scheduled_broadcasts_cron.sql` | 예약 단체 발송 cron |
+| 14 | `014_notifications_rls.sql` | notifications RLS |
+| 15 | `015_teacher_availability_rls.sql` | availability RLS |
+| 16 | `016_demo_admin_seed.sql` | demo-admin 계정 시드 |
+| 17 | `017_production_rls.sql` | production 역할 기반 RLS |
+| 18 | `018_fix_rls_auth.sql` | SECURITY DEFINER helpers, profiles 정책 |
+| 19 | `019_fix_rls_recursion.sql` | students↔lessons 재귀 차단 |
+| 20 | `020_fix_demo_admin_auth.sql` | demo-admin 로그인 수정 |
+| 21 | `021_admin_direct_notification_type.sql` | `admin_direct` notification enum |
+| 22 | `022_teacher_application_applicant_read.sql` | teacher applicant own application SELECT (RLS) |
+| 23 | `023_enrollment_payment_hold.sql` | enrollments `confirmed_at` · `payment_deadline_at` (15시간 홀드) |
+| 24 | `024_e2e_rich_seed.sql` | E2E 통합 테스트 시드 (수강신청·홀드·입금·스케줄·보강·피드백·재수강) |
 
 ### 8.3 `001` 포함 항목 (개념적 순서)
 
@@ -733,7 +840,7 @@ supabase db push
 6. salary·attendance·finance·notifications·admin logs
 7. views, functions, triggers
 
-> RLS 정책은 §6 예시만 문서화 — **production 적용 전 별도 migration 권장**.
+> RLS 정책은 §6 — **production migration 017~022 적용 완료** (bootstrap service role 경로 별도).
 
 ### 8.4 migration 003 (`faq_items`, `dashboard_settings`, `teacher_applications`)
 
@@ -744,7 +851,32 @@ supabase db push
 | `teacher_applications` | full_name, date_of_birth, phone, bank_account, email, status, submitted_at |
 | `teachers.application_id` | FK → `teacher_applications` (signup step 2) |
 
-> `student_registration_reviews` — 아직 DDL 없음 (in-memory, migration 004 후보).
+### 8.5 migration 004 (`profiles.active_student_id`)
+
+| 컬럼 | 설명 |
+|------|------|
+| `profiles.active_student_id` | 보호자 계정의 현재 선택 learner (`students.id` FK, ON DELETE SET NULL) |
+
+> `accounts/repository.ts` — 세션 warm 시 DB에서 active learner 복원.
+
+### 8.6 migration 005 (`student_registration_reviews`)
+
+| 테이블 / ENUM | 주요 컬럼 |
+|---------------|-----------|
+| `registration_status` | `pending`, `confirmed`, `rejected` |
+| `student_registration_reviews` | `id` (= `students.id` FK), account_holder_name/email/phone, account_type, country, learner_* fields, english_level, purposes[], status, submitted_at, reviewed_at/by |
+
+> `student-registrations/repository.ts` — 회원가입·learner 추가 시 `registerStudentForReviewInDb()`; 검토 센터 `student_signup` confirm/reject.
+
+### 8.7 migration 006 (`finance_transactions` + chat Realtime)
+
+| 테이블 / 설정 | 주요 컬럼 · 동작 |
+|---------------|------------------|
+| `finance_transactions` | transaction_date, type (income/expense), category, currency, amount, amount_krw, supply/vat, tax_treatment, source; FK `enrollment_id`, `salary_statement_id` |
+| Realtime | `ALTER PUBLICATION supabase_realtime ADD TABLE chat_messages` |
+
+> `finance/repository.ts` — 급여 `paid`·KRW 이체 완료 시 payroll 지출 기록; 입금 확인(`confirmEnrollmentPaymentInDb`) 시 수강료 수입 기록; 월별 `finance_snapshots` 자동 upsert.  
+> `chat/repository.ts` — `chat_rooms` CRUD·`chat_messages` 전송·읽음; 클라이언트 `useChatRealtime` 구독.
 
 ---
 
@@ -755,6 +887,21 @@ supabase db push
 - `dashboard_settings`: 관리자 슬로건 1 row (`003`)
 - `faq_items`: FAQ 10건 (`003`)
 - `teacher_applications`: dev 샘플 1건 (`003`)
+- demo 계정 (`007`/`016`): `demo-student@example.org` / `demo-teacher@example.org` / `demo-admin@example.org` — `DemoPass123!`
+- **E2E 풍부 시드** (`024`, `npm run seed:e2e`) — 모든 레슨·availability·`preferred_slot_time`은 KST **:00/:20/:40** 그리드. 기존 demo 계정은 유지.
+
+| 시나리오 | 로그인 | 상태 |
+|----------|--------|------|
+| 수강신청 | `e2e-student-fresh@example.org` | 수강권 없음, 슬롯 선택부터 |
+| 15시간 홀드 | `e2e-student-hold@example.org` | `pending_payment` + James 13:00 weekday5 홀드 |
+| 입금확인 → 스케줄 일괄 생성 | `e2e-student-pay@example.org` | 입금 신고됨, 관리자 confirm 시 8회 생성 |
+| 보강·피드백 | `e2e-student-active@example.org` | MWF 14:00 정규 스케줄, 보강 요청 1건, 피드백 미작성 1건 |
+| 재수강 | `e2e-student-renew@example.org` | weekday5 완료, James 10:00 유지 가능 |
+| 형제 계정 | `e2e-student-guardian@example.org` | 수강 중 1 / 미신청 1 / 가입 검토 대기 1 |
+| 선생님 | `e2e-teacher-james@example.org`, `e2e-teacher-emily@example.org` | active, 20분 그리드 availability |
+| 선생님 승인 | `e2e-teacher-carlos@example.org` | `pending` |
+
+비밀번호 공통: `DemoPass123!`
 
 ---
 

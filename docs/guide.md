@@ -45,7 +45,7 @@
 | Frontend | Next.js (App Router), TypeScript |
 | UI | Tailwind CSS, Shadcn UI |
 | i18n | next-intl |
-| PWA / Push | @ducanh2912/next-pwa, Web Push API |
+| PWA / Push | Web Push API, `public/sw.js` (수동 SW) |
 | Backend | Next.js Route Handlers, Supabase |
 | Database | Supabase PostgreSQL |
 | Auth | Supabase Auth |
@@ -84,13 +84,31 @@
 | Monthly Growth Report (5필드) | ✅ | `MonthlyGrowthReportEditor` |
 | Teacher Salary (월별 명세·EN 보너스 정책) | ✅ | `TeacherSalaryDashboard` |
 | Admin: teacher-profiles, pricing, FAQ | ✅ | `/admin/teacher-profiles`, `/admin/pricing`, `/admin/faq` |
-| **Supabase DDL** | ✅ | `001_initial_schema.sql`, `002_pricing_plans_plan_type_text.sql`, `003_faq_dashboard_teacher_applications.sql` |
+| **Supabase DDL** | ✅ | `001`~`022` — [`db.md`](./db.md) §8 |
 | **`pricing_plans` → Supabase** | ✅ | `pricing-plans/repository.ts`, `/api/pricing-plans` |
-| In-memory stores → Supabase (나머지) | ⏳ | enrollments, lessons, teachers, … |
-| 입금 확인·재무 API | ⏳ | 재무 집계 mock |
+| **MVP store → Supabase** | ✅ | **전 도메인** (chat·finance 포함) — [`backend.md`](./backend.md) §1.2 |
+| **Auth · RLS** | ✅ **2차 완료** | middleware 다역할 + session UUID + learner access 검증 |
+| **관리자 메시지 · CS · 단체 발송** | ✅ | `/api/admin/messages/*`, broadcast → 1:1 CS 채팅 통합 |
+| 입금 확인·재무 API | ✅ | 입금 확인 → `finance_transactions`; `/api/admin/finance/transactions` |
 | Trial → 결제 → 승인 | ✅ | learner 단위 enrollment |
-| Account vs Learner | ✅ | account-store, StudentSwitcher |
-| Teacher signup API | ⏳ | localStorage prototype |
+| Account vs Learner | ✅ | `accounts/repository` + `account-store-sync`, StudentSwitcher |
+| Teacher signup E2E (Auth → profile → admin approve) | ✅ | packages A–D; `test-api-e2e` teacher signup block |
+| Teacher signup API | ✅ | `/api/teacher/applications`, `/api/teachers/profile` → Supabase |
+
+### 2.3 Auth 2차 완료 · 잔여 (2026-08)
+
+| 항목 | 상태 |
+|------|------|
+| 선생님 세션 바인딩 (`TeacherSessionProvider`) | ✅ |
+| 학생 logout (`StudentAppShell`) | ✅ |
+| 학생 login → `/api/auth/login` + role 검증 | ✅ |
+| 학생 API middleware (`/api/student/*`, enrollments, learning, chat) | ✅ |
+| pricing admin mutation middleware (GET만 public) | ✅ |
+| 자동 시스템 알림 cron | ⏳ |
+| PWA install prompt | ⏳ |
+| HK 배포 | ⏳ |
+
+**테스트**: `npm run test:rls` (17/17) · `npm run test:api:e2e` (37/37)
 
 ---
 
@@ -200,6 +218,31 @@ flowchart TB
 - 캘린더 **이전/다음 주** ↔ 로그 필터 **동기화** (수업 예정 주 기준)
 - 노쇼: 원 수업 회색 · 보강 생성 · 학생 +1회 · 선생님 급여 패널티
 
+### 4.6 선생님 신규 가입 (E2E)
+
+```mermaid
+flowchart LR
+    A[/teacher/signup Step1] --> B[signUp + application]
+    B --> C[/teacher/signup/profile]
+    C --> D[teachers row pending]
+    D --> E[/teacher/login]
+    E --> F{status active?}
+    F -->|No| G[teacher_not_active]
+    F -->|Admin approve| H[검토 센터 teacher_signup]
+    H --> I[teachers.status=active]
+    I --> J[로그인 · Availability · 학생 매칭]
+```
+
+| 단계 | URL / API | 결과 |
+|------|-----------|------|
+| 1. 지원서 | `POST /api/teacher/applications` (+ password) | `auth.users` + `teacher_applications` |
+| 2. 프로필 | `POST /api/teachers/profile` (teacher 세션) | `teachers.id = auth.uid()`, `status=pending` |
+| 3. 승인 전 로그인 | `POST /api/auth/login` | `403 teacher_not_active` |
+| 4. 관리자 승인 | `/admin/reschedule` → `teacher_signup` approve | `teachers.status=active` |
+| 5. 승인 후 | `/teacher/login`, Availability 설정 | 공개 선생님 목록·수강 신청 가능 |
+
+> **관리자**는 demo 시드 계정만 (`demo-admin@example.org`). 관리자 셀프 가입 UI 없음.
+
 ---
 
 ## 5. 다국어 전략
@@ -243,18 +286,18 @@ supabase start
 cp .env.example .env.local
 # NEXT_PUBLIC_SUPABASE_URL, ANON_KEY, VAPID keys 등 입력
 
-# 5. DB 마이그레이션 (001 → 002 → 003 순서)
+# 5. DB 마이그레이션 (001 → 021 순서)
 supabase db push
 # 또는 Supabase Dashboard SQL Editor에서
 #   supabase/migrations/001_initial_schema.sql
-#   supabase/migrations/002_pricing_plans_plan_type_text.sql
-#   supabase/migrations/003_faq_dashboard_teacher_applications.sql
+#   …
+#   supabase/migrations/006_finance_transactions_chat_realtime.sql
 
 # 6. 개발 서버
 pnpm dev
 ```
 
-> **요금제 검증**: `.env.local`에 Supabase URL·ANON_KEY 설정 후 `/admin/pricing` 또는 랜딩 요금 섹션에서 DB 연동 확인.
+> **DB 연동 검증**: `.env.local`에 Supabase URL·ANON_KEY 설정 후 API Route 호출 시 `ensureSchedulesBootstrapped()`가 cache warm. 랜딩·수강신청은 `/admin/pricing`, FAQ, 선생님 목록에서 확인.
 
 ### 6.3 VAPID 키 생성
 
@@ -281,7 +324,8 @@ Pass_on_English/
 │   ├── migrations/
 │   │   ├── 001_initial_schema.sql
 │   │   ├── 002_pricing_plans_plan_type_text.sql
-│   │   └── 003_faq_dashboard_teacher_applications.sql
+│   │   ├── 003_faq_dashboard_teacher_applications.sql
+│   │   └── 004_profiles_active_student_id.sql
 │   └── seed.sql                 # (선택) dev seed
 ├── public/
 │   ├── icons/          # PWA
@@ -316,9 +360,9 @@ Pass_on_English/
 - [x] 학생: 가입, 설문, My Lessons, Learning Results
 - [x] 선생님: My Lessons, availability, schedule, feedback
 - [x] 관리자: teacher-profiles, pricing, students/teachers UI
-- [x] DB migrations DDL (`001`·`002`·`003`) — [`db.md`](./db.md) §8
+- [x] DB migrations DDL (`001`~`021`) — [`db.md`](./db.md) §8
 - [x] `pricing_plans` Supabase CRUD (첫 도메인 이전)
-- [ ] enrollments·lessons·teachers store → Supabase
+- [x] MVP store 전부 → Supabase (chat·finance 포함) — [`backend.md`](./backend.md) §9
 
 ### Phase 2 — 운영 기능 (2~3주)
 
@@ -335,16 +379,17 @@ Pass_on_English/
 
 - [x] 급여 월별 명세서 (estimated/processing/paid)
 - [x] 만근·분기 보너스 정책 UI
-- [ ] 재무 대시보드·차트 (mock)
+- [ ] 재무 대시보드·차트 (DB 연동 ✅, 고급 차트·cron 스냅샷 ⏳)
 - [ ] 월말 정산 스냅샷 (DB cron)
 
 ### Phase 4 — 배포·QA
 
 - [ ] Tencent Cloud HK 배포
 - [ ] 한·중 접속 테스트
-- [ ] PWA iOS/Android 검증
-- [ ] 보안·RLS 감사 (`pricing_plans` mutation 보호 포함)
-- [ ] in-memory store → Supabase migration (enrollments, lessons, …)
+- [ ] PWA iOS/Android 검증 (실제 install prompt)
+- [x] Auth·RLS 1차 연동 (middleware, login API, migration 017~021, `npm run test:rls`)
+- [ ] Auth·RLS 2차 (선생님 세션 UUID 바인딩, 학생 API 전면 보호, pricing admin auth)
+- [ ] 보안·RLS 감사 (service role bootstrap 경로 최소화)
 
 ---
 
@@ -411,11 +456,24 @@ Pass_on_English/
 
 | 영역 | 방법 |
 |------|------|
-| API | Vitest + Supabase local |
-| E2E | Playwright — student enroll, payment confirm |
+| RLS | `npm run test:rls` — JWT 직접 검증 (17케이스, migration 022 applicant read 포함) |
+| API E2E | `npm run test:api:e2e` — demo 시드 + Bearer auth (37케이스, **teacher signup A→C** 포함) |
 | i18n | locale snapshot |
 | PWA | Lighthouse PWA audit |
 | Cross-region | VPN KR/CN manual QA |
+
+### 12.1 통합 QA 체크리스트 (teacher signup E2E)
+
+**사전:** `.env.local` (Supabase + `SUPABASE_SERVICE_ROLE_KEY`), migration `001`~`024`, `npm run seed:e2e`, `npm run seed:demo`, `npm run dev`
+
+| # | 역할 | 확인 |
+|---|------|------|
+| 1 | 선생님 | `/teacher/signup` → 지원서 + password → profile → complete |
+| 2 | 선생님 | 승인 전 `/teacher/login` → `teacher_not_active` |
+| 3 | 관리자 | `/admin/reschedule` → 신규 선생님 → **프로필 완료** → 승인 |
+| 4 | 선생님 | 승인 후 login → Availability 설정 |
+| 5 | 학생 | 신규/demo 학생 → enrollment → 승인된 선생님 선택 |
+| 6 | 자동 | `npm run test:rls` · `npm run test:api:e2e` green |
 
 ---
 
@@ -453,11 +511,12 @@ Pass_on_English/
 ## 15. 다음 단계
 
 1. ~~본 명세서 리뷰 및 MVP UI 플로우 검증~~ ✅
-2. ~~통합 DDL migration + `pricing_plans` Supabase 연동~~ ✅
-3. **Supabase migration (나머지)** — `enrollments`, `lessons`, `profiles`/`students` 순
-4. Auth·RLS 연동 (`pricing_plans` admin mutation 보호 포함)
-5. Realtime 채팅
-6. 입금 확인·재무 API 완성
-7. Tencent Cloud HK 배포 및 한·중 QA
+2. ~~통합 DDL migration + MVP store Supabase 연동 (chat·finance 포함)~~ ✅
+3. ~~Auth·RLS 2차 (선생님 UUID, 학생 logout, API 보호)~~ ✅
+4. ~~Realtime 채팅 (messages)~~ ✅
+5. ~~관리자 메시지 · CS · 단체 발송~~ ✅
+6. Tencent Cloud HK 배포 + 한·중 QA
+7. 자동 시스템 알림 발송 엔진 (cron, `system_notification_rules` dispatch)
+8. demo 시드 → 운영 시드 분리 (`SUPABASE_SERVICE_ROLE_KEY` 필수)
 
 상세 구현은 각 명세서를 참조한다.

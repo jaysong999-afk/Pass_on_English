@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
   assignSubstituteTeacher,
   markTeacherNoShow,
@@ -7,6 +9,7 @@ import {
   findAvailableTeachersAt,
 } from "@/lib/admin/lesson-operations-store";
 import { getLessonById } from "@/lib/teacher-lesson-store";
+import { buildLessonDisplayContext } from "@/lib/teacher-lesson-context";
 
 type OperationBody =
   | { action: "assign_substitute"; substituteTeacherId: string; note?: string }
@@ -19,6 +22,10 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
   const { id } = await params;
   const lesson = getLessonById(id);
   if (!lesson) {
@@ -29,13 +36,21 @@ export async function GET(
     lesson.teacherId,
     lesson.id
   );
-  return NextResponse.json({ lesson, availableTeachers: teachers });
+  return NextResponse.json({
+    lesson,
+    availableTeachers: teachers,
+    display: buildLessonDisplayContext(lesson),
+  });
 }
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
   const { id } = await params;
   let body: OperationBody;
   try {
@@ -47,22 +62,22 @@ export async function PATCH(
   try {
     switch (body.action) {
       case "assign_substitute": {
-        const lesson = assignSubstituteTeacher(id, body.substituteTeacherId, body.note);
+        const lesson = await assignSubstituteTeacher(id, body.substituteTeacherId, body.note);
         return NextResponse.json({ lesson });
       }
       case "teacher_no_show": {
-        const result = markTeacherNoShow(id, {
+        const result = await markTeacherNoShow(id, {
           makeupScheduledAt: body.makeupScheduledAt,
           note: body.note,
         });
         return NextResponse.json(result);
       }
       case "cancel_unpaid": {
-        const result = cancelLessonUnpaid(id, body.note);
+        const result = await cancelLessonUnpaid(id, body.note);
         return NextResponse.json(result);
       }
       case "reschedule": {
-        const lesson = adminRescheduleLesson(id, body.scheduledAt, body.teacherId);
+        const lesson = await adminRescheduleLesson(id, body.scheduledAt, body.teacherId);
         return NextResponse.json({ lesson });
       }
       default:

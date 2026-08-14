@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { adjustEnrollmentSessions } from "@/lib/enrollment-store";
-import { adjustEnrollmentSessionsWithScheduleBatch } from "@/lib/lesson-scheduler";
+import { adjustEnrollmentSessionsInDb } from "@/lib/enrollments/repository";
+import { adjustEnrollmentSessionsWithScheduleBatchInDb } from "@/lib/lessons/schedule-service";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function PATCH(
   request: Request,
@@ -25,6 +26,12 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  try {
+    await ensureSchedulesBootstrapped();
+  } catch (error) {
+    console.error("[enrollments/sessions PATCH] bootstrap", error);
+  }
+
   if (
     body.action === "adjust_sessions" ||
     body.action === "add_session" ||
@@ -41,7 +48,7 @@ export async function PATCH(
       return NextResponse.json({ error: "invalid_delta" }, { status: 400 });
     }
 
-    const result = adjustEnrollmentSessionsWithScheduleBatch(id, Math.trunc(delta), {
+    const result = await adjustEnrollmentSessionsWithScheduleBatchInDb(id, Math.trunc(delta), {
       reason: body.reason,
       adminName: body.adminName,
     });
@@ -65,7 +72,7 @@ export async function PATCH(
     });
   }
 
-  const updated = adjustEnrollmentSessions(id, body);
+  const updated = await adjustEnrollmentSessionsInDb(id, body);
   if (!updated) {
     return NextResponse.json({ error: "Enrollment not found" }, { status: 404 });
   }

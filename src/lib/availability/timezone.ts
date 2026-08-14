@@ -1,7 +1,8 @@
 import type { Locale } from "@/lib/i18n/config";
-import { CANONICAL_TIMEZONE } from "./constants";
+import { CANONICAL_TIMEZONE, DAY_LABEL_TO_DOW, DOW_TO_DAY_LABEL } from "./constants";
 import type { DayLabel, SlotStartTime } from "./types";
-import { DOW_TO_DAY_LABEL } from "./constants";
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** Teacher portal — Philippines (UTC+8) */
 export const TEACHER_TIMEZONE = "Asia/Manila";
@@ -140,19 +141,31 @@ export function formatCalendarDayHeader(date: Date, timeZone: string): string {
   }).format(date);
 }
 
-/** Monday 00:00 local for the week containing `date`. */
+function addDaysToYmd(dateKey: string, days: number): string {
+  const utc = new Date(`${dateKey}T00:00:00Z`);
+  utc.setUTCDate(utc.getUTCDate() + days);
+  return utc.toISOString().slice(0, 10);
+}
+
+/** Instant at 12:00 KST for a YYYY-MM-DD calendar date. Avoids midnight TZ flips. */
+function dateKeyToNoonKst(dateKey: string): Date {
+  return new Date(`${dateKey}T12:00:00+09:00`);
+}
+
+/**
+ * Monday 12:00 KST for the week containing `date`.
+ * Weeks are Mon–Sun in Korea time so calendar columns match stored slots.
+ */
 export function startOfWeekMonday(date: Date = new Date()): Date {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dow = d.getDay();
+  const dateKey = getDateKeyInTimezone(date, CANONICAL_TIMEZONE);
+  const dayLabel = getDayLabelInTimezone(date, CANONICAL_TIMEZONE);
+  const dow = DAY_LABEL_TO_DOW[dayLabel];
   const diff = dow === 0 ? -6 : 1 - dow;
-  d.setDate(d.getDate() + diff);
-  return d;
+  return dateKeyToNoonKst(addDaysToYmd(dateKey, diff));
 }
 
 export function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
+  return new Date(date.getTime() + days * MS_PER_DAY);
 }
 
 export function formatWeekRange(weekStart: Date, timeZone: string): string {

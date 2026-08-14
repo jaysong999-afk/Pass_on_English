@@ -1,40 +1,63 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse } from "@/lib/auth/api-guard";
+import { assertLearnerAccess } from "@/lib/auth/session";
 import {
-  addLessonFeedback,
-  getFeedbacksByStudent,
-  markFeedbackRead,
-} from "@/lib/learning-store";
-import { completeLesson } from "@/lib/teacher-lesson-store";
+  addLessonFeedbackInDb,
+  markFeedbackReadInDb,
+  warmLearningCache,
+} from "@/lib/learning/repository";
+import { getFeedbacksByStudent } from "@/lib/learning-store";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
+  await ensureSchedulesBootstrapped();
+  try {
+    await warmLearningCache();
+  } catch (error) {
+    console.error("[learning/feedback GET] warm cache", error);
+  }
+
   const { searchParams } = new URL(request.url);
   const studentId = searchParams.get("studentId");
   if (!studentId) {
     return NextResponse.json({ error: "studentId required" }, { status: 400 });
   }
-  return NextResponse.json({ feedbacks: getFeedbacksByStudent(studentId) });
+
+  try {
+    await assertLearnerAccess(studentId);
+    return NextResponse.json({ feedbacks: getFeedbacksByStudent(studentId) });
+  } catch (error) {
+    return authErrorResponse(error);
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    await ensureSchedulesBootstrapped();
+
     const body = await request.json();
-    const feedback = addLessonFeedback(body);
-    if (body.lessonId) {
-      completeLesson(body.lessonId as string);
-    }
+    const feedback = await addLessonFeedbackInDb(body);
     return NextResponse.json({ feedback }, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  } catch (error) {
+    console.error("[learning/feedback POST]", error);
+    const message = error instanceof Error ? error.message : "Invalid body";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }
 
 export async function PATCH(request: Request) {
+  await ensureSchedulesBootstrapped();
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   const action = searchParams.get("action");
   if (id && action === "read") {
-    markFeedbackRead(id);
-    return NextResponse.json({ ok: true });
+    try {
+      await markFeedbackReadInDb(id);
+      return NextResponse.json({ ok: true });
+    } catch (error) {
+      console.error("[learning/feedback PATCH]", error);
+      return NextResponse.json({ error: "read_failed" }, { status: 400 });
+    }
   }
   return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 }

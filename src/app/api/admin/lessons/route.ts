@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
 import {
   getUpcomingLessonsForAdmin,
   findAvailableTeachersAt,
@@ -6,6 +7,9 @@ import {
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
   await ensureSchedulesBootstrapped();
   const { searchParams } = new URL(request.url);
   const teacherId = searchParams.get("teacherId") ?? undefined;

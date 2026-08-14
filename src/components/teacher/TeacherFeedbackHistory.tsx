@@ -13,14 +13,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { students } from "@/lib/mock-data";
-import { CURRENT_TEACHER_ID } from "@/lib/availability/constants";
+import { useTeacherSession } from "@/contexts/TeacherSessionContext";
 import { TEACHER_TIMEZONE } from "@/lib/availability/timezone";
-import { getStudentDisplayName } from "@/lib/student-display-name";
 import { formatDate, formatTime } from "@/lib/utils";
 import type { LessonFeedback } from "@/types";
-
-const TEACHER_NAME = "Sarah Mitchell";
 
 function currentMonthKey(): string {
   const now = new Date();
@@ -30,6 +26,7 @@ function currentMonthKey(): string {
 }
 
 export function TeacherFeedbackHistory() {
+  const { teacherId } = useTeacherSession();
   const [feedbacks, setFeedbacks] = useState<LessonFeedback[]>([]);
   const [loading, setLoading] = useState(true);
   const [studentTab, setStudentTab] = useState("all");
@@ -38,29 +35,31 @@ export function TeacherFeedbackHistory() {
   const [viewing, setViewing] = useState<LessonFeedback | null>(null);
 
   const load = useCallback(async () => {
+    if (!teacherId) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/teacher/feedback?teacherId=${CURRENT_TEACHER_ID}`
-      );
+      const res = await fetch(`/api/teacher/feedback`);
       const data = await res.json();
       setFeedbacks(data.feedbacks ?? []);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [teacherId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const myStudents = useMemo(() => {
-    const byTeacher = students.filter((s) => s.teacherName === TEACHER_NAME);
-    const fromFeedbacks = feedbacks
-      .map((f) => students.find((s) => s.id === f.studentId))
-      .filter((s): s is NonNullable<typeof s> => Boolean(s));
-    const map = new Map<string, (typeof students)[number]>();
-    for (const s of [...byTeacher, ...fromFeedbacks]) map.set(s.id, s);
+    const map = new Map<string, { id: string; name: string }>();
+    for (const feedback of feedbacks) {
+      if (!map.has(feedback.studentId)) {
+        map.set(feedback.studentId, {
+          id: feedback.studentId,
+          name: feedback.studentName,
+        });
+      }
+    }
     return Array.from(map.values());
   }, [feedbacks]);
 
@@ -78,7 +77,6 @@ export function TeacherFeedbackHistory() {
     setExporting(true);
     try {
       const params = new URLSearchParams({
-        teacherId: CURRENT_TEACHER_ID,
         format: "csv",
         month: exportMonth,
       });
@@ -105,11 +103,7 @@ export function TeacherFeedbackHistory() {
   const selectedStudentLabel =
     studentTab === "all"
       ? "all students"
-      : getStudentDisplayName(
-          myStudents.find((s) => s.id === studentTab) ?? {
-            fullName: studentTab,
-          }
-        );
+      : (myStudents.find((s) => s.id === studentTab)?.name ?? studentTab);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -162,7 +156,7 @@ export function TeacherFeedbackHistory() {
           </TabsTrigger>
           {myStudents.map((s) => (
             <TabsTrigger key={s.id} value={s.id} className="rounded-lg px-3 py-2 text-sm">
-              {getStudentDisplayName(s)}
+              {s.name}
             </TabsTrigger>
           ))}
         </TabsList>

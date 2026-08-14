@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useId } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
 import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
@@ -18,6 +19,7 @@ export function StudentSwitcher({
 }) {
   const locale = useLocale();
   const t = useTranslations("studentPortal.shell");
+  const selectId = useId();
   const { account, learners, activeLearner, loading, switchLearner } = useActiveLearner();
 
   if (loading || !activeLearner) {
@@ -46,11 +48,11 @@ export function StudentSwitcher({
 
   return (
     <div className={cn("flex items-center gap-2", isBar && "min-w-0 flex-1", className)}>
-      <label className="sr-only" htmlFor="learner-switcher">
+      <label className="sr-only" htmlFor={selectId}>
         {t("switchLearner")}
       </label>
       <select
-        id="learner-switcher"
+        id={selectId}
         value={activeLearner.id}
         onChange={(e) => void switchLearner(e.target.value)}
         className={cn(

@@ -1,18 +1,8 @@
-const DEFAULT_SLOGAN = "배워서 남주자!!!";
+import { clearDashboardSettingsCache } from "@/lib/admin/dashboard-settings-cache";
 
-let dashboardSlogan = DEFAULT_SLOGAN;
-
-export function getDashboardSlogan(): string {
-  return dashboardSlogan;
-}
-
-export function setDashboardSlogan(value: string): string {
-  const trimmed = value.trim();
-  dashboardSlogan = trimmed || DEFAULT_SLOGAN;
-  return dashboardSlogan;
-}
+export { getDashboardSlogan } from "@/lib/admin/dashboard-settings-store-sync";
 
 /** @internal */
 export function resetDashboardSettingsStore() {
-  dashboardSlogan = DEFAULT_SLOGAN;
+  clearDashboardSettingsCache();
 }

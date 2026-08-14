@@ -1,0 +1,35 @@
+{
+  "seededAt": "2026-08-14T11:51:50.111Z",
+  "password": "DemoPass123!",
+  "scenarios": {
+    "enrollment": {
+      "email": "e2e-student-fresh@example.org",
+      "note": "수강신청 — 계정만 있고 수강권 없음"
+    },
+    "hold15h": {
+      "email": "e2e-student-hold@example.org",
+      "note": "15시간 홀드 (James 13:00 weekday5, 입금 전)"
+    },
+    "paymentConfirm": {
+      "email": "e2e-student-pay@example.org",
+      "note": "입금 신고 완료 → 관리자 확인 시 스케줄 일괄 생성"
+    },
+    "scheduleFeedbackMakeup": {
+      "email": "e2e-student-active@example.org",
+      "note": "정규 스케줄 + 보강 요청 + 피드백 미작성 1건"
+    },
+    "renewal": {
+      "email": "e2e-student-renew@example.org",
+      "note": "가장 최근 지난 평일 10:00–10:20 종료 후 12h/15h 재수강 창구 (James 10:00 홀드)"
+    },
+    "guardianSibling": {
+      "email": "e2e-student-guardian@example.org",
+      "note": "형제 1명 수강 중, 1명 미신청, 1명 가입 검토 대기"
+    },
+    "teachers": [
+      "e2e-teacher-james@example.org",
+      "e2e-teacher-emily@example.org",
+      "e2e-teacher-carlos@example.org (pending 승인)"
+    ]
+  }
+}

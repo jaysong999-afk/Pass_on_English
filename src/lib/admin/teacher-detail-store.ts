@@ -10,7 +10,7 @@ import type { TeacherWeeklyAvailability } from "@/lib/availability/types";
 import { getAllEnrollments } from "@/lib/enrollment-store";
 import { getFeedbacksByTeacher } from "@/lib/learning-store";
 import { listTeacherApplications, getTeacherApplicationById } from "@/lib/admin/teacher-application-store";
-import { getTeacherWeeklyAvailability } from "@/lib/teacher-availability-store";
+import { getTeacherWeeklyAvailability } from "@/lib/teacher-availability-store-sync";
 import { getTeacherPenalties } from "@/lib/teacher-payroll-penalty-store";
 import { getTeacherById } from "@/lib/teacher-profile-store";
 import {
@@ -20,7 +20,7 @@ import {
   statementTotal,
 } from "@/lib/teacher-salary-store";
 import { getTeacherLessons, getTodayLessons } from "@/lib/teacher-lesson-store";
-import { getStudent } from "@/lib/mock-data";
+import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
@@ -69,10 +69,10 @@ export function getAdminTeacherDetail(teacherId: string): AdminTeacherDetail | n
         e.studentId === studentId &&
         (e.status === "active" || e.status === "expiring_soon")
     )!;
-    const profile = getStudent(studentId);
+    const profile = getStudentDirectoryEntry(studentId);
     return {
       studentId,
-      studentName: profile ? getStudentDisplayName(profile) : studentId,
+      studentName: profile ? getStudentDisplayName(profile.student) : studentId,
       planLabel: enrollment.planLabel,
       status: enrollment.status,
     };

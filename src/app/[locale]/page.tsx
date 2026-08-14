@@ -1,4 +1,5 @@
 import { getPublicTeachers } from "@/lib/teacher-profile-store";
+import { ensurePublicContentBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { HeroSection } from "@/components/landing/HeroSection";
 import { StatsBar } from "@/components/landing/StatsBar";
 import { FeaturesSection } from "@/components/landing/FeaturesSection";
@@ -16,6 +17,7 @@ export default async function LandingPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  await ensurePublicContentBootstrapped();
   const teachers = getPublicTeachers();
 
   return (

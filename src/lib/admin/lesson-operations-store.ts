@@ -2,19 +2,24 @@ import type { Lesson } from "@/types";
 import { CANONICAL_TIMEZONE, LESSON_MINUTES } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
 import {
-  appendAdminLessonOperationLog,
-  weekStartKeyFromScheduledAt,
-  getAdminLessonOperationLogById,
-  markAdminLessonOperationUndone,
-} from "@/lib/admin/admin-lesson-operation-log-store";
+  appendAdminLessonOperationLogInDb,
+  getAdminLessonOperationLogByIdInDb,
+  markAdminLessonOperationUndoneInDb,
+} from "@/lib/admin/admin-lesson-operation-log-repository";
+import { weekStartKeyFromScheduledAt } from "@/lib/admin/admin-lesson-operation-log-utils";
+import { adjustEnrollmentSessionsWithScheduleBatchInDb } from "@/lib/lessons/schedule-service";
 import {
-  adjustEnrollmentSessions,
+  deleteLessonByIdInDb,
+  insertLessonInDb,
+  replaceLessonInDb,
+} from "@/lib/lessons/repository";
+import {
   getEnrollmentsByStudent,
   getActiveEnrollmentsByTeacher,
   updateEnrollmentTeacher,
   getEnrollmentById,
 } from "@/lib/enrollment-store";
-import { getStudent } from "@/lib/mock-data";
+import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
 import {
@@ -23,14 +28,9 @@ import {
   isTeacherSlotFree,
 } from "@/lib/lesson-scheduler";
 import { getAllTeachers, getTeacherById } from "@/lib/teacher-profile-store";
-import { applyTeacherNoShowPenalty, revertTeacherNoShowPenalty } from "@/lib/teacher-payroll-penalty-store";
-import {
-  getAllLessons,
-  getLessonById,
-  pushLesson,
-  replaceLesson,
-  deleteLessonById,
-} from "@/lib/teacher-lesson-store";
+import { applyTeacherNoShowPenaltyInDb, revertTeacherNoShowPenaltyInDb } from "@/lib/teacher-payroll-penalty-repository";
+import { getAllLessons, getLessonById } from "@/lib/teacher-lesson-store";
+import { restoreOccupiedWeeklyAvailabilityInDb } from "@/lib/teacher-availability/repository";
 
 export interface AvailableTeacherOption {
   teacherId: string;
@@ -85,9 +85,9 @@ export function getBulkEnrollmentTransferPreview(
   fromTeacherId: string
 ): BulkEnrollmentTransferPreview[] {
   return getActiveEnrollmentsByTeacher(fromTeacherId).map((enrollment) => {
-    const student = getStudent(enrollment.studentId);
+    const student = getStudentDirectoryEntry(enrollment.studentId);
     const studentName = student
-      ? getStudentDisplayName(student)
+      ? getStudentDisplayName(student.student)
       : enrollment.studentId;
     const plan = getCachedPricingPlanById(enrollment.planId);
     const upcoming = futureLessonsForEnrollment(enrollment.id, fromTeacherId);
@@ -132,8 +132,17 @@ export function previewEnrollmentTransferSlots(
   }
   const scheduled = futureLessonsForEnrollment(enrollmentId, fromTeacherId);
   let movableCount = 0;
+  const ignoreOwner = { studentId: enrollment.studentId };
   for (const lesson of scheduled) {
-    if (isTeacherSlotFree(toTeacherId, lesson.scheduledAt, lesson.id)) {
+    if (
+      isTeacherSlotFree(
+        toTeacherId,
+        lesson.scheduledAt,
+        lesson.id,
+        lesson.durationMinutes,
+        ignoreOwner
+      )
+    ) {
       movableCount += 1;
     }
   }
@@ -187,7 +196,7 @@ function logLessonOperation(input: {
   undoable?: boolean;
   undoPayload?: import("@/types").AdminLessonOperationUndoPayload;
 }) {
-  return appendAdminLessonOperationLog({
+  return appendAdminLessonOperationLogInDb({
     teacherId: input.teacherId,
     teacherName: input.teacherName,
     lessonId: input.lesson.id,
@@ -203,11 +212,11 @@ function logLessonOperation(input: {
   });
 }
 
-export function assignSubstituteTeacher(
+export async function assignSubstituteTeacher(
   lessonId: string,
   substituteTeacherId: string,
   note?: string
-): Lesson {
+): Promise<Lesson> {
   const lesson = getLessonById(lessonId);
   if (!lesson) throw new Error("lesson_not_found");
   if (!["scheduled", "reschedule_pending"].includes(lesson.status)) {
@@ -219,11 +228,11 @@ export function assignSubstituteTeacher(
     throw new Error("substitute_not_available");
   }
 
-  if (!isTeacherSlotFree(substituteTeacherId, lesson.scheduledAt, lessonId)) {
+  if (!isTeacherSlotFree(substituteTeacherId, lesson.scheduledAt, lessonId, lesson.durationMinutes)) {
     throw new Error("substitute_slot_unavailable");
   }
 
-  const updated = replaceLesson({
+  const updated = await replaceLessonInDb({
     ...lesson,
     originalTeacherId: lesson.originalTeacherId ?? lesson.teacherId,
     originalTeacherName: lesson.originalTeacherName ?? lesson.teacherName,
@@ -234,7 +243,7 @@ export function assignSubstituteTeacher(
     operationNote: note ?? "대체 선생님 배정",
   });
 
-  logLessonOperation({
+  await logLessonOperation({
     teacherId: lesson.teacherId,
     teacherName: lesson.teacherName ?? lesson.teacherId,
     lesson,
@@ -246,10 +255,10 @@ export function assignSubstituteTeacher(
   return updated;
 }
 
-export function markTeacherNoShow(
+export async function markTeacherNoShow(
   lessonId: string,
   options?: { makeupScheduledAt?: string; note?: string }
-): { original: Lesson; makeup: Lesson } {
+): Promise<{ original: Lesson; makeup: Lesson }> {
   const lesson = getLessonById(lessonId);
   if (!lesson) throw new Error("lesson_not_found");
   if (!["scheduled", "reschedule_pending"].includes(lesson.status)) {
@@ -261,7 +270,7 @@ export function markTeacherNoShow(
   const noShowTeacherId = lesson.originalTeacherId ?? lesson.teacherId;
   const noShowTeacherName = lesson.originalTeacherName ?? lesson.teacherName;
 
-  const cancelled = replaceLesson({
+  const cancelled = await replaceLessonInDb({
     ...lesson,
     status: "cancelled",
     teacherNoShow: true,
@@ -274,8 +283,7 @@ export function markTeacherNoShow(
 
   const enrollment = activeEnrollmentForStudent(lesson.studentId);
   if (enrollment) {
-    adjustEnrollmentSessions(enrollment.id, {
-      deltaRemaining: 1,
+    await adjustEnrollmentSessionsWithScheduleBatchInDb(enrollment.id, 1, {
       reason: "선생님 노쇼 — 수업 1회 보상",
       adminName: "관리자",
     });
@@ -285,7 +293,7 @@ export function markTeacherNoShow(
     options?.makeupScheduledAt ??
     new Date(new Date(lesson.scheduledAt).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const makeup = pushLesson({
+  const makeup = await insertLessonInDb({
     id: `lesson-${Date.now()}-mk`,
     teacherId: lesson.teacherId,
     teacherName: lesson.teacherName,
@@ -304,10 +312,10 @@ export function markTeacherNoShow(
     operationNote: "노쇼 보강 수업 (노쇼 선생님 무급)",
   });
 
-  replaceLesson({ ...cancelled, relatedLessonId: makeup.id });
-  applyTeacherNoShowPenalty(noShowTeacherId, month, "선생님 노쇼");
+  await replaceLessonInDb({ ...cancelled, relatedLessonId: makeup.id });
+  await applyTeacherNoShowPenaltyInDb(noShowTeacherId, month, "선생님 노쇼");
 
-  logLessonOperation({
+  await logLessonOperation({
     teacherId: lesson.teacherId,
     teacherName: lesson.teacherName ?? lesson.teacherId,
     lesson,
@@ -329,7 +337,7 @@ export function markTeacherNoShow(
   return { original: cancelled, makeup };
 }
 
-export function cancelLessonUnpaid(lessonId: string, note?: string): { deletedLessonId: string } {
+export async function cancelLessonUnpaid(lessonId: string, note?: string): Promise<{ deletedLessonId: string }> {
   const lesson = getLessonById(lessonId);
   if (!lesson) throw new Error("lesson_not_found");
   if (!["scheduled", "reschedule_pending", "pending_payment"].includes(lesson.status)) {
@@ -343,18 +351,17 @@ export function cancelLessonUnpaid(lessonId: string, note?: string): { deletedLe
     activeEnrollmentForStudent(lesson.studentId);
 
   if (enrollment) {
-    adjustEnrollmentSessions(enrollment.id, {
-      deltaRemaining: -1,
+    await adjustEnrollmentSessionsWithScheduleBatchInDb(enrollment.id, -1, {
       reason,
       adminName: "관리자",
     });
   }
 
-  if (!deleteLessonById(lessonId)) {
+  if (!(await deleteLessonByIdInDb(lessonId))) {
     throw new Error("lesson_not_found");
   }
 
-  logLessonOperation({
+  await logLessonOperation({
     teacherId: lesson.teacherId,
     teacherName: lesson.teacherName ?? lesson.teacherId,
     lesson,
@@ -373,11 +380,11 @@ export function cancelLessonUnpaid(lessonId: string, note?: string): { deletedLe
   return { deletedLessonId: lessonId };
 }
 
-export function adminRescheduleLesson(
+export async function adminRescheduleLesson(
   lessonId: string,
   newScheduledAt: string,
   teacherId?: string
-): Lesson {
+): Promise<Lesson> {
   const lesson = getLessonById(lessonId);
   if (!lesson) throw new Error("lesson_not_found");
   if (!["scheduled", "reschedule_pending"].includes(lesson.status)) {
@@ -388,7 +395,7 @@ export function adminRescheduleLesson(
   const teacher = getTeacherById(targetTeacherId);
   if (!teacher) throw new Error("teacher_not_found");
 
-  if (!isTeacherSlotFree(targetTeacherId, newScheduledAt, lessonId)) {
+  if (!isTeacherSlotFree(targetTeacherId, newScheduledAt, lessonId, lesson.durationMinutes)) {
     throw new Error("slot_unavailable");
   }
 
@@ -408,9 +415,9 @@ export function adminRescheduleLesson(
     updated.payrollTeacherName = teacher.displayName;
   }
 
-  const result = replaceLesson(updated);
+  const result = await replaceLessonInDb(updated);
 
-  logLessonOperation({
+  await logLessonOperation({
     teacherId: lesson.teacherId,
     teacherName: lesson.teacherName ?? lesson.teacherId,
     lesson,
@@ -422,8 +429,8 @@ export function adminRescheduleLesson(
   return result;
 }
 
-export function undoAdminLessonOperation(logId: string): void {
-  const log = getAdminLessonOperationLogById(logId);
+export async function undoAdminLessonOperation(logId: string): Promise<void> {
+  const log = await getAdminLessonOperationLogByIdInDb(logId);
   if (!log) throw new Error("log_not_found");
   if (log.undoneAt) throw new Error("already_undone");
   if (!log.undoable || !log.undoPayload) throw new Error("not_undoable");
@@ -449,7 +456,7 @@ export function undoAdminLessonOperation(logId: string): void {
     }
 
     if (makeup) {
-      deleteLessonById(payload.makeupLessonId);
+      await deleteLessonByIdInDb(payload.makeupLessonId);
     }
 
     const restored: Lesson = {
@@ -462,22 +469,25 @@ export function undoAdminLessonOperation(logId: string): void {
       operationNote: undefined,
     };
 
-    if (!isTeacherSlotFree(restored.teacherId, restored.scheduledAt, restored.id)) {
+    if (!isTeacherSlotFree(restored.teacherId, restored.scheduledAt, restored.id, restored.durationMinutes)) {
       throw new Error("slot_unavailable");
     }
 
-    replaceLesson(restored);
+    await replaceLessonInDb(restored);
 
     if (payload.enrollmentId && payload.enrollmentDeltaRemaining) {
-      adjustEnrollmentSessions(payload.enrollmentId, {
-        deltaRemaining: -payload.enrollmentDeltaRemaining,
-        reason: "선생님 노쇼 조치 취소",
-        adminName: "관리자",
-      });
+      await adjustEnrollmentSessionsWithScheduleBatchInDb(
+        payload.enrollmentId,
+        -payload.enrollmentDeltaRemaining,
+        {
+          reason: "선생님 노쇼 조치 취소",
+          adminName: "관리자",
+        }
+      );
     }
 
     if (payload.penaltyTeacherId && payload.penaltyMonth) {
-      revertTeacherNoShowPenalty(
+      await revertTeacherNoShowPenaltyInDb(
         payload.penaltyTeacherId,
         payload.penaltyMonth,
         "선생님 노쇼"
@@ -491,30 +501,33 @@ export function undoAdminLessonOperation(logId: string): void {
     }
 
     const lesson = payload.deletedLesson;
-    if (!isTeacherSlotFree(lesson.teacherId, lesson.scheduledAt)) {
+    if (!isTeacherSlotFree(lesson.teacherId, lesson.scheduledAt, undefined, lesson.durationMinutes)) {
       throw new Error("slot_unavailable");
     }
 
-    pushLesson(lesson);
+    await insertLessonInDb(lesson);
 
     if (payload.enrollmentId && payload.enrollmentDeltaRemaining) {
-      adjustEnrollmentSessions(payload.enrollmentId, {
-        deltaRemaining: -payload.enrollmentDeltaRemaining,
-        reason: "무급 취소 조치 취소",
-        adminName: "관리자",
-      });
+      await adjustEnrollmentSessionsWithScheduleBatchInDb(
+        payload.enrollmentId,
+        -payload.enrollmentDeltaRemaining,
+        {
+          reason: "무급 취소 조치 취소",
+          adminName: "관리자",
+        }
+      );
     }
   } else {
     throw new Error("not_undoable");
   }
 
-  markAdminLessonOperationUndone(logId);
+  await markAdminLessonOperationUndoneInDb(logId);
 }
 
-export function bulkTransferEnrollmentsFromTeacher(input: {
+export async function bulkTransferEnrollmentsFromTeacher(input: {
   fromTeacherId: string;
   transfers: { enrollmentId: string; toTeacherId: string }[];
-}): BulkEnrollmentTransferResult {
+}): Promise<BulkEnrollmentTransferResult> {
   const fromTeacher = getTeacherById(input.fromTeacherId);
   const fromTeacherName = fromTeacher?.displayName ?? input.fromTeacherId;
   const allMoved: Lesson[] = [];
@@ -523,9 +536,9 @@ export function bulkTransferEnrollmentsFromTeacher(input: {
   for (const transfer of input.transfers) {
     const enrollment = getEnrollmentById(transfer.enrollmentId);
     const toTeacher = getTeacherById(transfer.toTeacherId);
-    const student = enrollment ? getStudent(enrollment.studentId) : undefined;
+    const student = enrollment ? getStudentDirectoryEntry(enrollment.studentId) : undefined;
     const studentName = student
-      ? getStudentDisplayName(student)
+      ? getStudentDisplayName(student.student)
       : enrollment?.studentId ?? "—";
 
     if (!enrollment || enrollment.teacherId !== input.fromTeacherId) {
@@ -556,15 +569,22 @@ export function bulkTransferEnrollmentsFromTeacher(input: {
       continue;
     }
 
-    updateEnrollmentTeacher(enrollment.id, toTeacher.id, toTeacher.displayName);
-
     const scheduled = futureLessonsForEnrollment(enrollment.id, input.fromTeacherId);
     const skipReasons: string[] = [];
     let lessonsMoved = 0;
     let lessonsSkipped = 0;
+    const ignoreOwner = { studentId: enrollment.studentId };
 
     for (const lesson of scheduled) {
-      if (!isTeacherSlotFree(toTeacher.id, lesson.scheduledAt, lesson.id)) {
+      if (
+        !isTeacherSlotFree(
+          toTeacher.id,
+          lesson.scheduledAt,
+          lesson.id,
+          lesson.durationMinutes,
+          ignoreOwner
+        )
+      ) {
         lessonsSkipped += 1;
         skipReasons.push(
           `${lesson.scheduledAt.slice(0, 16)} — 받는 선생님 시간 불가 (기존 스케줄 유지)`
@@ -572,7 +592,7 @@ export function bulkTransferEnrollmentsFromTeacher(input: {
         continue;
       }
 
-      const moved = replaceLesson({
+      const moved = await replaceLessonInDb({
         ...lesson,
         originalTeacherId: lesson.originalTeacherId ?? input.fromTeacherId,
         originalTeacherName: lesson.originalTeacherName ?? fromTeacherName,
@@ -586,6 +606,9 @@ export function bulkTransferEnrollmentsFromTeacher(input: {
       allMoved.push(moved);
       lessonsMoved += 1;
     }
+
+    updateEnrollmentTeacher(enrollment.id, toTeacher.id, toTeacher.displayName);
+    await restoreOccupiedWeeklyAvailabilityInDb(toTeacher.id);
 
     transfers.push({
       enrollmentId: enrollment.id,
@@ -603,14 +626,14 @@ export function bulkTransferEnrollmentsFromTeacher(input: {
 }
 
 /** @deprecated bulkTransferEnrollmentsFromTeacher 사용 */
-export function bulkReassignTeacherLessons(input: {
+export async function bulkReassignTeacherLessons(input: {
   fromTeacherId: string;
   toTeacherId?: string;
   assignments?: { lessonId: string; toTeacherId: string }[];
-}): BulkReassignResult {
+}): Promise<BulkReassignResult> {
   if (input.toTeacherId && !input.assignments?.length) {
     const previews = getBulkEnrollmentTransferPreview(input.fromTeacherId);
-    const result = bulkTransferEnrollmentsFromTeacher({
+    const result = await bulkTransferEnrollmentsFromTeacher({
       fromTeacherId: input.fromTeacherId,
       transfers: previews.map((p) => ({
         enrollmentId: p.enrollmentId,
@@ -629,13 +652,6 @@ export function bulkReassignTeacherLessons(input: {
   }
 
   throw new Error("use_bulkTransferEnrollmentsFromTeacher");
-}
-
-export function lessonCountsForPayroll(lesson: Lesson, payrollTeacherId: string): boolean {
-  if (lesson.status !== "completed") return false;
-  if (lesson.unpaidForTeacher || lesson.teacherNoShow) return false;
-  const payee = lesson.payrollTeacherId ?? lesson.teacherId;
-  return payee === payrollTeacherId;
 }
 
 export function getUpcomingLessonsForAdmin(filters?: {

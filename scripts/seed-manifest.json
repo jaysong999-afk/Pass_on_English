@@ -1,0 +1,24 @@
+{
+  "seededAt": "2026-08-13T09:06:21.539Z",
+  "password": "DemoPass123!",
+  "authAvailable": true,
+  "student": {
+    "email": "demo-student@example.org",
+    "userId": "a0000002-0000-4000-8000-000000000002",
+    "learnerId": "a0000003-0000-4000-8000-000000000003"
+  },
+  "teacher": {
+    "email": "demo-teacher@example.org",
+    "userId": "a0000001-0000-4000-8000-000000000001",
+    "displayName": "Sarah Mitchell"
+  },
+  "admin": {
+    "email": "demo-admin@example.org",
+    "userId": "a0000004-0000-4000-8000-000000000004"
+  },
+  "activeEnrollmentId": "a0000010-0000-4000-8000-000000000010",
+  "pendingEnrollmentId": "a0000011-0000-4000-8000-000000000011",
+  "completedLessonId": "a0000020-0000-4000-8000-000000000020",
+  "scheduledLessonId": "a0000021-0000-4000-8000-000000000021",
+  "chatRoomId": "a0000030-0000-4000-8000-000000000030"
+}

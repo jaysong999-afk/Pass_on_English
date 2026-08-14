@@ -1,5 +1,5 @@
 import type { Lesson, TeacherStudentContext } from "@/types";
-import { getStudent } from "@/lib/mock-data";
+import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
 import { getFeedbacksByStudent } from "@/lib/learning-store";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { getTeacherStudentContext } from "@/lib/teacher-student-context-store";
@@ -31,7 +31,8 @@ function calcAge(dateOfBirth: string | undefined): number | null {
 export function buildLessonDisplayContext(lesson: Lesson): LessonDisplayContext | null {
   if (!lesson.studentId) return null;
 
-  const student = getStudent(lesson.studentId);
+  const directoryEntry = getStudentDirectoryEntry(lesson.studentId);
+  const student = directoryEntry?.student;
   const studentContext = getTeacherStudentContext(lesson.studentId, lesson.teacherId);
 
   const priorFeedback = getFeedbacksByStudent(lesson.studentId).find(

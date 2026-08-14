@@ -4,7 +4,7 @@ import { DOW_TO_DAY_LABEL } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
 import { getAllEnrollments } from "@/lib/enrollment-store";
 import { getPendingTeacherApplications } from "@/lib/admin/teacher-application-store";
-import { getTeacherWeeklyAvailability } from "@/lib/teacher-availability-store";
+import { getTeacherWeeklyAvailability } from "@/lib/teacher-availability-store-sync";
 import { getAllTeachers } from "@/lib/teacher-profile-store";
 import {
   getSalaryStatement,
@@ -23,6 +23,7 @@ export interface AdminTeacherSummaryCounts {
 export interface AdminTeacherListItem {
   id: string;
   displayName: string;
+  avatarUrl?: string;
   status: Teacher["status"];
   studentCount: number;
   todayLessonCount: number;
@@ -104,6 +105,7 @@ export function getAdminTeacherListItems(now = new Date()): AdminTeacherListItem
       return {
         id: teacher.id,
         displayName: teacher.displayName,
+        avatarUrl: teacher.avatarUrl,
         status: teacher.status,
         studentCount: countStudentsForTeacher(teacher.id),
         todayLessonCount: getTodayLessons(teacher.id, CANONICAL_TIMEZONE, now).length,

@@ -2,6 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/shared/AppShell";
+import { PushSubscribeProvider } from "@/components/shared/PushSubscribeProvider";
+import { TeacherSessionProvider } from "@/contexts/TeacherSessionContext";
 
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -12,5 +14,10 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     return <>{children}</>;
   }
 
-  return <AppShell role="teacher">{children}</AppShell>;
+  return (
+    <TeacherSessionProvider>
+      <PushSubscribeProvider />
+      <AppShell role="teacher">{children}</AppShell>
+    </TeacherSessionProvider>
+  );
 }

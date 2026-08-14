@@ -95,6 +95,7 @@ export function LessonDetailDialog({
                 makeupRemaining: t("makeupRemaining"),
                 limitReached: t("makeupLimitReached"),
                 pendingExists: t("pendingRequestExists"),
+                slotUnavailable: t("slotUnavailable"),
               }}
             />
           ) : (

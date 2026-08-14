@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAllEnrollments } from "@/lib/enrollment-store";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
   deletePricingPlan,
   getPricingPlanById,
@@ -35,6 +36,7 @@ export async function GET(
   const { id } = await params;
 
   try {
+    await ensureSchedulesBootstrapped();
     const plan = await getPricingPlanById(id);
     if (!plan) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -58,6 +60,7 @@ export async function PATCH(
   }
 
   try {
+    await ensureSchedulesBootstrapped();
     const updated = await updatePricingPlan(id, body);
     if (!updated) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -76,6 +79,7 @@ export async function DELETE(
   const { id } = await params;
 
   try {
+    await ensureSchedulesBootstrapped();
     const plan = await getPricingPlanById(id);
     if (!plan) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });

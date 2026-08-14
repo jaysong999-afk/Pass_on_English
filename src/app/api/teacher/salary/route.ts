@@ -1,19 +1,35 @@
 import { NextResponse } from "next/server";
-import { CURRENT_TEACHER_ID } from "@/lib/availability/constants";
+import { authErrorResponse } from "@/lib/auth/api-guard";
+import { requireTeacherAuth } from "@/lib/auth/session";
 import {
-  getBonusPolicy,
-  getSalaryMonthsForTeacher,
-  getSalaryStatement,
-  getSalaryStatementsForTeacher,
-} from "@/lib/teacher-salary-store";
+  getSalaryStatementInDb,
+  getSalaryStatementsForTeacherInDb,
+  warmSalaryCache,
+} from "@/lib/teacher-salary/repository";
+import { getBonusPolicy, getSalaryMonthsForTeacher } from "@/lib/teacher-salary-store";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
+  await ensureSchedulesBootstrapped();
+
+  let teacherId: string;
+  try {
+    ({ teacherId } = await requireTeacherAuth());
+  } catch (error) {
+    return authErrorResponse(error);
+  }
+
+  try {
+    await warmSalaryCache();
+  } catch (error) {
+    console.error("[teacher/salary GET] warm cache", error);
+  }
+
   const { searchParams } = new URL(request.url);
-  const teacherId = searchParams.get("teacherId") ?? CURRENT_TEACHER_ID;
   const month = searchParams.get("month");
 
   if (month) {
-    const statement = getSalaryStatement(teacherId, month);
+    const statement = await getSalaryStatementInDb(teacherId, month);
     if (!statement) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
@@ -24,8 +40,9 @@ export async function GET(request: Request) {
     });
   }
 
+  const statements = await getSalaryStatementsForTeacherInDb(teacherId);
   return NextResponse.json({
-    statements: getSalaryStatementsForTeacher(teacherId),
+    statements,
     availableMonths: getSalaryMonthsForTeacher(teacherId),
     bonusPolicy: getBonusPolicy(),
   });

@@ -22,7 +22,7 @@ export default function SignupPage() {
   const locale = (params.locale as string) ?? "ko";
   const t = useTranslations("studentPortal.auth");
 
-  const [accountType, setAccountType] = useState<AccountType>("guardian");
+  const [accountType, setAccountType] = useState<AccountType>("self");
   const [fullName, setFullName] = useState("");
   const [englishName, setEnglishName] = useState("");
   const [learnerFullName, setLearnerFullName] = useState("");
@@ -74,6 +74,7 @@ export default function SignupPage() {
           fullName,
           email,
           phone,
+          password,
           country,
           learnerFullName: isSelf ? fullName : learnerFullName,
           learnerEnglishName: isSelf ? englishName : learnerEnglishName,
@@ -82,7 +83,14 @@ export default function SignupPage() {
       });
 
       if (!res.ok) {
-        setError(t("signupFailed"));
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (data.error === "email_already_registered") {
+          setError(t("emailAlreadyRegistered"));
+        } else if (data.error === "signup_rate_limited") {
+          setError(t("signupRateLimited"));
+        } else {
+          setError(t("signupFailed"));
+        }
         return;
       }
 

@@ -1,39 +1,99 @@
-import { appendAdminReviewLog, getAdminReviewLogsByCategory } from "@/lib/admin/admin-review-log-store";
+import { appendAdminReviewLogInDb, getAdminReviewLogsByCategorySync } from "@/lib/admin/admin-review-log-repository";
 import {
   getPendingStudentRegistrations,
   getStudentRegistrationById,
-  updateStudentRegistrationStatus,
 } from "@/lib/admin/student-registration-store";
 import {
+  updateStudentRegistrationStatusInDb,
+} from "@/lib/student-registrations/repository";
+import {
   getPendingTeacherApplications,
-  getTeacherApplicationById,
-  updateTeacherApplicationStatus,
 } from "@/lib/admin/teacher-application-store";
 import {
-  confirmEnrollmentPayment,
-  getEnrollmentById,
-  getPendingPaymentEnrollments,
-  rejectEnrollmentPayment,
-} from "@/lib/enrollment-store";
-import { scheduleLessonsForConfirmedEnrollment } from "@/lib/lesson-scheduler";
+  getTeacherApplicationByIdInDb,
+  getTeacherApplicationTeacherIdInDb,
+  listTeacherApplicationsInDb,
+  updateTeacherApplicationStatusInDb,
+} from "@/lib/teacher-applications/repository";
 import {
-  adminApproveRescheduleRequest,
-  adminRejectRescheduleRequest,
+  confirmEnrollmentPaymentInDb,
+  rejectEnrollmentPaymentInDb,
+} from "@/lib/enrollments/repository";
+import {
+  getEnrollmentById,
+  getPaymentByEnrollmentId,
+  getPendingPaymentEnrollments,
+} from "@/lib/enrollment-store";
+import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
+import { getStudentDisplayName } from "@/lib/student-display-name";
+import {
+  adminApproveRescheduleRequestInDb,
+  adminRejectRescheduleRequestInDb,
+} from "@/lib/reschedule/repository";
+import {
   getActiveRescheduleRequests,
   getRescheduleRequestById,
 } from "@/lib/reschedule-store";
-import { updateLearnerRegistrationStatus } from "@/lib/account-store";
-import { getTeacherByApplicationId, updateTeacherStatus } from "@/lib/teacher-profile-store";
+import { updateLearnerRegistrationStatus } from "@/lib/account-store-sync";
+import { updateTeacherStatusInDb, warmTeacherProfileCache } from "@/lib/teachers/repository";
 import { formatDate, formatTime } from "@/lib/utils";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
-import type { AdminReviewLogEntry } from "@/types";
+import { decorateEnrollmentRenewal, getRenewalWindowState, isRenewalSystemAutoOffer } from "@/lib/enrollments/renewal-window";
+import { getAllLessons } from "@/lib/teacher-lesson-store-sync";
+import { getAllEnrollments } from "@/lib/enrollment-store-sync";
+import type { AdminReviewLogEntry, StudentEnrollment } from "@/types";
+
+export interface AdminPaymentReviewItem extends StudentEnrollment {
+  studentName: string;
+  studentLegalName?: string;
+  depositorName?: string;
+  accountHolderName?: string;
+  renewalUnapplied?: boolean;
+}
+
+function paymentReviewLabel(enrollment: StudentEnrollment): Omit<
+  AdminPaymentReviewItem,
+  keyof StudentEnrollment
+> {
+  const entry = getStudentDirectoryEntry(enrollment.studentId);
+  const payment = getPaymentByEnrollmentId(enrollment.id);
+  const legalName = entry?.student.fullName.trim();
+  const studentName = entry
+    ? getStudentDisplayName(entry.student)
+    : legalName || enrollment.studentId;
+  const accountHolderName = entry?.accountHolder?.fullName.trim();
+  const depositorName = payment?.depositorName?.trim() || undefined;
+  return {
+    studentName,
+    studentLegalName: legalName && legalName !== studentName ? legalName : undefined,
+    depositorName,
+    accountHolderName:
+      accountHolderName && accountHolderName !== studentName && accountHolderName !== legalName
+        ? accountHolderName
+        : undefined,
+    renewalUnapplied: Boolean(
+      enrollment.renewedFromEnrollmentId &&
+        enrollment.paymentStatus === "pending" &&
+        !depositorName &&
+        isRenewalSystemAutoOffer(enrollment, getAllLessons(), getAllEnrollments()) &&
+        getRenewalWindowState(enrollment, getAllLessons()).status === "student_closed"
+    ),
+  };
+}
+
+function toPaymentReviewItem(enrollment: StudentEnrollment): AdminPaymentReviewItem {
+  return {
+    ...decorateEnrollmentRenewal(enrollment),
+    ...paymentReviewLabel(enrollment),
+  };
+}
 
 export function getAdminReviewSnapshot() {
   return {
     reschedule: getActiveRescheduleRequests(),
     teacherApplications: getPendingTeacherApplications(),
     studentRegistrations: getPendingStudentRegistrations(),
-    paymentEnrollments: getPendingPaymentEnrollments(),
+    paymentEnrollments: getPendingPaymentEnrollments().map(toPaymentReviewItem),
     logs: getAdminReviewLogsByCategory(),
   };
 }
@@ -42,21 +102,25 @@ export function getAdminReviewLogs() {
   return getAdminReviewLogsByCategory();
 }
 
-export function processAdminReviewAction(input: {
+export function getAdminReviewLogsByCategory(limit = 100) {
+  return getAdminReviewLogsByCategorySync(limit);
+}
+
+export async function processAdminReviewAction(input: {
   category: "reschedule" | "teacher_signup" | "student_signup" | "payment_activation";
   action: "approve" | "reject" | "confirm" | "activate";
   targetId: string;
   adminName?: string;
-}): { error?: string; log?: AdminReviewLogEntry } {
+}): Promise<{ error?: string; log?: AdminReviewLogEntry }> {
   const adminName = input.adminName?.trim() || "관리자";
 
   if (input.category === "reschedule") {
     if (input.action === "approve") {
       const before = getRescheduleRequestById(input.targetId);
       if (!before) return { error: "not_found" };
-      const result = adminApproveRescheduleRequest(input.targetId);
+      const result = await adminApproveRescheduleRequestInDb(input.targetId);
       if (result.error) return { error: result.error };
-      const log = appendAdminReviewLog({
+      const log = await appendAdminReviewLogInDb({
         category: "reschedule",
         action: "approved",
         targetId: input.targetId,
@@ -69,9 +133,9 @@ export function processAdminReviewAction(input: {
     if (input.action === "reject") {
       const before = getRescheduleRequestById(input.targetId);
       if (!before) return { error: "not_found" };
-      const result = adminRejectRescheduleRequest(input.targetId);
+      const result = await adminRejectRescheduleRequestInDb(input.targetId);
       if (result.error) return { error: result.error };
-      const log = appendAdminReviewLog({
+      const log = await appendAdminReviewLogInDb({
         category: "reschedule",
         action: "rejected",
         targetId: input.targetId,
@@ -84,17 +148,26 @@ export function processAdminReviewAction(input: {
   }
 
   if (input.category === "teacher_signup") {
-    const application = getTeacherApplicationById(input.targetId);
+    const application = await getTeacherApplicationByIdInDb(input.targetId);
     if (!application) return { error: "not_found" };
     if (application.status !== "pending") return { error: "not_pending" };
 
     if (input.action === "approve") {
-      updateTeacherApplicationStatus(input.targetId, "approved");
-      const teacher = getTeacherByApplicationId(input.targetId);
-      if (teacher) {
-        updateTeacherStatus(teacher.id, "active");
+      const teacherId = await getTeacherApplicationTeacherIdInDb(input.targetId);
+      if (!teacherId) {
+        return { error: "profile_incomplete" };
       }
-      const log = appendAdminReviewLog({
+
+      const updatedTeacher = await updateTeacherStatusInDb(teacherId, "active");
+      if (!updatedTeacher) {
+        return { error: "teacher_not_found" };
+      }
+
+      await updateTeacherApplicationStatusInDb(input.targetId, "approved");
+      await warmTeacherProfileCache();
+      await listTeacherApplicationsInDb();
+
+      const log = await appendAdminReviewLogInDb({
         category: "teacher_signup",
         action: "approved",
         targetId: input.targetId,
@@ -105,8 +178,16 @@ export function processAdminReviewAction(input: {
       return { log };
     }
     if (input.action === "reject") {
-      updateTeacherApplicationStatus(input.targetId, "rejected");
-      const log = appendAdminReviewLog({
+      const teacherId = await getTeacherApplicationTeacherIdInDb(input.targetId);
+      if (teacherId) {
+        await updateTeacherStatusInDb(teacherId, "terminated");
+        await warmTeacherProfileCache();
+      }
+
+      await updateTeacherApplicationStatusInDb(input.targetId, "rejected");
+      await listTeacherApplicationsInDb();
+
+      const log = await appendAdminReviewLogInDb({
         category: "teacher_signup",
         action: "rejected",
         targetId: input.targetId,
@@ -124,9 +205,9 @@ export function processAdminReviewAction(input: {
     if (registration.status !== "pending") return { error: "not_pending" };
 
     if (input.action === "confirm") {
-      updateStudentRegistrationStatus(input.targetId, "confirmed");
+      await updateStudentRegistrationStatusInDb(input.targetId, "confirmed");
       updateLearnerRegistrationStatus(input.targetId, "confirmed");
-      const log = appendAdminReviewLog({
+      const log = await appendAdminReviewLogInDb({
         category: "student_signup",
         action: "confirmed",
         targetId: input.targetId,
@@ -137,9 +218,9 @@ export function processAdminReviewAction(input: {
       return { log };
     }
     if (input.action === "reject") {
-      updateStudentRegistrationStatus(input.targetId, "rejected");
+      await updateStudentRegistrationStatusInDb(input.targetId, "rejected");
       updateLearnerRegistrationStatus(input.targetId, "rejected");
-      const log = appendAdminReviewLog({
+      const log = await appendAdminReviewLogInDb({
         category: "student_signup",
         action: "rejected",
         targetId: input.targetId,
@@ -154,28 +235,41 @@ export function processAdminReviewAction(input: {
   if (input.category === "payment_activation") {
     const enrollment = getEnrollmentById(input.targetId);
     if (!enrollment) return { error: "not_found" };
+    const review = toPaymentReviewItem(enrollment);
+    const studentLabel = review.studentLegalName
+      ? `${review.studentName} (${review.studentLegalName})`
+      : review.studentName;
+    const depositorDetail = review.depositorName
+      ? `입금자 ${review.depositorName} · `
+      : "";
 
     if (input.action === "activate") {
-      const confirmed = confirmEnrollmentPayment(input.targetId, adminName);
-      if (!confirmed) return { error: "not_found" };
-      scheduleLessonsForConfirmedEnrollment(input.targetId);
-      const log = appendAdminReviewLog({
+      try {
+        const confirmed = await confirmEnrollmentPaymentInDb(input.targetId, adminName);
+        if (!confirmed) return { error: "not_found" };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "activate_failed";
+        if (message === "hold_expired") return { error: "hold_expired" };
+        throw error;
+      }
+      const log = await appendAdminReviewLogInDb({
         category: "payment_activation",
         action: "activated",
         targetId: input.targetId,
-        targetLabel: `${enrollment.planLabel} · ${enrollment.teacherName}`,
-        detail: `${enrollment.amountKrw.toLocaleString("ko-KR")}원`,
+        targetLabel: `${studentLabel} · ${enrollment.planLabel}`,
+        detail: `${depositorDetail}${enrollment.amountKrw.toLocaleString("ko-KR")}원`,
         adminName,
       });
       return { log };
     }
     if (input.action === "reject") {
-      rejectEnrollmentPayment(input.targetId, adminName);
-      const log = appendAdminReviewLog({
+      await rejectEnrollmentPaymentInDb(input.targetId, adminName);
+      const log = await appendAdminReviewLogInDb({
         category: "payment_activation",
         action: "rejected",
         targetId: input.targetId,
-        targetLabel: `${enrollment.planLabel} · ${enrollment.teacherName}`,
+        targetLabel: `${studentLabel} · ${enrollment.planLabel}`,
+        detail: `${depositorDetail}${enrollment.amountKrw.toLocaleString("ko-KR")}원 · 신청 취소·시간대 해제`,
         adminName,
       });
       return { log };

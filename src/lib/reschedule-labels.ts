@@ -80,3 +80,13 @@ export function fromDatetimeLocalValue(value: string): string {
   if (!value) return "";
   return value.length === 16 ? `${value}:00` : value;
 }
+
+/** Treat datetime-local wall clock as a specific zone (PHT/KST have no DST). */
+export function fromDatetimeLocalInTimeZone(value: string, timeZone: string): string {
+  const withSeconds = fromDatetimeLocalValue(value);
+  if (!withSeconds) return "";
+  if (/[zZ]|[+-]\d{2}:\d{2}$/.test(withSeconds)) return withSeconds;
+  const offset =
+    timeZone === "Asia/Manila" || timeZone === "Asia/Shanghai" ? "+08:00" : "+09:00";
+  return `${withSeconds}${offset}`;
+}

@@ -22,6 +22,7 @@ import {
 } from "@/lib/admin/teacher-overview-store";
 import type { Teacher } from "@/types";
 import { formatCurrency } from "@/lib/utils";
+import { PersonAvatar } from "@/components/shared/PersonAvatar";
 
 export default function AdminTeachersPage() {
   const [summary, setSummary] = useState<AdminTeacherSummaryCounts | null>(null);
@@ -121,7 +122,17 @@ export default function AdminTeachersPage() {
             {!loading &&
               teachers.map((teacher) => (
                 <TableRow key={teacher.id}>
-                  <TableCell className="font-medium">{teacher.displayName}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <PersonAvatar
+                        name={teacher.displayName}
+                        avatarUrl={teacher.avatarUrl}
+                        className="h-9 w-9"
+                        fallbackClassName="text-xs font-bold"
+                      />
+                      <span className="font-medium">{teacher.displayName}</span>
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{teacher.studentCount}</TableCell>
                   <TableCell className="text-right tabular-nums">{teacher.todayLessonCount}</TableCell>
                   <TableCell className="text-right tabular-nums">{teacher.monthHours}h</TableCell>

@@ -102,6 +102,7 @@ export function AdminTodayLessons() {
 
       <AdminLessonDualModal
         lesson={modal.selected}
+        display={modal.display}
         open={modal.selected !== null}
         onOpenChange={(open) => {
           if (!open) modal.closeLesson();

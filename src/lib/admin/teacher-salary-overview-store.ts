@@ -2,12 +2,12 @@ import type { TeacherSalaryStatement } from "@/types";
 import { getPenaltyForMonth } from "@/lib/teacher-payroll-penalty-store";
 import { getAllTeachers, getTeacherById } from "@/lib/teacher-profile-store";
 import {
-  confirmSalaryStatement,
   getSalaryStatement,
   statementTotal,
   getAllSalaryStatements,
   isSalaryMonthEnded,
 } from "@/lib/teacher-salary-store";
+import { confirmSalaryStatementInDb } from "@/lib/teacher-salary/repository";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
 
@@ -132,12 +132,14 @@ export function getAdminSalaryOverview(month: string): {
   return { summary, rows };
 }
 
-export function finalizeAllEstimatesForMonth(month: string): TeacherSalaryStatement[] {
+export async function finalizeAllEstimatesForMonth(
+  month: string
+): Promise<TeacherSalaryStatement[]> {
   const finalized: TeacherSalaryStatement[] = [];
   for (const teacherId of teachersForMonth(month)) {
     const statement = getSalaryStatement(teacherId, month);
     if (statement?.isLiveEstimate || statement?.status === "estimated") {
-      const result = confirmSalaryStatement(teacherId, month);
+      const result = await confirmSalaryStatementInDb(teacherId, month);
       if (result) finalized.push(result);
     }
   }

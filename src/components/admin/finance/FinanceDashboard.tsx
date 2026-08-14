@@ -107,8 +107,21 @@ export function FinanceDashboard() {
   }, [refreshRates]);
 
   useEffect(() => {
-    const auto = buildAutoTransactions(rates, activePlans);
-    setTransactions([...auto, ...SEED_MANUAL_TRANSACTIONS]);
+    async function loadTransactions() {
+      try {
+        const res = await fetch("/api/admin/finance/transactions");
+        if (res.ok) {
+          const data = await res.json();
+          setTransactions(data.transactions ?? []);
+          return;
+        }
+      } catch {
+        /* fallback below */
+      }
+      const auto = buildAutoTransactions(rates, activePlans, []);
+      setTransactions([...auto, ...SEED_MANUAL_TRANSACTIONS]);
+    }
+    void loadTransactions();
   }, [rates, activePlans]);
 
   const availableMonths = useMemo(

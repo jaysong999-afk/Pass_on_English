@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { deleteFaqItem, getFaqItemById, updateFaqItem } from "@/lib/faq-store";
+import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
+import {
+  deleteFaqItemInDb,
+  getFaqItemByIdInDb,
+  updateFaqItemInDb,
+} from "@/lib/faq/repository";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import type { UpsertFaqInput } from "@/types";
 
 function validateInput(body: UpsertFaqInput): string | null {
@@ -13,6 +19,10 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
   const { id } = await params;
 
   try {
@@ -22,7 +32,7 @@ export async function PATCH(
       return NextResponse.json({ error }, { status: 400 });
     }
 
-    const item = updateFaqItem(id, body);
+    const item = await updateFaqItemInDb(id, body);
     if (!item) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
@@ -37,12 +47,16 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
+  await ensureSchedulesBootstrapped();
   const { id } = await params;
-  const existing = getFaqItemById(id);
+  const existing = await getFaqItemByIdInDb(id);
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  deleteFaqItem(id);
+  await deleteFaqItemInDb(id);
   return NextResponse.json({ ok: true });
 }

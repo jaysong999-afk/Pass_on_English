@@ -4,7 +4,7 @@ import { User } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PersonAvatar } from "@/components/shared/PersonAvatar";
 import {
   Dialog,
   DialogContent,
@@ -38,25 +38,18 @@ export function TeacherProfileModal({
 
   if (!teacher) return null;
 
-  const initials = teacher.displayName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2);
-
   return (
     <Dialog open={!!teacher} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3 pr-8">
-            <Avatar className="h-12 w-12 shrink-0 rounded-xl">
-              {teacher.avatarUrl ? (
-                <AvatarImage src={teacher.avatarUrl} alt={teacher.displayName} className="object-cover" />
-              ) : null}
-              <AvatarFallback className="rounded-xl bg-gradient-to-br from-brand-600 to-brand-500 text-sm font-bold text-white">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            <PersonAvatar
+              name={teacher.displayName}
+              avatarUrl={teacher.avatarUrl}
+              className="h-12 w-12 shrink-0 rounded-xl"
+              imageClassName="rounded-xl"
+              fallbackClassName="rounded-xl bg-gradient-to-br from-brand-600 to-brand-500 text-sm font-bold text-white"
+            />
             <span>{teacher.displayName}</span>
           </DialogTitle>
           <DialogDescription className="sr-only">{t("srDescription")}</DialogDescription>

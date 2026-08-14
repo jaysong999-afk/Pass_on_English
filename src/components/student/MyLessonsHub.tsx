@@ -12,18 +12,16 @@ import {
   LessonDetailDialog,
 } from "@/components/student/LessonDialogs";
 import { RescheduleProgressPanel } from "@/components/shared/RescheduleProgressPanel";
-import { getEnrollmentsByStudent } from "@/lib/enrollment-store";
 import { useStudentBasePath } from "@/lib/student-paths";
-import { formatSessionBalance, sumSessionBalance } from "@/lib/sessions";
+import { formatSessionBalance, sumActiveSessionBalance } from "@/lib/sessions";
 import { getStudentTimezone } from "@/lib/availability/timezone";
 import type { Locale } from "@/lib/i18n/config";
-import { formatDate, formatLessonTimeRange, formatTime } from "@/lib/utils";
-import { useActiveLearner, useActiveLearnerId } from "@/contexts/ActiveLearnerContext";
-import type { Lesson } from "@/types";
+import { formatDate, formatLessonTimeRange } from "@/lib/utils";
+import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
+import type { Lesson, StudentEnrollment } from "@/types";
 
 export function MyLessonsHub() {
-  const learnerId = useActiveLearnerId();
-  const { loading: learnerLoading } = useActiveLearner();
+  const { activeLearnerId: learnerId, loading: accountLoading } = useActiveLearner();
   const locale = useLocale() as Locale;
   const studentTz = getStudentTimezone(locale);
   const t = useTranslations("studentPortal.lessons");
@@ -34,23 +32,27 @@ export function MyLessonsHub() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [studentLessons, setStudentLessons] = useState<Lesson[]>([]);
+  const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([]);
   const [makeupRemaining, setMakeupRemaining] = useState(2);
   const makeupLimit = 2;
 
   const loadData = useCallback(async () => {
     if (!learnerId) return;
-    const [lessonsRes, rescheduleRes] = await Promise.all([
+    const [lessonsRes, rescheduleRes, enrollmentsRes] = await Promise.all([
       fetch(`/api/teacher/lessons?scope=student&studentId=${learnerId}`),
       fetch(`/api/lessons/reschedule?studentId=${learnerId}`),
+      fetch(`/api/enrollments?studentId=${learnerId}`),
     ]);
-    const lessonsData = await lessonsRes.json();
-    const rescheduleData = await rescheduleRes.json();
+    const lessonsData = lessonsRes.ok ? await lessonsRes.json() : { lessons: [] };
+    const rescheduleData = rescheduleRes.ok ? await rescheduleRes.json() : {};
+    const enrollmentsData = enrollmentsRes.ok ? await enrollmentsRes.json() : {};
     setStudentLessons(
       (lessonsData.lessons ?? []).sort(
         (a: Lesson, b: Lesson) =>
           new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
       )
     );
+    setEnrollments(enrollmentsData.enrollments ?? []);
     setMakeupRemaining(rescheduleData.makeupRemaining ?? 2);
   }, [learnerId]);
 
@@ -58,10 +60,10 @@ export function MyLessonsHub() {
     if (learnerId) void loadData();
   }, [loadData, learnerId]);
 
-  const enrollments = learnerId
-    ? getEnrollmentsByStudent(learnerId).filter((e) => e.status !== "completed")
-    : [];
-  const sessionBalance = sumSessionBalance(enrollments);
+  const activeEnrollments = enrollments.filter(
+    (e) => e.status === "active" || e.status === "expiring_soon"
+  );
+  const sessionBalance = sumActiveSessionBalance(enrollments);
 
   const now = new Date();
   const nextLesson = studentLessons.find(
@@ -86,6 +88,14 @@ export function MyLessonsHub() {
 
   return (
     <div className="space-y-6">
+      {accountLoading ? (
+        <div className="py-8 text-center text-sm text-ink-muted">{tCommon("loading")}</div>
+      ) : null}
+      {!accountLoading && !learnerId ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {t("loginRequired")}
+        </div>
+      ) : null}
       <div>
         <h2 className="text-xl font-bold text-ink md:text-2xl">{t("title")}</h2>
         <p className="mt-1 text-sm text-ink-muted">{t("subtitle")}</p>
@@ -116,7 +126,7 @@ export function MyLessonsHub() {
         <div className="rounded-2xl border border-mint-200/80 bg-white p-4 shadow-sm">
           <p className="text-xs font-medium text-ink-muted">{t("remainingThisMonth")}</p>
           <p className="mt-1 text-xl font-bold tabular-nums text-brand-700">
-            {enrollments.length > 0
+            {activeEnrollments.length > 0
               ? formatSessionBalance(sessionBalance.remaining, sessionBalance.total)
               : "—"}
           </p>
@@ -151,6 +161,7 @@ export function MyLessonsHub() {
         lessons={studentLessons}
         onLessonSelect={openLesson}
         initialMonth={new Date()}
+        timeZone={studentTz}
       />
 
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -172,7 +183,9 @@ export function MyLessonsHub() {
 
       <RescheduleProgressPanel
         role="student"
-        fetchUrl={`/api/lessons/reschedule?studentId=${learnerId}`}
+        fetchUrl={
+          learnerId ? `/api/lessons/reschedule?studentId=${learnerId}` : ""
+        }
         timeZone={studentTz}
         locale={locale === "zh-CN" ? "zh" : locale === "ko" ? "ko" : "en"}
         title={tReschedule("progressTitle")}

@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { buildLessonDisplayContext } from "@/lib/teacher-lesson-context";
+import type { LessonDisplayContext } from "@/lib/teacher-lesson-context";
 import { AdminLessonDetailCard } from "./AdminLessonDetailCard";
 import { AdminLessonActionsPanel } from "./AdminLessonActionsPanel";
 import { useAdminLessonModal } from "./useAdminLessonModal";
@@ -12,6 +11,7 @@ import type { Lesson } from "@/types";
 
 interface AdminLessonDualModalProps {
   lesson: Lesson | null;
+  display: LessonDisplayContext | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   available: ReturnType<typeof useAdminLessonModal>["available"];
@@ -30,6 +30,7 @@ interface AdminLessonDualModalProps {
 
 export function AdminLessonDualModal({
   lesson,
+  display,
   open,
   onOpenChange,
   available,
@@ -45,11 +46,6 @@ export function AdminLessonDualModal({
   message,
   onAction,
 }: AdminLessonDualModalProps) {
-  const display = useMemo(
-    () => (lesson ? buildLessonDisplayContext(lesson) : null),
-    [lesson]
-  );
-
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
@@ -69,6 +65,8 @@ export function AdminLessonDualModal({
             <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
               {display ? (
                 <AdminLessonDetailCard display={display} />
+              ) : lesson ? (
+                <p className="p-4 text-sm text-gray-500">학생 정보를 불러오는 중…</p>
               ) : (
                 <p className="p-4 text-sm text-gray-500">수업 정보를 불러올 수 없습니다.</p>
               )}

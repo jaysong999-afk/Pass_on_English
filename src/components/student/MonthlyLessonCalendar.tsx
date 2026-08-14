@@ -5,6 +5,9 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type { Lesson } from "@/types";
+import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
+import { getDateKeyInTimezone, getStudentTimezone } from "@/lib/availability/timezone";
+import type { Locale } from "@/lib/i18n/config";
 
 const WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
@@ -14,19 +17,12 @@ function startOfDay(d: Date) {
   return x;
 }
 
-function isSameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function formatTimeShort(iso: string, locale: string) {
+function formatTimeShort(iso: string, locale: string, timeZone: string) {
   return new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone,
   }).format(new Date(iso));
 }
 
@@ -49,17 +45,21 @@ interface MonthlyLessonCalendarProps {
   lessons: Lesson[];
   onLessonSelect: (lesson: Lesson) => void;
   initialMonth?: Date;
+  timeZone?: string;
 }
 
 export function MonthlyLessonCalendar({
   lessons,
   onLessonSelect,
   initialMonth,
+  timeZone,
 }: MonthlyLessonCalendarProps) {
   const locale = useLocale();
   const t = useTranslations("studentPortal.calendar");
+  const displayTz = timeZone ?? getStudentTimezone(locale as Locale);
   const [viewDate, setViewDate] = useState(() => initialMonth ?? new Date());
   const today = useMemo(() => startOfDay(new Date()), []);
+  const todayKey = getDateKeyInTimezone(new Date(), CANONICAL_TIMEZONE);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -75,8 +75,7 @@ export function MonthlyLessonCalendar({
   const lessonsByDay = useMemo(() => {
     const map = new Map<string, Lesson[]>();
     for (const lesson of lessons) {
-      const d = startOfDay(new Date(lesson.scheduledAt));
-      const key = d.toISOString();
+      const key = getDateKeyInTimezone(new Date(lesson.scheduledAt), CANONICAL_TIMEZONE);
       const list = map.get(key) ?? [];
       list.push(lesson);
       map.set(key, list);
@@ -144,10 +143,10 @@ export function MonthlyLessonCalendar({
             return <div key={`empty-${idx}`} className="min-h-[4.5rem] border-b border-r border-brand-50/80 bg-surface/30 sm:min-h-[5.25rem]" />;
           }
 
-          const key = startOfDay(day).toISOString();
+          const key = getDateKeyInTimezone(day, CANONICAL_TIMEZONE);
           const dayLessons = (lessonsByDay.get(key) ?? []).slice(0, 2);
           const extra = (lessonsByDay.get(key)?.length ?? 0) - dayLessons.length;
-          const isToday = isSameDay(day, today);
+          const isToday = key === todayKey;
           const isPastDay = day < today;
 
           return (
@@ -186,7 +185,7 @@ export function MonthlyLessonCalendar({
                           : "bg-mint-200/90 text-brand-800"
                       )}
                     >
-                      {formatTimeShort(lesson.scheduledAt, locale)}
+                      {formatTimeShort(lesson.scheduledAt, locale, displayTz)}
                     </button>
                   );
                 })}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -30,11 +30,12 @@ import {
 } from "@/components/ui/dialog";
 import { TeacherLessonDetailCard } from "@/components/teacher/TeacherLessonDetailCard";
 import { RescheduleRequestForm } from "@/components/shared/RescheduleRequestForm";
-import { buildLessonDisplayContext } from "@/lib/teacher-lesson-context";
+import type { LessonDisplayContext } from "@/lib/teacher-lesson-context";
 
 const ACTIVE_LESSON: LessonStatus[] = ["scheduled", "reschedule_pending", "pending_payment"];
+const PAST_LESSON: LessonStatus[] = ["completed", "cancelled"];
 
-type CalendarCellVariant = "active" | "teacher_no_show";
+type CalendarCellVariant = "active" | "teacher_no_show" | "past";
 
 interface WeekCellBooking {
   lesson: Lesson;
@@ -50,8 +51,39 @@ function calendarCellVariant(lesson: Lesson): CalendarCellVariant | null {
   if (ACTIVE_LESSON.includes(lesson.status)) {
     return "active";
   }
+  if (PAST_LESSON.includes(lesson.status)) {
+    return "past";
+  }
   return null;
 }
+
+/** Hue-separated fills: sky = upcoming, slate = past, amber = no-show. */
+const CELL_VARIANT_CLASS: Record<
+  CalendarCellVariant,
+  { cell: string; label: string; meta: string; swatch: string; stat: string }
+> = {
+  active: {
+    cell: "cursor-pointer bg-sky-600 hover:bg-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-800",
+    label: "text-white",
+    meta: "text-sky-100",
+    swatch: "bg-sky-600",
+    stat: "text-sky-700",
+  },
+  past: {
+    cell: "cursor-pointer bg-slate-100 ring-1 ring-inset ring-slate-300 hover:bg-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-500",
+    label: "text-slate-500",
+    meta: "text-slate-400",
+    swatch: "bg-slate-100 ring-1 ring-slate-300",
+    stat: "text-slate-600",
+  },
+  teacher_no_show: {
+    cell: "cursor-pointer bg-amber-400 hover:bg-amber-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700",
+    label: "text-amber-950 line-through decoration-amber-800/80",
+    meta: "text-amber-900",
+    swatch: "bg-amber-400",
+    stat: "text-amber-700",
+  },
+};
 
 interface TeacherWeeklyScheduleCalendarProps {
   slots: WeeklySlotMap;
@@ -60,7 +92,7 @@ interface TeacherWeeklyScheduleCalendarProps {
   onLessonsChange?: () => void;
   /** Parent handles lesson click (e.g. admin dual modal) */
   onLessonClick?: (lesson: Lesson) => void;
-  /** Timezone for calendar header / today highlight (slot grid uses KST) */
+  /** Timezone for row time labels (slot columns / weekday headers stay KST) */
   displayTimezone?: string;
   showAvailabilityFooter?: boolean;
   /** Controlled week start (Monday) — syncs with parent e.g. operation logs */
@@ -94,6 +126,8 @@ export function TeacherWeeklyScheduleCalendar({
     }
   };
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
+  const [selectedDisplay, setSelectedDisplay] = useState<LessonDisplayContext | null>(null);
+  const [displayLoading, setDisplayLoading] = useState(false);
   const [showRescheduleForm, setShowRescheduleForm] = useState(false);
   const gridTimes = useMemo(() => generateGridStartTimes(), []);
   const tzLabel = getTimezoneShortLabel(displayTimezone);
@@ -128,15 +162,40 @@ export function TeacherWeeklyScheduleCalendar({
     return map;
   }, [lessons, teacherId, weekDays]);
 
-  const selectedDisplay = useMemo(
-    () => (selectedLesson ? buildLessonDisplayContext(selectedLesson) : null),
-    [selectedLesson]
-  );
+  useEffect(() => {
+    if (!selectedLesson) {
+      setSelectedDisplay(null);
+      setDisplayLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setDisplayLoading(true);
+    setSelectedDisplay(null);
+
+    fetch(`/api/teacher/lessons/${selectedLesson.id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: { display?: LessonDisplayContext | null } | null) => {
+        if (cancelled) return;
+        setSelectedDisplay(json?.display ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedDisplay(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDisplayLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedLesson]);
 
   const stats = useMemo(() => {
     let open = 0;
     let booked = 0;
     let noShow = 0;
+    let past = 0;
 
     for (const dayDate of weekDays) {
       const dateKey = getDateKeyInTimezone(dayDate, CANONICAL_TIMEZONE);
@@ -149,19 +208,20 @@ export function TeacherWeeklyScheduleCalendar({
 
         if (cell?.variant === "active") booked++;
         else if (cell?.variant === "teacher_no_show") noShow++;
+        else if (cell?.variant === "past") past++;
         else if (enabled) open++;
       }
     }
 
-    const upcoming = lessons.filter((l) => {
+    const weekLessonCount = lessons.filter((l) => {
       if (l.teacherId !== teacherId) return false;
-      if (!ACTIVE_LESSON.includes(l.status)) return false;
+      if (!calendarCellVariant(l)) return false;
       const dateKey = getDateKeyInTimezone(new Date(l.scheduledAt), CANONICAL_TIMEZONE);
       const weekKeys = weekDays.map((d) => getDateKeyInTimezone(d, CANONICAL_TIMEZONE));
       return weekKeys.includes(dateKey);
     }).length;
 
-    return { open, booked, noShow, upcoming };
+    return { open, booked, noShow, past, upcoming: weekLessonCount };
   }, [weekDays, gridTimes, slots, weekBookings, lessons, teacherId]);
 
   function shiftWeek(delta: number) {
@@ -181,7 +241,7 @@ export function TeacherWeeklyScheduleCalendar({
         </button>
         <div className="min-w-0 flex-1 text-center">
           <p className="truncate text-sm font-semibold text-ink">
-            {formatWeekRange(weekStart, displayTimezone)}
+            {formatWeekRange(weekStart, CANONICAL_TIMEZONE)}
           </p>
           <p className="text-[10px] text-gray-500">{tzLabel} · stored in KST</p>
         </div>
@@ -208,8 +268,8 @@ export function TeacherWeeklyScheduleCalendar({
             </div>
             {weekDays.map((dayDate) => {
               const isToday =
-                getDateKeyInTimezone(dayDate, displayTimezone) ===
-                getDateKeyInTimezone(new Date(), displayTimezone);
+                getDateKeyInTimezone(dayDate, CANONICAL_TIMEZONE) ===
+                getDateKeyInTimezone(new Date(), CANONICAL_TIMEZONE);
               return (
                 <div
                   key={dayDate.toISOString()}
@@ -219,7 +279,7 @@ export function TeacherWeeklyScheduleCalendar({
                   )}
                 >
                   <div className="text-[8px] font-bold uppercase text-emerald-800 sm:text-[9px]">
-                    {formatCalendarDayHeader(dayDate, displayTimezone)}
+                    {formatCalendarDayHeader(dayDate, CANONICAL_TIMEZONE)}
                   </div>
                 </div>
               );
@@ -262,8 +322,8 @@ export function TeacherWeeklyScheduleCalendar({
                 const booked = Boolean(bookedLesson);
                 const label = bookedLesson?.studentName ?? bookedLesson?.studentId;
                 const isToday =
-                  getDateKeyInTimezone(dayDate, displayTimezone) ===
-                  getDateKeyInTimezone(new Date(), displayTimezone);
+                  getDateKeyInTimezone(dayDate, CANONICAL_TIMEZONE) ===
+                  getDateKeyInTimezone(new Date(), CANONICAL_TIMEZONE);
 
                 const lessonStart = bookedLesson
                   ? lessonScheduledAtToKstSlot(bookedLesson.scheduledAt).start
@@ -296,9 +356,11 @@ export function TeacherWeeklyScheduleCalendar({
                       booked
                         ? cellVariant === "teacher_no_show"
                           ? `${label} — teacher no-show`
-                          : lessonEnd
-                            ? `${label} · ${lessonStart}–${lessonEnd}`
-                            : `${label} — click to view lesson`
+                          : cellVariant === "past"
+                            ? `${label} — completed / past`
+                            : lessonEnd
+                              ? `${label} · ${lessonStart}–${lessonEnd}`
+                              : `${label} — click to view lesson`
                         : enabled
                           ? "Open for booking"
                           : "Not available"
@@ -306,10 +368,7 @@ export function TeacherWeeklyScheduleCalendar({
                     className={cn(
                       "flex min-h-0 flex-col justify-start overflow-hidden border-b border-l px-px py-0.5 text-left",
                       isToday && !booked && !enabled && "bg-gray-50/80",
-                      cellVariant === "active" &&
-                        "cursor-pointer bg-red-100 transition-colors hover:bg-red-200/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500",
-                      cellVariant === "teacher_no_show" &&
-                        "cursor-pointer bg-gray-300 transition-colors hover:bg-gray-400/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gray-500",
+                      cellVariant && CELL_VARIANT_CLASS[cellVariant].cell,
                       !booked && enabled && "cursor-default bg-emerald-400",
                       !booked && !enabled && "cursor-default bg-white"
                     )}
@@ -319,15 +378,22 @@ export function TeacherWeeklyScheduleCalendar({
                         <span
                           className={cn(
                             "block w-full truncate text-[9px] font-semibold leading-tight sm:text-[10px]",
-                            cellVariant === "teacher_no_show"
-                              ? "text-gray-600 line-through decoration-gray-500/80"
+                            cellVariant
+                              ? CELL_VARIANT_CLASS[cellVariant].label
                               : "text-red-900"
                           )}
                         >
                           {cellVariant === "teacher_no_show" ? `${label} · 노쇼` : label}
                         </span>
                         {cell?.isStart && lessonEnd && cell.rowSpan > 1 && (
-                          <span className="mt-0.5 block text-[8px] leading-none text-red-800/80">
+                          <span
+                            className={cn(
+                              "mt-0.5 block text-[8px] leading-none",
+                              cellVariant
+                                ? CELL_VARIANT_CLASS[cellVariant].meta
+                                : "text-red-800/80"
+                            )}
+                          >
                             {formatGridTimeLabel(lessonStart, displayTimezone)}–
                             {formatGridTimeLabel(lessonEnd, displayTimezone)}
                           </span>
@@ -349,11 +415,15 @@ export function TeacherWeeklyScheduleCalendar({
             Open
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-red-100 ring-1 ring-red-200" />
-            Booked
+            <span className={cn("inline-block h-2.5 w-2.5 rounded-sm", CELL_VARIANT_CLASS.active.swatch)} />
+            Upcoming
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-gray-300 ring-1 ring-gray-400" />
+            <span className={cn("inline-block h-2.5 w-2.5 rounded-sm", CELL_VARIANT_CLASS.past.swatch)} />
+            Past
+          </span>
+          <span className="flex items-center gap-1">
+            <span className={cn("inline-block h-2.5 w-2.5 rounded-sm", CELL_VARIANT_CLASS.teacher_no_show.swatch)} />
             No-show
           </span>
           <span className="flex items-center gap-1">
@@ -378,13 +448,18 @@ export function TeacherWeeklyScheduleCalendar({
         </span>
         <span className="text-gray-300">·</span>
         <span>
-          <span className="text-gray-500">Booked </span>
-          <span className="font-semibold text-red-600">{stats.booked}</span>
+          <span className="text-gray-500">Upcoming </span>
+          <span className={cn("font-semibold", CELL_VARIANT_CLASS.active.stat)}>{stats.booked}</span>
+        </span>
+        <span className="text-gray-300">·</span>
+        <span>
+          <span className="text-gray-500">Past </span>
+          <span className={cn("font-semibold", CELL_VARIANT_CLASS.past.stat)}>{stats.past}</span>
         </span>
         <span className="text-gray-300">·</span>
         <span>
           <span className="text-gray-500">No-show </span>
-          <span className="font-semibold text-gray-600">{stats.noShow}</span>
+          <span className={cn("font-semibold", CELL_VARIANT_CLASS.teacher_no_show.stat)}>{stats.noShow}</span>
         </span>
         <span className="text-gray-300">·</span>
         <span>
@@ -399,6 +474,7 @@ export function TeacherWeeklyScheduleCalendar({
         onOpenChange={(open) => {
           if (!open) {
             setSelectedLesson(null);
+            setSelectedDisplay(null);
             setShowRescheduleForm(false);
           }
         }}
@@ -407,9 +483,15 @@ export function TeacherWeeklyScheduleCalendar({
           <DialogHeader className="sr-only">
             <DialogTitle>Lesson Details</DialogTitle>
           </DialogHeader>
-          {selectedDisplay && selectedLesson ? (
+          {displayLoading ? (
+            <p className="p-6 text-sm text-gray-500">Loading student details…</p>
+          ) : selectedDisplay && selectedLesson ? (
             <>
-              <TeacherLessonDetailCard display={selectedDisplay} editableTextbook />
+              <TeacherLessonDetailCard
+                key={selectedLesson.id}
+                display={selectedDisplay}
+                editableTextbook
+              />
               <div className="border-t px-4 pb-4 pt-2">
                 {selectedLesson.status === "reschedule_pending" ? (
                   <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -427,6 +509,7 @@ export function TeacherWeeklyScheduleCalendar({
                   <RescheduleRequestForm
                     lesson={selectedLesson}
                     initiator="teacher"
+                    inputTimeZone={TEACHER_TIMEZONE}
                     onCancel={() => setShowRescheduleForm(false)}
                     onSubmitted={() => {
                       setShowRescheduleForm(false);
@@ -443,6 +526,7 @@ export function TeacherWeeklyScheduleCalendar({
                       submitting: "Sending…",
                       success: "Request sent. Waiting for student approval.",
                       pendingExists: "A reschedule request is already pending for this lesson.",
+                      slotUnavailable: "That time is already occupied by another class.",
                     }}
                   />
                 ) : null}

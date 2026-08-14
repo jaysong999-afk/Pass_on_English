@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import {
   ArrowRight,
   BookOpen,
   CalendarDays,
+  Clock,
   CreditCard,
   Plus,
   RefreshCw,
@@ -26,8 +27,19 @@ import {
   formatSessionBalance,
   formatSessionProgressFromEnrollment,
   getSessionsUsed,
-  sumSessionBalance,
+  sumActiveSessionBalance,
 } from "@/lib/sessions";
+import { PersonAvatar } from "@/components/shared/PersonAvatar";
+import {
+  formatEnrollmentCurriculum,
+  formatEnrollmentWeeklySchedule,
+  getEnrollmentDisplayPeriod,
+  sortStudentEnrollmentList,
+} from "@/lib/enrollment-display";
+import { canShowStudentRenewButton } from "@/lib/enrollments/renewal-window";
+import type { Locale } from "@/lib/i18n/config";
+import { PaymentDeadlineCountdown } from "@/components/student/PaymentDeadlineCountdown";
+import { PAYMENT_DISPLAY_HOURS, paymentHoldStartsAt, studentFacingPaymentDeadlineAt } from "@/lib/enrollment-hold/constants";
 
 import { useActiveLearner, useActiveLearnerId } from "@/contexts/ActiveLearnerContext";
 
@@ -44,6 +56,8 @@ function enrollmentStatusBadge(
       return <Badge variant="secondary">{t("statusCompleted")}</Badge>;
     case "pending_payment":
       return <Badge variant="warning">{t("statusPendingPayment")}</Badge>;
+    case "cancelled":
+      return <Badge variant="secondary">{t("statusCancelled")}</Badge>;
   }
 }
 
@@ -71,51 +85,86 @@ function EnrollmentCard({
   base: string;
 }) {
   const t = useTranslations("studentPortal.enrollment");
+  const locale = useLocale() as Locale;
   const used = getSessionsUsed(enrollment);
   const progress =
     enrollment.sessionsTotal > 0
       ? Math.round((used / enrollment.sessionsTotal) * 100)
       : 0;
-  const initials = enrollment.teacherName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2);
+  const weekly = formatEnrollmentWeeklySchedule(enrollment, locale);
+  const curriculum = formatEnrollmentCurriculum(enrollment.curriculum);
+  const period = getEnrollmentDisplayPeriod(enrollment);
+  const pending = enrollment.status === "pending_payment";
+  const showRenew = canShowStudentRenewButton(enrollment);
 
   return (
     <Card className="overflow-hidden border-brand-100/80 transition-shadow hover:shadow-md">
       <CardContent className="p-0">
         <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
           <div className="flex gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 text-lg font-bold text-white shadow-md">
-              {initials}
-            </div>
-            <div className="min-w-0">
+            <PersonAvatar
+              name={enrollment.teacherName}
+              avatarUrl={enrollment.teacherAvatarUrl}
+              className="h-14 w-14 rounded-2xl shadow-md"
+              imageClassName="rounded-2xl"
+              fallbackClassName="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 text-lg font-bold text-white"
+            />
+            <div className="min-w-0 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-lg font-bold text-ink">{enrollment.planLabel}</h3>
                 {enrollmentStatusBadge(enrollment.status, t)}
               </div>
-              <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-muted">
-                <User className="h-3.5 w-3.5" />
+              <p className="flex items-center gap-1.5 text-sm text-ink-muted">
+                <User className="h-3.5 w-3.5 shrink-0" />
                 {enrollment.teacherName}
               </p>
-              <p className="mt-0.5 flex items-center gap-1.5 text-sm text-ink-muted">
-                <BookOpen className="h-3.5 w-3.5" />
-                {enrollment.curriculum}
+              {weekly && (
+                <p className="flex items-center gap-1.5 text-sm text-ink">
+                  <Clock className="h-3.5 w-3.5 shrink-0 text-brand-600" />
+                  {t("weeklySchedule", { schedule: weekly })}
+                </p>
+              )}
+              <p className="flex items-start gap-1.5 text-sm text-ink-muted">
+                <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <span className="font-medium text-ink">
+                    {period.tentative ? t("coursePeriodPending") : t("coursePeriod")}
+                  </span>
+                  <span className="mt-0.5 block">
+                    {formatDate(period.start, locale)} — {formatDate(period.end, locale)}
+                    {enrollment.sessionsTotal > 0 && (
+                      <span className="text-ink-muted">
+                        {" "}
+                        · {t("totalSessions", { count: enrollment.sessionsTotal })}
+                      </span>
+                    )}
+                  </span>
+                </span>
               </p>
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-muted">
-                <CalendarDays className="h-3.5 w-3.5" />
-                {formatDate(enrollment.startDate)} — {formatDate(enrollment.endDate)}
-              </p>
+              {curriculum && (
+                <p className="flex items-center gap-1.5 text-sm text-ink-muted">
+                  <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    <span className="font-medium text-ink">{t("curriculumLabel")}</span>
+                    {": "}
+                    {curriculum}
+                  </span>
+                </p>
+              )}
+              {pending && (
+                <p className="pt-1 text-xs font-medium text-amber-700">{t("awaitingActivation")}</p>
+              )}
             </div>
           </div>
 
-          <Button asChild className="shrink-0 gap-2 rounded-xl shadow-sm">
-            <Link href={`${base}/enrollment/renew/${enrollment.id}`}>
-              <RefreshCw className="h-4 w-4" />
-              {t("renew")}
-            </Link>
-          </Button>
+          {showRenew && (
+            <Button asChild className="shrink-0 gap-2 rounded-xl shadow-sm">
+              <Link href={`${base}/enrollment/renew/${enrollment.id}`}>
+                <RefreshCw className="h-4 w-4" />
+                {t("renew")}
+              </Link>
+            </Button>
+          )}
         </div>
 
         <div className="border-t border-brand-50 bg-mint-50/30 px-5 py-4 sm:px-6">
@@ -202,9 +251,73 @@ export function EnrollmentDashboard({
     loadEnrollments();
   }, [loadEnrollments]);
 
-  const activeEnrollments = enrollments.filter((e) => e.status !== "completed");
-  const sessionBalance = sumSessionBalance(activeEnrollments);
-  const pendingAmount = activeEnrollments.find((e) => e.paymentStatus === "pending")?.amountKrw;
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadEnrollments();
+    };
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
+  }, [loadEnrollments]);
+
+  const visibleEnrollments = useMemo(
+    () =>
+      sortStudentEnrollmentList(
+        enrollments.filter((e) => e.cancelReason !== "merged_into_original")
+      ),
+    [enrollments]
+  );
+  const activeEnrollments = visibleEnrollments.filter(
+    (e) => e.status === "active" || e.status === "expiring_soon"
+  );
+  const pendingEnrollments = visibleEnrollments.filter((e) => e.status === "pending_payment");
+  const sessionBalance = sumActiveSessionBalance(visibleEnrollments);
+
+  const pendingHold = enrollments.find(
+    (e) =>
+      e.status === "pending_payment" &&
+      (e.paymentStatus === "pending" || e.paymentStatus === "reported")
+  );
+  const pendingAmount = pendingHold?.amountKrw;
+  const studentPaymentExpired = Boolean(
+    pendingHold &&
+      studentFacingPaymentDeadlineAt(pendingHold) &&
+      new Date(studentFacingPaymentDeadlineAt(pendingHold) as string).getTime() <= Date.now()
+  );
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
+  const [depositorInput, setDepositorInput] = useState("");
+
+  useEffect(() => {
+    if (depositorName) setDepositorInput(depositorName);
+  }, [depositorName]);
+
+  async function handleDashboardPaymentReport() {
+    if (!pendingHold || pendingHold.paymentStatus === "reported") return;
+    setPaymentError("");
+    setPaymentSubmitting(true);
+    try {
+      const res = await fetch("/api/enrollments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enrollmentId: pendingHold.id,
+          depositorName: depositorInput.trim() || depositorName,
+          learnerId: studentId,
+        }),
+      });
+      if (!res.ok) {
+        setPaymentError(
+          res.status === 409 ? t("holdExpired") : t("paymentReportFailed")
+        );
+        return;
+      }
+      await loadEnrollments();
+    } catch {
+      setPaymentError(tCommon("errorNetwork"));
+    } finally {
+      setPaymentSubmitting(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -231,7 +344,9 @@ export function EnrollmentDashboard({
         <Card className="border-brand-100/80 bg-gradient-to-br from-brand-50/80 to-white">
           <CardContent className="p-5">
             <p className="text-sm font-medium text-ink-muted">{t("activeCourses")}</p>
-            <p className="mt-1 text-3xl font-extrabold text-brand-700">{activeEnrollments.length}</p>
+            <p className="mt-1 text-3xl font-extrabold text-brand-700">
+              {activeEnrollments.length + pendingEnrollments.length}
+            </p>
           </CardContent>
         </Card>
         <Card className="border-mint-100 bg-gradient-to-br from-mint-50/60 to-white">
@@ -271,7 +386,7 @@ export function EnrollmentDashboard({
         </TabsList>
 
         <TabsContent value="courses" className="mt-6 space-y-4">
-          {enrollments.length === 0 ? (
+          {visibleEnrollments.length === 0 ? (
             <Card className="border-dashed border-brand-200 bg-brand-50/30">
               <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-700">
@@ -290,7 +405,7 @@ export function EnrollmentDashboard({
               </CardContent>
             </Card>
           ) : (
-            enrollments.map((enrollment) => (
+            visibleEnrollments.map((enrollment) => (
               <EnrollmentCard key={enrollment.id} enrollment={enrollment} base={base} />
             ))
           )}
@@ -312,9 +427,28 @@ export function EnrollmentDashboard({
         </TabsContent>
 
         <TabsContent value="payment" className="mt-6 space-y-6">
-          {pendingAmount && (
+          {pendingHold && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              {t("paymentPending")}
+              {pendingHold.paymentStatus === "reported"
+                ? t("paymentReportedBody")
+                : t("paymentPending")}
+              {pendingHold.paymentDeadlineAt && pendingHold.paymentStatus === "pending" && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium">{t("holdCountdownLabel")}</p>
+                  <PaymentDeadlineCountdown
+                    deadlineAt={
+                      studentFacingPaymentDeadlineAt(pendingHold) ?? pendingHold.paymentDeadlineAt
+                    }
+                    expiredLabel={t("holdExpired")}
+                    holdStartsAt={
+                      pendingHold.includesTrial
+                        ? paymentHoldStartsAt(pendingHold.paymentDeadlineAt).toISOString()
+                        : undefined
+                    }
+                    waitingLabel={t("holdWaitingForTrial")}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -323,7 +457,19 @@ export function EnrollmentDashboard({
               amount={pendingAmount ?? activeEnrollments[0]?.amountKrw ?? 87000}
               currency="KRW"
               bankAccount={tCommon("bankAccount")}
-              depositorHint={depositorName || tCommon("studentFallback")}
+              depositorHint={depositorInput || depositorName || tCommon("studentFallback")}
+              deadlineNotice={
+                pendingHold?.paymentStatus === "pending"
+                  ? t(
+                      pendingHold.includesTrial
+                        ? "paymentDeadlineNoticeTrial"
+                        : pendingHold.renewedFromEnrollmentId
+                          ? "paymentDeadlineNoticeRenew"
+                          : "paymentDeadlineNotice",
+                      { hours: PAYMENT_DISPLAY_HOURS }
+                    )
+                  : undefined
+              }
             />
 
             <Card>
@@ -335,9 +481,11 @@ export function EnrollmentDashboard({
                   <Label htmlFor="depositor">{t("depositor")}</Label>
                   <Input
                     id="depositor"
-                    defaultValue={depositorName}
+                    value={depositorInput}
+                    onChange={(e) => setDepositorInput(e.target.value)}
                     placeholder={t("depositorPlaceholder")}
                     className="h-11 rounded-xl"
+                    disabled={!pendingHold || pendingHold.paymentStatus === "reported" || studentPaymentExpired}
                   />
                 </div>
                 <div className="space-y-2">
@@ -349,8 +497,20 @@ export function EnrollmentDashboard({
                     readOnly
                   />
                 </div>
-                <Button className="h-11 w-full rounded-xl">{t("paymentReport")}</Button>
-                <p className="text-center text-xs text-ink-muted">{t("paymentActivate")}</p>
+                {paymentError && <p className="text-sm text-red-600">{paymentError}</p>}
+                <Button
+                  className="h-11 w-full rounded-xl"
+                  disabled={
+                    !pendingHold ||
+                    pendingHold.paymentStatus === "reported" ||
+                    paymentSubmitting ||
+                    studentPaymentExpired
+                  }
+                  onClick={handleDashboardPaymentReport}
+                >
+                  {paymentSubmitting ? t("submittingPayment") : t("paymentReport")}
+                </Button>
+                <p className="text-center text-xs text-ink-muted">{t("paymentWithoutReport")}</p>
               </CardContent>
             </Card>
           </div>

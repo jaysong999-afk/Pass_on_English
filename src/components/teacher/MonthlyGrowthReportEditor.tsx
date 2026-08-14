@@ -13,12 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { students } from "@/lib/mock-data";
-import { getStudentDisplayName } from "@/lib/student-display-name";
+import { useTeacherSession } from "@/contexts/TeacherSessionContext";
 import type { MonthlyGrowthReport } from "@/types";
-
-const TEACHER_ID = "teacher-1";
-const TEACHER_NAME = "Sarah Mitchell";
 
 function formatMonthLabel(month: string) {
   const [y, m] = month.split("-");
@@ -28,9 +24,9 @@ function formatMonthLabel(month: string) {
 }
 
 const emptyForm = {
-  studentId: "student-1",
-  month: "2026-07",
-  title: "July Growth Report",
+  studentId: "",
+  month: "",
+  title: "",
   lessonsCovered: "",
   progressMade: "",
   areasToWorkOn: "",
@@ -39,6 +35,7 @@ const emptyForm = {
 };
 
 export function MonthlyGrowthReportEditor() {
+  const { teacherId, teacherName } = useTeacherSession();
   const [reports, setReports] = useState<MonthlyGrowthReport[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -47,22 +44,23 @@ export function MonthlyGrowthReportEditor() {
   const [viewingReport, setViewingReport] = useState<MonthlyGrowthReport | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/learning/reports?teacherId=${TEACHER_ID}`);
+    if (!teacherId) return;
+    const res = await fetch(`/api/learning/reports?teacherId=${teacherId}`);
     const data = await res.json();
     setReports(data.reports ?? []);
-  }, []);
+  }, [teacherId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const myStudents = useMemo(() => {
-    const byTeacher = students.filter((s) => s.teacherName === TEACHER_NAME);
-    const fromReports = reports
-      .map((r) => students.find((s) => s.id === r.studentId))
-      .filter((s): s is NonNullable<typeof s> => Boolean(s));
-    const map = new Map<string, (typeof students)[number]>();
-    for (const s of [...byTeacher, ...fromReports]) map.set(s.id, s);
+    const map = new Map<string, { id: string; name: string }>();
+    for (const report of reports) {
+      if (!map.has(report.studentId)) {
+        map.set(report.studentId, { id: report.studentId, name: report.studentName });
+      }
+    }
     return Array.from(map.values());
   }, [reports]);
 
@@ -82,7 +80,7 @@ export function MonthlyGrowthReportEditor() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStudent) return;
+    if (!selectedStudent || !teacherId) return;
     setSaving(true);
     setSaved(false);
     try {
@@ -91,9 +89,9 @@ export function MonthlyGrowthReportEditor() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentId: form.studentId,
-          studentName: getStudentDisplayName(selectedStudent),
-          teacherId: TEACHER_ID,
-          teacherName: TEACHER_NAME,
+          studentName: selectedStudent.name,
+          teacherId,
+          teacherName: teacherName ?? reports[0]?.teacherName ?? "Teacher",
           month: form.month,
           title: form.title,
           lessonsCovered: form.lessonsCovered,
@@ -158,7 +156,7 @@ export function MonthlyGrowthReportEditor() {
                 >
                   {myStudents.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {getStudentDisplayName(s)}
+                      {s.name}
                     </option>
                   ))}
                 </select>
@@ -253,7 +251,7 @@ export function MonthlyGrowthReportEditor() {
                 <option value="all">All students</option>
                 {myStudents.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {getStudentDisplayName(s)}
+                    {s.name}
                   </option>
                 ))}
               </select>

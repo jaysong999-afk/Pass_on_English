@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { TeacherLessonDetailCard } from "@/components/teacher/TeacherLessonDetailCard";
 import { RescheduleRequestForm } from "@/components/shared/RescheduleRequestForm";
 import { LessonStatusBadge } from "@/components/shared/LessonStatusBadge";
+import { TEACHER_TIMEZONE } from "@/lib/availability/timezone";
 import type { LessonDisplayContext } from "@/lib/teacher-lesson-context";
 import type { Lesson } from "@/types";
 
@@ -98,6 +99,7 @@ export default function TeacherLessonDetailPage({
         <RescheduleRequestForm
           lesson={lesson}
           initiator="teacher"
+          inputTimeZone={TEACHER_TIMEZONE}
           onCancel={() => setShowRescheduleForm(false)}
           onSubmitted={() => {
             setShowRescheduleForm(false);
@@ -113,6 +115,7 @@ export default function TeacherLessonDetailPage({
             submitting: "Sending…",
             success: "Request sent. Waiting for student approval.",
             pendingExists: "A reschedule request is already pending for this lesson.",
+            slotUnavailable: "That time is already occupied by another class.",
           }}
         />
       ) : null}

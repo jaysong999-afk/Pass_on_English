@@ -1,14 +1,31 @@
 import { NextResponse } from "next/server";
-import { CURRENT_TEACHER_ID } from "@/lib/availability/constants";
+import { authErrorResponse } from "@/lib/auth/api-guard";
+import { requireTeacherAuth } from "@/lib/auth/session";
 import {
   getFeedbacksByTeacher,
   getFeedbacksByTeacherMonth,
 } from "@/lib/learning-store";
+import { warmLearningCache } from "@/lib/learning/repository";
 import { buildFeedbackCsvRows, feedbackCsvFilename } from "@/lib/feedback-csv";
+import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
+  await ensureSchedulesBootstrapped();
+
+  let teacherId: string;
+  try {
+    ({ teacherId } = await requireTeacherAuth());
+  } catch (error) {
+    return authErrorResponse(error);
+  }
+
+  try {
+    await warmLearningCache();
+  } catch (error) {
+    console.error("[teacher/feedback GET] warm cache", error);
+  }
+
   const { searchParams } = new URL(request.url);
-  const teacherId = searchParams.get("teacherId") ?? CURRENT_TEACHER_ID;
   const studentId = searchParams.get("studentId");
   const month = searchParams.get("month");
   const format = searchParams.get("format");

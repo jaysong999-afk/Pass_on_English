@@ -14,7 +14,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatNotificationBell } from "@/components/shared/ChatNotificationBell";
+import { LogoutButton } from "@/components/shared/LogoutButton";
 import { StudentAppShell } from "@/components/shared/StudentAppShell";
+import { useTeacherSession } from "@/contexts/TeacherSessionContext";
 
 type AppRole = "student" | "teacher";
 
@@ -33,7 +35,6 @@ interface AppShellProps {
 
 const TEACHER_CONFIG = {
   title: "Teacher Portal",
-  subtitle: "Welcome, Sarah!",
   accent: "bg-emerald-600",
   items: [
     { href: "/teacher", matchPath: "/teacher", label: "My Lessons", shortLabel: "Lessons", icon: LayoutDashboard },
@@ -48,12 +49,14 @@ const TEACHER_CONFIG = {
 
 export function AppShell({ role, children }: AppShellProps) {
   const pathname = usePathname();
+  const { teacherId, teacherName, loading: sessionLoading } = useTeacherSession();
 
   if (role === "student") {
     return <StudentAppShell>{children}</StudentAppShell>;
   }
 
   const config = TEACHER_CONFIG;
+  const subtitle = teacherName ? `Welcome, ${teacherName.split(" ")[0]}!` : undefined;
 
   function isActive(item: NavItem) {
     if (item.matchPath === "/teacher") {
@@ -69,19 +72,28 @@ export function AppShell({ role, children }: AppShellProps) {
           <div className="min-w-0">
             <p className="text-xs font-medium text-white/80">Pass on English</p>
             <h1 className="text-lg font-bold">{config.title}</h1>
-            {config.subtitle && (
-              <p className="truncate text-sm text-white/80">{config.subtitle}</p>
+            {subtitle && (
+              <p className="truncate text-sm text-white/80">{subtitle}</p>
             )}
           </div>
-          <ChatNotificationBell
-            role="teacher"
-            copy={{
-              title: "Messages",
-              viewAll: "View all chats",
-              empty: "No new messages",
-              unreadLabel: (count) => `${count} unread`,
-            }}
-          />
+          <div className="flex shrink-0 items-center gap-2">
+            <LogoutButton
+              redirectTo="/teacher/login"
+              label="Sign out"
+              className="hidden text-white/90 hover:bg-white/10 hover:text-white sm:inline-flex"
+            />
+            <ChatNotificationBell
+              role="teacher"
+              teacherId={teacherId ?? undefined}
+              enabled={!sessionLoading && Boolean(teacherId)}
+              copy={{
+                title: "Messages",
+                viewAll: "View all chats",
+                empty: "No new messages",
+                unreadLabel: (count) => `${count} unread`,
+              }}
+            />
+          </div>
         </div>
       </header>
 

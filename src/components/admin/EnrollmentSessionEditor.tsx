@@ -22,7 +22,7 @@ import {
 } from "@/lib/sessions";
 import { formatDate, formatLessonTimeRange, formatTime } from "@/lib/utils";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
-import { formatEnrollmentSlotLabel } from "@/lib/lesson-scheduler";
+import { formatEnrollmentSlotLabel } from "@/lib/lesson-scheduler-core";
 
 interface EnrollmentSessionEditorProps {
   studentId: string;

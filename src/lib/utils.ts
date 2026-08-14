@@ -12,12 +12,17 @@ export function formatCurrency(amount: number, currency: "KRW" | "CNY" | "PHP") 
 }
 
 export function formatDate(date: string | Date, locale = "ko") {
+  const value =
+    typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? new Date(`${date}T12:00:00+09:00`)
+      : new Date(date);
   return new Intl.DateTimeFormat(locale, {
+    timeZone: "Asia/Seoul",
     year: "numeric",
     month: "long",
     day: "numeric",
     weekday: "short",
-  }).format(new Date(date));
+  }).format(value);
 }
 
 export function formatTime(date: string | Date, locale = "ko", timeZone?: string) {

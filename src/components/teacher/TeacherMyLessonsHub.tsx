@@ -6,7 +6,6 @@ import { AlertCircle, Calendar, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TeacherLessonDetailCard } from "@/components/teacher/TeacherLessonDetailCard";
 import { RescheduleProgressPanel } from "@/components/shared/RescheduleProgressPanel";
-import { CURRENT_TEACHER_ID } from "@/lib/availability/constants";
 import { TEACHER_TIMEZONE } from "@/lib/availability/timezone";
 import type { LessonDisplayContext } from "@/lib/teacher-lesson-context";
 import type { Lesson } from "@/types";
@@ -26,15 +25,37 @@ interface HubData {
 export function TeacherMyLessonsHub() {
   const [data, setData] = useState<HubData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(
-        `/api/teacher/lessons?teacherId=${CURRENT_TEACHER_ID}&timeZone=${encodeURIComponent(TEACHER_TIMEZONE)}`
+        `/api/teacher/lessons?timeZone=${encodeURIComponent(TEACHER_TIMEZONE)}`
       );
-      const json = (await res.json()) as HubData;
-      setData(json);
+      const json = (await res.json()) as Partial<HubData> & { error?: string };
+
+      if (!res.ok) {
+        setData(null);
+        setError(json.error ?? "Could not load lessons.");
+        return;
+      }
+
+      if (!Array.isArray(json.todayLessons) || !Array.isArray(json.actionRequired)) {
+        setData(null);
+        setError("Unexpected response from server.");
+        return;
+      }
+
+      setData({
+        nextLesson: json.nextLesson ?? null,
+        todayLessons: json.todayLessons,
+        actionRequired: json.actionRequired,
+      });
+    } catch {
+      setData(null);
+      setError("Could not load lessons.");
     } finally {
       setLoading(false);
     }
@@ -53,7 +74,7 @@ export function TeacherMyLessonsHub() {
   if (!data) {
     return (
       <p className="py-12 text-center text-sm text-gray-500">
-        Could not load lessons. Please refresh.
+        {error ?? "Could not load lessons. Please refresh."}
       </p>
     );
   }
@@ -162,7 +183,7 @@ export function TeacherMyLessonsHub() {
 
       <RescheduleProgressPanel
         role="teacher"
-        fetchUrl={`/api/lessons/reschedule?teacherId=${CURRENT_TEACHER_ID}`}
+        fetchUrl="/api/lessons/reschedule"
         timeZone={TEACHER_TIMEZONE}
         locale="en"
         title="Reschedule Requests"

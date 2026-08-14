@@ -9,58 +9,98 @@ import { TeacherProfileForm } from "@/components/teacher/TeacherProfileForm";
 import { fetchTeacherApplicationById } from "@/lib/teacher-applications";
 import type { TeacherApplication, TeacherProfileInput } from "@/types";
 
+type LoadState =
+  | { kind: "loading" }
+  | { kind: "ready"; application: TeacherApplication }
+  | { kind: "unauthorized" }
+  | { kind: "invalid" };
+
 function SignupProfileContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const applicationId = searchParams.get("applicationId");
 
-  const [application, setApplication] = useState<TeacherApplication | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
     if (!applicationId) {
-      setLoading(false);
+      setLoadState({ kind: "invalid" });
       return;
     }
-    fetchTeacherApplicationById(applicationId).then((app) => {
-      setApplication(app);
-      setLoading(false);
+
+    fetchTeacherApplicationById(applicationId).then((result) => {
+      if (result.ok) {
+        setLoadState({ kind: "ready", application: result.application });
+        return;
+      }
+      if (result.error === "unauthorized") {
+        setLoadState({ kind: "unauthorized" });
+        return;
+      }
+      setLoadState({ kind: "invalid" });
     });
   }, [applicationId]);
 
   async function handleSubmit(data: TeacherProfileInput) {
-    if (!applicationId || !application) {
+    if (!applicationId || loadState.kind !== "ready") {
       throw new Error("missing application");
     }
 
+    setSubmitError("");
     const res = await fetch("/api/teachers/profile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...data,
         applicationId,
-        email: application.email,
-        fullName: application.fullName,
       }),
     });
 
+    if (res.status === 401) {
+      setLoadState({ kind: "unauthorized" });
+      return;
+    }
+
     if (!res.ok) {
+      setSubmitError("Could not save your profile. Please try again.");
       throw new Error("save failed");
     }
 
     router.push("/teacher/signup/complete");
   }
 
-  if (loading) {
+  if (loadState.kind === "loading") {
     return <p className="py-12 text-center text-sm text-gray-500">Loading…</p>;
   }
 
-  if (!applicationId || !application) {
+  if (loadState.kind === "unauthorized") {
+    return (
+      <Card className="w-full max-w-lg border-0 shadow-2xl shadow-black/20">
+        <CardContent className="py-10 text-center space-y-4">
+          <p className="text-sm text-gray-600">
+            Please complete step 1 first while signed in, then return to this page.
+          </p>
+          <Link
+            href="/teacher/signup"
+            className="inline-block text-sm font-semibold text-emerald-700 hover:underline"
+          >
+            Back to registration
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (loadState.kind === "invalid" || !applicationId) {
     return (
       <Card className="w-full max-w-lg border-0 shadow-2xl shadow-black/20">
         <CardContent className="py-10 text-center">
           <p className="text-sm text-gray-600">Invalid or expired application link.</p>
-          <Link href="/teacher/signup" className="mt-4 inline-block text-sm font-semibold text-emerald-700">
+          <Link
+            href="/teacher/signup"
+            className="mt-4 inline-block text-sm font-semibold text-emerald-700"
+          >
             Start registration again
           </Link>
         </CardContent>
@@ -68,6 +108,7 @@ function SignupProfileContent() {
     );
   }
 
+  const { application } = loadState;
   const initial: TeacherProfileInput = {
     displayName: application.fullName,
     bio: "",
@@ -87,6 +128,7 @@ function SignupProfileContent() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {submitError && <p className="mb-4 text-sm text-red-600">{submitError}</p>}
         <TeacherProfileForm
           initial={initial}
           onSubmit={handleSubmit}

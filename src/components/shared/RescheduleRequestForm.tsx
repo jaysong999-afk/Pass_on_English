@@ -6,15 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { fromDatetimeLocalValue } from "@/lib/reschedule-labels";
+import { fromDatetimeLocalInTimeZone } from "@/lib/reschedule-labels";
 import { snapIsoToSlotGrid } from "@/lib/availability/time-utils";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
+import { getTimezoneShortLabel } from "@/lib/availability/timezone";
 import type { Lesson } from "@/types";
 
 interface RescheduleRequestFormProps {
   lesson: Lesson;
   initiator: "teacher" | "student";
   makeupRemaining?: number;
+  /** Wall-clock zone for datetime-local (teachers: PHT, students: KST). */
+  inputTimeZone?: string;
   onSubmitted?: () => void;
   onCancel?: () => void;
   labels: {
@@ -29,6 +32,7 @@ interface RescheduleRequestFormProps {
     makeupRemaining?: string;
     limitReached?: string;
     pendingExists?: string;
+    slotUnavailable?: string;
   };
 }
 
@@ -36,6 +40,7 @@ export function RescheduleRequestForm({
   lesson,
   initiator,
   makeupRemaining,
+  inputTimeZone = CANONICAL_TIMEZONE,
   onSubmitted,
   onCancel,
   labels,
@@ -57,7 +62,7 @@ export function RescheduleRequestForm({
         body: JSON.stringify({
           lessonId: lesson.id,
           proposedScheduledAt: snapIsoToSlotGrid(
-            fromDatetimeLocalValue(proposedTime),
+            fromDatetimeLocalInTimeZone(proposedTime, inputTimeZone),
             CANONICAL_TIMEZONE
           ),
           reason,
@@ -68,7 +73,9 @@ export function RescheduleRequestForm({
       if (!res.ok) {
         if (data.error === "monthly_limit_reached") setError(labels.limitReached ?? data.error);
         else if (data.error === "pending_request_exists") setError(labels.pendingExists ?? data.error);
-        else setError(data.error ?? "Request failed");
+        else if (data.error === "slot_unavailable") {
+          setError(labels.slotUnavailable ?? "That time is already occupied by another class.");
+        } else setError(data.error ?? "Request failed");
         return;
       }
       setSubmitted(true);
@@ -113,7 +120,9 @@ export function RescheduleRequestForm({
           className="rounded-xl"
           disabled={disabledByLimit}
         />
-        <p className="text-xs text-gray-500">:00 · :20 · :40 (20-minute slots, KST)</p>
+        <p className="text-xs text-gray-500">
+          :00 · :20 · :40 (20-minute slots, {getTimezoneShortLabel(inputTimeZone)})
+        </p>
       </div>
 
       <div className="space-y-2">

@@ -35,6 +35,7 @@ const ENROLLMENT_STATUS: Record<EnrollmentStatus, string> = {
   expiring_soon: "만료 임박",
   completed: "완료",
   pending_payment: "결제 대기",
+  cancelled: "취소됨",
 };
 
 const LESSON_STATUS: Record<Lesson["status"], string> = {
@@ -77,7 +78,9 @@ export default function AdminStudentDetailPage() {
   }, [load]);
 
   const pendingEnrollment = detail?.enrollments.find(
-    (e) => e.status === "pending_payment" && e.paymentStatus === "reported"
+    (e) =>
+      e.status === "pending_payment" &&
+      (e.paymentStatus === "reported" || e.paymentStatus === "pending")
   );
 
   async function handlePaymentAction(action: "confirm_payment" | "reject_payment") {
