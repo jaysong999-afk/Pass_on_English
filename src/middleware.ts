@@ -135,10 +135,12 @@ export async function middleware(request: NextRequest) {
     if (denied) return denied;
   }
 
-  const apiRoles = requiredRolesForApi(pathname, request.method);
-  if (apiRoles) {
-    const denied = await enforceRoles(request, response, apiRoles);
-    if (denied) return denied;
+  if (pathname.startsWith("/api/")) {
+    const apiRoles = requiredRolesForApi(pathname, request.method);
+    if (apiRoles) {
+      const denied = await enforceRoles(request, response, apiRoles);
+      if (denied) return denied;
+    }
   }
 
   if (isIntlRoute(pathname)) {

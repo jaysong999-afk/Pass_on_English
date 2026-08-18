@@ -5,6 +5,8 @@ import type {
   CoursePurpose,
   PaymentStatus,
   RegistrationStatus,
+  VideoPlatform,
+  StudentGender,
 } from "@/types";
 
 export interface RegisterAccountInput {
@@ -16,6 +18,8 @@ export interface RegisterAccountInput {
   learnerFullName: string;
   learnerEnglishName: string;
   learnerDateOfBirth: string;
+  learnerGender: StudentGender;
+  videoPlatforms: VideoPlatform[];
 }
 
 export interface AddLearnerInput {

@@ -1,6 +1,6 @@
 import type { AdminLessonOperationLogEntry, AdminLessonOperationType } from "@/types";
 import { createClient } from "@/lib/supabase/server";
-import { getTeacherById } from "@/lib/teacher-profile-store";
+import { getTeacherById } from "@/lib/teacher-profile-store-sync";
 import {
   getAdminLessonOperationLogCache,
   patchAdminLessonOperationLogCache,

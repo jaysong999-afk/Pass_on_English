@@ -40,6 +40,8 @@ import { canShowStudentRenewButton } from "@/lib/enrollments/renewal-window";
 import type { Locale } from "@/lib/i18n/config";
 import { PaymentDeadlineCountdown } from "@/components/student/PaymentDeadlineCountdown";
 import { PAYMENT_DISPLAY_HOURS, paymentHoldStartsAt, studentFacingPaymentDeadlineAt } from "@/lib/enrollment-hold/constants";
+import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
+import { formatPlanLabel } from "@/lib/pricing-plan-display";
 
 import { useActiveLearner, useActiveLearnerId } from "@/contexts/ActiveLearnerContext";
 
@@ -77,6 +79,17 @@ function paymentStatusLabel(
   }
 }
 
+function localizeStoredPlanLabel(label: string, locale: Locale, sessions: number, minutes: number) {
+  if (locale !== "zh-CN") return label;
+  const match = label.match(/주(\d+)회\(([^)]+)\)\s*(\d+)분/);
+  if (!match) return label.replace(/회/g, "次").replace(/분/g, "分钟");
+  const dayNames = match[2]
+    .split(/[~·]/)
+    .map((day) => ({ 월: "周一", 화: "周二", 수: "周三", 목: "周四", 금: "周五", 토: "周六", 일: "周日" }[day] ?? day))
+    .join("至");
+  return `每周${match[1]}次（${dayNames}）${minutes || match[3]}分钟 (${sessions}次)`;
+}
+
 function EnrollmentCard({
   enrollment,
   base,
@@ -93,6 +106,10 @@ function EnrollmentCard({
       : 0;
   const weekly = formatEnrollmentWeeklySchedule(enrollment, locale);
   const curriculum = formatEnrollmentCurriculum(enrollment.curriculum);
+  const cachedPlan = getCachedPricingPlanById(enrollment.planId);
+  const planLabel = cachedPlan
+    ? formatPlanLabel(cachedPlan, locale)
+    : localizeStoredPlanLabel(enrollment.planLabel, locale, enrollment.sessionsTotal, enrollment.sessionMinutes ?? 20);
   const period = getEnrollmentDisplayPeriod(enrollment);
   const pending = enrollment.status === "pending_payment";
   const showRenew = canShowStudentRenewButton(enrollment);
@@ -111,7 +128,7 @@ function EnrollmentCard({
             />
             <div className="min-w-0 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-lg font-bold text-ink">{enrollment.planLabel}</h3>
+                <h3 className="text-lg font-bold text-ink">{planLabel}</h3>
                 {enrollmentStatusBadge(enrollment.status, t)}
               </div>
               <p className="flex items-center gap-1.5 text-sm text-ink-muted">
@@ -171,7 +188,10 @@ function EnrollmentCard({
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium text-ink-muted">{t("progress")}</span>
             <span className="font-bold tabular-nums text-brand-700">
-              {formatSessionProgressFromEnrollment(enrollment)}
+              {formatSessionProgressFromEnrollment(enrollment, {
+                unit: t("sessionUnit"),
+                remaining: t("remainingLabel"),
+              })}
             </span>
           </div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-brand-100">
@@ -186,17 +206,20 @@ function EnrollmentCard({
   );
 }
 
-function PaymentHistoryRow({ record }: { record: PaymentRecord }) {
+function PaymentHistoryRow({ record, locale }: { record: PaymentRecord; locale: Locale }) {
   const t = useTranslations("studentPortal.enrollment");
   const status = paymentStatusLabel(record.status, t);
+  const amountLabel = locale === "zh-CN"
+    ? `${record.amountKrw.toLocaleString("zh-CN")} 韩元`
+    : formatCurrency(record.amountKrw, "KRW");
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-brand-100/80 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p className="font-medium text-ink">{record.label}</p>
-        <p className="mt-0.5 text-sm text-ink-muted">{formatDate(record.paidAt)}</p>
+        <p className="mt-0.5 text-sm text-ink-muted">{formatDate(record.paidAt, locale)}</p>
       </div>
       <div className="flex items-center gap-3">
-        <p className="font-bold text-brand-700">{formatCurrency(record.amountKrw, "KRW")}</p>
+        <p className="font-bold text-brand-700">{amountLabel}</p>
         <Badge variant={status.variant}>{status.label}</Badge>
       </div>
     </div>
@@ -216,6 +239,7 @@ export function EnrollmentDashboard({
 }: EnrollmentDashboardProps) {
   const learnerId = useActiveLearnerId();
   const studentId = studentIdProp ?? learnerId;
+  const locale = useLocale() as Locale;
   const { account: _account } = useActiveLearner();
   const t = useTranslations("studentPortal.enrollment");
   const tCommon = useTranslations("studentPortal.common");
@@ -353,7 +377,9 @@ export function EnrollmentDashboard({
           <CardContent className="p-5">
             <p className="text-sm font-medium text-ink-muted">{t("remainingSessions")}</p>
             <p className="mt-1 text-3xl font-extrabold tabular-nums text-brand-700">
-              {formatSessionBalance(sessionBalance.remaining, sessionBalance.total)}
+              {formatSessionBalance(sessionBalance.remaining, sessionBalance.total, {
+                unit: t("sessionUnit"),
+              })}
             </p>
             <p className="mt-1 text-xs text-ink-muted">{t("remainingFormat")}</p>
           </CardContent>
@@ -362,7 +388,11 @@ export function EnrollmentDashboard({
           <CardContent className="p-5">
             <p className="text-sm font-medium text-ink-muted">{t("recentPayment")}</p>
             <p className="mt-1 text-lg font-bold text-ink">
-              {payments[0] ? formatCurrency(payments[0].amountKrw, "KRW") : "—"}
+              {payments[0]
+                ? locale === "zh-CN"
+                  ? `${payments[0].amountKrw.toLocaleString("zh-CN")} 韩元`
+                  : formatCurrency(payments[0].amountKrw, "KRW")
+                : "—"}
             </p>
             {payments[0] && (
               <Badge variant="success" className="mt-2">
@@ -524,7 +554,7 @@ export function EnrollmentDashboard({
               {payments.length === 0 ? (
                 <p className="py-8 text-center text-sm text-ink-muted">{t("noPayments")}</p>
               ) : (
-                payments.map((record) => <PaymentHistoryRow key={record.id} record={record} />)
+                payments.map((record) => <PaymentHistoryRow key={record.id} record={record} locale={locale} />)
               )}
             </CardContent>
           </Card>

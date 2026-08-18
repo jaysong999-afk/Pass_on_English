@@ -20,6 +20,8 @@ import { TEACHER_TIMEZONE } from "@/lib/availability/timezone";
 import { formatDate, formatLessonTimeRange, formatTime } from "@/lib/utils";
 import type { LessonDisplayContext } from "@/lib/teacher-lesson-context";
 import { StudentChatLink } from "@/components/teacher/StudentChatLink";
+import { TextbookHistory } from "@/components/shared/TextbookHistory";
+import type { TeacherStudentContext } from "@/types";
 
 interface TeacherLessonDetailCardProps {
   display: LessonDisplayContext;
@@ -38,6 +40,7 @@ export function TeacherLessonDetailCard({
   const [editingTextbook, setEditingTextbook] = useState(false);
   const [editingSpecialNotes, setEditingSpecialNotes] = useState(false);
   const [textbook, setTextbook] = useState(display.textbook);
+  const [textbookHistory, setTextbookHistory] = useState(display.textbookHistory);
   const [specialNotes, setSpecialNotes] = useState(display.specialNotes ?? "");
   const [savingTextbook, setSavingTextbook] = useState(false);
   const [savingSpecialNotes, setSavingSpecialNotes] = useState(false);
@@ -59,6 +62,11 @@ export function TeacherLessonDetailCard({
         }),
       });
       if (res.ok) {
+        const payload = (await res.json()) as { context?: TeacherStudentContext };
+        if (payload.context) {
+          setTextbook(payload.context.textbook);
+          setTextbookHistory(payload.context.textbookHistory);
+        }
         setSavedTextbook(true);
         setEditingTextbook(false);
       }
@@ -102,6 +110,11 @@ export function TeacherLessonDetailCard({
             <CardTitle className="flex items-center gap-2 text-lg">
               <User className="h-5 w-5 text-emerald-600" />
               {display.englishName}
+              {lesson.isTrial && (
+                <Badge className="bg-rose-500 text-[10px] text-white hover:bg-rose-500">
+                  NEW
+                </Badge>
+              )}
               {lesson.studentId && (
                 <StudentChatLink
                   studentId={lesson.studentId}
@@ -137,6 +150,9 @@ export function TeacherLessonDetailCard({
         </DetailItem>
         <DetailItem icon={GraduationCap} label="English Level">
           {display.englishLevel}
+        </DetailItem>
+        <DetailItem icon={User} label="Gender">
+          {display.gender === "male" ? "Male" : display.gender === "female" ? "Female" : "—"}
         </DetailItem>
         <DetailItem icon={Video} label="Video Platform">
           <Badge variant="outline" className="font-mono text-xs">
@@ -192,9 +208,13 @@ export function TeacherLessonDetailCard({
               {savedTextbook && (
                 <p className="text-xs text-emerald-600">Textbook saved.</p>
               )}
+              <TextbookHistory entries={textbookHistory} locale="en" />
             </div>
           ) : (
-            <span className="font-medium">{display.textbook || "—"}</span>
+            <div>
+              <span className="font-medium">{display.textbook || "—"}</span>
+              <TextbookHistory entries={display.textbookHistory} locale="en" />
+            </div>
           )}
         </DetailItem>
         <DetailItem icon={BookOpen} label="Last Progress (pages)">

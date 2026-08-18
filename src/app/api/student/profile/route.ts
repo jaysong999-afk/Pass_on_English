@@ -46,6 +46,7 @@ export async function POST(request: Request) {
   const learnerFullName = String(body.learnerFullName ?? fullName).trim();
   const learnerEnglishName = String(body.learnerEnglishName ?? englishName).trim();
   const learnerDateOfBirth = String(body.learnerDateOfBirth ?? dateOfBirth).trim();
+  const learnerGender = body.learnerGender === "male" ? "male" : "female";
 
   if (
     !fullName ||
@@ -74,6 +75,8 @@ export async function POST(request: Request) {
       learnerFullName,
       learnerEnglishName,
       learnerDateOfBirth,
+      learnerGender,
+      videoPlatforms: ["ZOOM"],
     });
   } catch {
     return NextResponse.json({ error: "signup_failed" }, { status: 500 });

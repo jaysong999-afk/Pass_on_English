@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -8,25 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Teacher } from "@/types";
+import { apiRequest } from "@/lib/api/client";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export default function AdminTeacherProfilesPage() {
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [loading, setLoading] = useState(true);
-
   const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/teachers/profile");
-      const data = await res.json();
-      setTeachers(data.teachers ?? []);
-    } finally {
-      setLoading(false);
-    }
+    const data = await apiRequest<{ teachers?: Teacher[] }>("/api/teachers/profile");
+    return data.teachers ?? [];
   }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data: teachers, loading } = useApiResource(load, []);
 
   return (
     <div className="space-y-6">

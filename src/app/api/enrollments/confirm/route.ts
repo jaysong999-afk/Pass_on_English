@@ -11,6 +11,8 @@ import {
 import { appendAdminReviewLogInDb } from "@/lib/admin/admin-review-log-repository";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { formatPlanLabel } from "@/lib/pricing-plan-display";
+import { getTeacherFromCache } from "@/lib/teachers/teacher-profile-cache";
+import { areVideoPlatformsCompatible } from "@/lib/video-platforms";
 
 export async function POST(request: Request) {
   let body: {
@@ -59,13 +61,17 @@ export async function POST(request: Request) {
   try {
     if (body.renewFromEnrollmentId) {
       const fromId = String(body.renewFromEnrollmentId).trim();
-      const { getEnrollmentById } = await import("@/lib/enrollment-store");
+      const { getEnrollmentById } = await import("@/lib/enrollment-store-sync");
       const previous = getEnrollmentById(fromId);
       if (!previous) {
         return NextResponse.json({ error: "enrollment_not_found" }, { status: 404 });
       }
       if (previous.studentId !== activeLearner.id) {
         return NextResponse.json({ error: "forbidden" }, { status: 403 });
+      }
+      const renewalTeacher = getTeacherFromCache(previous.teacherId);
+      if (!renewalTeacher || !areVideoPlatformsCompatible(activeLearner.videoPlatforms, renewalTeacher.videoPlatforms)) {
+        return NextResponse.json({ error: "video_platform_mismatch" }, { status: 409 });
       }
 
       const plan = await getPricingPlanById(previous.planId);
@@ -108,6 +114,10 @@ export async function POST(request: Request) {
     const plan = await getPricingPlanById(planId);
     if (!plan) {
       return NextResponse.json({ error: "plan_not_found" }, { status: 404 });
+    }
+    const teacher = getTeacherFromCache(teacherId);
+    if (!teacher || !areVideoPlatformsCompatible(activeLearner.videoPlatforms, teacher.videoPlatforms)) {
+      return NextResponse.json({ error: "video_platform_mismatch" }, { status: 409 });
     }
 
     const amountKrw = currency === "CNY" ? plan.priceCny : plan.priceKrw;

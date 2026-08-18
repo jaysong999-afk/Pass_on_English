@@ -67,7 +67,7 @@
 - Self-host fonts/assets
 - Supabase/API latency HK 기준 검증
 
-### 2.2 MVP 구현 현황 (2026-08)
+### 2.2 MVP 구현 현황 (2026-08-17)
 
 | 기능 | 상태 | 구현 위치 |
 |------|------|-----------|
@@ -76,17 +76,18 @@
 | **재수강(renewal)** | ✅ | `createRenewalEnrollment`, `EnrollmentFlow` renew 모드 |
 | **관리자 수업 운영 센터** | ✅ | `/admin/operations`, 조치 로그·undo |
 | **관리자 검토 센터** | ✅ | `/admin/reschedule`, 4탭 + 처리 로그 |
-| 수업 상세·교재/Special Notes 편집 | ✅ | `TeacherLessonDetailCard`, student-context API |
+| 수업 상세·교재/Special Notes·과거 교재 | ✅ | `TeacherLessonDetailCard`, DB 교재 이력 trigger |
 | Schedule 캘린더·노쇼 회색 셀 | ✅ | `TeacherWeeklyScheduleCalendar` |
-| 보강 (양방향·취소·월 2회) | ✅ | `reschedule-store`, 20분 그리드 스냅 |
-| 학생 채팅·모바일 헤더 | ✅ | `StudentChatLink`, `StudentAppShell` 2-row |
-| Lesson Feedback + progressPages | ✅ | `/api/learning/feedback` |
+| 보강 (양방향·취소·월 2회) | ✅ | migration 029 원자 RPC + 20분 그리드 스냅 |
+| 학생·선생님 채팅 | ✅ | 선생님/학생/관리자 대상 선택, shared chat UI |
+| 선생님 신규 수업 배정 알림 | ✅ | 수강목적·수업 모달·확인 처리, 무료체험 NEW 배지 |
+| Lesson Feedback + 교재·progressPages 스냅샷 | ✅ | `/api/learning/feedback`, 학생 상세 수업 로그 |
 | Monthly Growth Report (5필드) | ✅ | `MonthlyGrowthReportEditor` |
 | Teacher Salary (월별 명세·EN 보너스 정책) | ✅ | `TeacherSalaryDashboard` |
 | Admin: teacher-profiles, pricing, FAQ | ✅ | `/admin/teacher-profiles`, `/admin/pricing`, `/admin/faq` |
-| **Supabase DDL** | ✅ | `001`~`022` — [`db.md`](./db.md) §8 |
+| **Supabase DDL** | ✅ | 운영 migration `001`~`035` (`024` 제외) — [`db.md`](./db.md) §8 |
 | **`pricing_plans` → Supabase** | ✅ | `pricing-plans/repository.ts`, `/api/pricing-plans` |
-| **MVP store → Supabase** | ✅ | **전 도메인** (chat·finance 포함) — [`backend.md`](./backend.md) §1.2 |
+| **도메인 데이터 → Supabase** | ✅ | repository write + 제한된 bootstrap/cache read — [`backend.md`](./backend.md) §1.2 |
 | **Auth · RLS** | ✅ **2차 완료** | middleware 다역할 + session UUID + learner access 검증 |
 | **관리자 메시지 · CS · 단체 발송** | ✅ | `/api/admin/messages/*`, broadcast → 1:1 CS 채팅 통합 |
 | 입금 확인·재무 API | ✅ | 입금 확인 → `finance_transactions`; `/api/admin/finance/transactions` |
@@ -94,8 +95,14 @@
 | Account vs Learner | ✅ | `accounts/repository` + `account-store-sync`, StudentSwitcher |
 | Teacher signup E2E (Auth → profile → admin approve) | ✅ | packages A–D; `test-api-e2e` teacher signup block |
 | Teacher signup API | ✅ | `/api/teacher/applications`, `/api/teachers/profile` → Supabase |
+| 학생·선생님 내 정보 관리 | ✅ | `/student/settings`, `/teacher/profile`, password 분리 |
+| ZOOM/VOOV 선호·매칭 | ✅ | 가입/설정 복수 선택 + 수강 확정 서버 재검증 |
+| 학생 성별·가입 메모 | ✅ | 관리자/교사 학생 카드와 가입 검토/상세 연계 |
+| API 권한 기본 거부·DTO 제한 | ✅ | middleware allowlist, route ownership, profile/단가 열 보안 |
+| 급여 정산·재무 원자화 | ✅ | migration 027~029; 신규/live 분기 보너스 방지 035 |
+| 랜딩·SEO·정책 페이지 | ✅ | DB 요금제 전체 노출, locale metadata, about/privacy/terms/refund |
 
-### 2.3 Auth 2차 완료 · 잔여 (2026-08)
+### 2.3 보안·배포 잔여 (2026-08-17)
 
 | 항목 | 상태 |
 |------|------|
@@ -104,11 +111,14 @@
 | 학생 login → `/api/auth/login` + role 검증 | ✅ |
 | 학생 API middleware (`/api/student/*`, enrollments, learning, chat) | ✅ |
 | pricing admin mutation middleware (GET만 public) | ✅ |
+| 미분류 API 기본 거부 | ✅ |
+| profile private/teacher compensation 열 제한 | ✅ |
+| 보강·급여 정산 트랜잭션 경계 | ✅ |
 | 자동 시스템 알림 cron | ⏳ |
-| PWA install prompt | ⏳ |
+| PWA install 안내 배너 | ✅ (실제 설치 가능 여부는 브라우저 정책에 따름) |
 | HK 배포 | ⏳ |
 
-**테스트**: `npm run test:rls` (17/17) · `npm run test:api:e2e` (37/37)
+**테스트 묶음**: `test:auth*`, `test:rls`, `test:transactions`, `test:api:e2e`, 설정·채팅·boundary 회귀 테스트. 실행 명령은 `package.json`을 SSOT로 한다.
 
 ---
 
@@ -177,7 +187,7 @@ sequenceDiagram
 
 ```
 월 명세서 = baseSalary (totalHours × hourlyRate)
-         + perfectAttendanceBonus (25 PHP/h × hours, 만근 시)
+         + perfectAttendanceBonus (직전 1개월 만근 완료 후 다음 달부터 25 PHP/h × hours)
          + quarterlyBonus (분기 tier)
          + otherIncentives - deductions
 
@@ -286,12 +296,10 @@ supabase start
 cp .env.example .env.local
 # NEXT_PUBLIC_SUPABASE_URL, ANON_KEY, VAPID keys 등 입력
 
-# 5. DB 마이그레이션 (001 → 021 순서)
+# 5. DB 마이그레이션 (운영 migration 001 → 035 순서, 024 제외)
 supabase db push
-# 또는 Supabase Dashboard SQL Editor에서
-#   supabase/migrations/001_initial_schema.sql
-#   …
-#   supabase/migrations/006_finance_transactions_chat_realtime.sql
+# 프로젝트 스크립트로 보안/RLS migration 적용 시: npm run apply:rls
+# E2E 데이터는 migration이 아니라: npm run seed:e2e
 
 # 6. 개발 서버
 pnpm dev
@@ -325,8 +333,9 @@ Pass_on_English/
 │   │   ├── 001_initial_schema.sql
 │   │   ├── 002_pricing_plans_plan_type_text.sql
 │   │   ├── 003_faq_dashboard_teacher_applications.sql
-│   │   └── 004_profiles_active_student_id.sql
-│   └── seed.sql                 # (선택) dev seed
+│   │   ├── ...
+│   │   └── 035_fix_ineligible_live_quarterly_bonus.sql
+│   └── seeds/e2e_rich_seed.sql # 운영 migration과 분리된 테스트 시드
 ├── public/
 │   ├── icons/          # PWA
 │   └── manifest.json
@@ -350,7 +359,7 @@ Pass_on_English/
 ### Phase 0 — 기반 (1~2주)
 
 - [x] Next.js + Tailwind + Shadcn 보일러플레이트
-- [ ] Supabase 프로젝트, Auth, profiles (MVP: mock auth)
+- [x] Supabase 프로젝트, Auth, profiles + 역할 세션
 - [x] next-intl, locale routing (ko, zh-CN)
 - [x] PWA manifest + service worker
 
@@ -360,9 +369,9 @@ Pass_on_English/
 - [x] 학생: 가입, 설문, My Lessons, Learning Results
 - [x] 선생님: My Lessons, availability, schedule, feedback
 - [x] 관리자: teacher-profiles, pricing, students/teachers UI
-- [x] DB migrations DDL (`001`~`021`) — [`db.md`](./db.md) §8
+- [x] DB migrations DDL (`001`~`035`, 024 제외) — [`db.md`](./db.md) §8
 - [x] `pricing_plans` Supabase CRUD (첫 도메인 이전)
-- [x] MVP store 전부 → Supabase (chat·finance 포함) — [`backend.md`](./backend.md) §9
+- [x] 도메인 데이터 → Supabase (chat·finance 포함) — [`backend.md`](./backend.md) §9
 
 ### Phase 2 — 운영 기능 (2~3주)
 
@@ -374,11 +383,17 @@ Pass_on_English/
 - [x] 수업 완료 + 피드백 (progressPages)
 - [x] 채팅 (rooms API, StudentChatLink)
 - [x] Web Push 구독·발송 API
+- [x] 학생·선생님 내 정보 관리와 비밀번호 변경
+- [x] ZOOM/VOOV 선호 선택·호환 교사 매칭
+- [x] 학생 성별·가입 메모·교재 변경 이력·수업 로그 스냅샷
+- [x] 관리자 수업 변경 모니터링/예외 조치 분리
 
 ### Phase 3 — 재무·급여 (2주)
 
 - [x] 급여 월별 명세서 (estimated/processing/paid)
 - [x] 만근·분기 보너스 정책 UI
+- [x] 신규·미종료 월 quarterly bonus 부적격 처리
+- [x] 급여 정산 상태·재무 원장 원자 처리
 - [ ] 재무 대시보드·차트 (DB 연동 ✅, 고급 차트·cron 스냅샷 ⏳)
 - [ ] 월말 정산 스냅샷 (DB cron)
 
@@ -387,9 +402,10 @@ Pass_on_English/
 - [ ] Tencent Cloud HK 배포
 - [ ] 한·중 접속 테스트
 - [ ] PWA iOS/Android 검증 (실제 install prompt)
-- [x] Auth·RLS 1차 연동 (middleware, login API, migration 017~021, `npm run test:rls`)
-- [ ] Auth·RLS 2차 (선생님 세션 UUID 바인딩, 학생 API 전면 보호, pricing admin auth)
-- [ ] 보안·RLS 감사 (service role bootstrap 경로 최소화)
+- [x] Auth·RLS 1·2차 (세션 UUID, 학생 API, pricing mutation 보호)
+- [x] API default deny·프로필/교사 단가 열 제한·RLS 감사 1차
+- [x] 보강·급여 정산 트랜잭션 경계
+- [ ] 운영 배포 전 service role 사용 경로와 Supabase 적용 migration 최종 감사
 
 ---
 
@@ -503,7 +519,7 @@ Pass_on_English/
 | My Lessons | 선생님/학생 홈 — 다음 수업·오늘 일정·Action Required |
 | Growth Report | 월말 5필드 성장 레포트 (lessonsCovered 등) |
 | Salary Statement | 월별 급여 명세서 (estimated/processing/paid) |
-| Perfect attendance / 만근 | 해당 월 결근·무단 변경 없음 |
+| Perfect attendance / 만근 | 직전 한 달 전체 근무·수업 실적·결근/무단 변경 없음. 다음 달부터 적용되며 당월 노쇼 시 상실 |
 | PWA | Progressive Web App — 홈 화면 설치형 웹 |
 
 ---

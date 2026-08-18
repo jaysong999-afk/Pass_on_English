@@ -5,14 +5,15 @@ import { lessonCountsForPayroll } from "@/lib/admin/lesson-payroll-utils";
 import {
   isPerfectAttendanceForfeited,
   isQuarterlyBonusReset,
-} from "@/lib/teacher-payroll-penalty-store";
+} from "@/lib/teacher-payroll-penalty-store-sync";
 import {
   calcQuarterlyBonusFromHours,
   getSalaryBonusPolicy,
-} from "@/lib/teacher-salary-policy-store";
-import { getAdjustmentTotals } from "@/lib/teacher-salary-adjustment-store";
-import { getTeacherById, getAllTeachers, updateTeacherHourlyRatePhp } from "@/lib/teacher-profile-store";
-import { getTeacherLessons } from "@/lib/teacher-lesson-store";
+} from "@/lib/teacher-salary-policy-store-sync";
+import { getAdjustmentTotals } from "@/lib/teacher-salary-adjustment-store-sync";
+import { getTeacherById, getAllTeachers, updateTeacherHourlyRatePhp } from "@/lib/teacher-profile-store-sync";
+import { getTeacherLessons } from "@/lib/teacher-lesson-store-sync";
+import { getTeacherApplicationCache } from "@/lib/teacher-applications/application-cache";
 
 export const PAYOUT_ACCOUNTS: Record<string, TeacherPayoutAccount> = {
   "teacher-1": {
@@ -63,6 +64,51 @@ function rollingQuarterlyHours(teacherId: string, month: string): number {
   return Math.round(total * 10) / 10;
 }
 
+export function isQuarterlyBonusEligible(teacherId: string, month: string): boolean {
+  const policy = getSalaryBonusPolicy();
+  const teacher = getTeacherById(teacherId);
+  if (!teacher?.createdAt || !isSalaryMonthEnded(month)) return false;
+
+  const firstMonth = addMonths(month, -(policy.quarterlyPeriodMonths - 1));
+  const firstMonthStart = `${firstMonth}-01`;
+  const joinedDate = getDateKeyInTimezone(new Date(teacher.createdAt), CANONICAL_TIMEZONE);
+  if (joinedDate > firstMonthStart) return false;
+
+  for (let i = 0; i < policy.quarterlyPeriodMonths; i++) {
+    if (isQuarterlyBonusReset(teacherId, addMonths(month, -i))) return false;
+  }
+
+  return rollingQuarterlyHours(teacherId, month) > 0;
+}
+
+/**
+ * The monthly attendance bonus starts only after one complete, worked month.
+ * A penalty in the earning month removes next month's eligibility, while a
+ * penalty in the payout month keeps the existing no-show forfeiture rule.
+ */
+export function isPerfectAttendanceBonusEligible(
+  teacherId: string,
+  month: string
+): boolean {
+  const teacher = getTeacherById(teacherId);
+  if (!teacher?.createdAt) return false;
+
+  const qualifyingMonth = addMonths(month, -1);
+  if (!isSalaryMonthEnded(qualifyingMonth)) return false;
+
+  const joinedDate = getDateKeyInTimezone(
+    new Date(teacher.createdAt),
+    CANONICAL_TIMEZONE
+  );
+  if (joinedDate > `${qualifyingMonth}-01`) return false;
+
+  if (lessonsInMonth(teacherId, qualifyingMonth).length === 0) return false;
+  if (isPerfectAttendanceForfeited(teacherId, qualifyingMonth)) return false;
+  if (isPerfectAttendanceForfeited(teacherId, month)) return false;
+
+  return true;
+}
+
 export function computeAmounts(
   teacherId: string,
   month: string,
@@ -72,12 +118,12 @@ export function computeAmounts(
   const policy = getSalaryBonusPolicy();
   const { bonusTotal, penaltyTotal } = getAdjustmentTotals(teacherId, month);
   const baseSalary = Math.round(totalHours * hourlyRate);
-  const perfectAttendanceBonus = isPerfectAttendanceForfeited(teacherId, month)
-    ? 0
-    : Math.round(totalHours * policy.perfectAttendancePerHourPhp);
-  const quarterlyBonus = isQuarterlyBonusReset(teacherId, month)
-    ? 0
-    : calcQuarterlyBonusFromHours(rollingQuarterlyHours(teacherId, month));
+  const perfectAttendanceBonus = isPerfectAttendanceBonusEligible(teacherId, month)
+    ? Math.round(totalHours * policy.perfectAttendancePerHourPhp)
+    : 0;
+  const quarterlyBonus = isQuarterlyBonusEligible(teacherId, month)
+    ? calcQuarterlyBonusFromHours(rollingQuarterlyHours(teacherId, month))
+    : 0;
   return {
     baseSalary,
     perfectAttendanceBonus,
@@ -89,13 +135,22 @@ export function computeAmounts(
 
 export function getPayoutAccount(teacherId: string): TeacherPayoutAccount {
   const teacher = getTeacherById(teacherId);
+  const application = teacher?.applicationId
+    ? getTeacherApplicationCache().find((item) => item.id === teacher.applicationId)
+    : getTeacherApplicationCache().find((item) => item.teacherId === teacherId);
+  const bankAccount = application?.bankAccount.trim();
   return (
-    PAYOUT_ACCOUNTS[teacherId] ?? {
+    PAYOUT_ACCOUNTS[teacherId] ?? (bankAccount ? {
+      type: "bank",
+      label: "Registered payout account",
+      accountNumber: bankAccount,
+      accountName: application?.fullName || teacher?.displayName || "Teacher",
+    } : {
       type: "bank",
       label: "Bank Account",
       accountNumber: "—",
       accountName: teacher?.displayName ?? "Teacher",
-    }
+    })
   );
 }
 
@@ -135,8 +190,8 @@ export function getBonusPolicy() {
     })
     .join(" | ");
   return {
-    perfectAttendance: `Perfect attendance bonus: ₱${policy.perfectAttendancePerHourPhp}/hr (no unapproved absences or schedule changes)`,
-    quarterly: `${policy.quarterlyPeriodMonths}-month rolling total: ${tiers}`,
+    perfectAttendance: `Perfect attendance bonus: ₱${policy.perfectAttendancePerHourPhp}/hr from the month after completing one full month with no unapproved absences or schedule changes`,
+    quarterly: `After ${policy.quarterlyPeriodMonths} full months with no attendance reset · rolling total: ${tiers}`,
     config: policy,
   };
 }
@@ -202,7 +257,7 @@ export function updateTeacherHourlyRate(teacherId: string, hourlyRatePhp: number
   return updateTeacherHourlyRatePhp(teacherId, hourlyRatePhp);
 }
 
-type DbSalaryStatus = "estimated" | "processing" | "paid";
+type DbSalaryStatus = "estimated" | "processing" | "paid" | "completed";
 
 export function dbStatusToApp(
   dbStatus: DbSalaryStatus,
@@ -211,6 +266,7 @@ export function dbStatusToApp(
   if (isLiveEstimate) return "estimated";
   if (dbStatus === "estimated") return "confirmed";
   if (dbStatus === "paid") return "paid";
+  if (dbStatus === "completed") return "completed";
   return dbStatus;
 }
 
@@ -227,7 +283,8 @@ export function appStatusToDb(
   if (status === "processing") {
     return { status: "processing", is_live_estimate: false };
   }
-  return { status: "paid", is_live_estimate: false };
+  if (status === "paid") return { status: "paid", is_live_estimate: false };
+  return { status: "completed", is_live_estimate: false };
 }
 
 export function cloneStatement(s: TeacherSalaryStatement): TeacherSalaryStatement {

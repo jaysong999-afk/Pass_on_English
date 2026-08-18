@@ -61,8 +61,8 @@ const NAV_GROUPS: NavGroup[] = [
       {
         href: "/admin/reschedule",
         matchPath: "/admin/reschedule",
-        label: "승인 요청 현황",
-        description: "시간 변경·신규 가입·입금 확인 검토",
+        label: "운영 요청 센터",
+        description: "요청 모니터링·가입·입금 처리",
         icon: RefreshCw,
       },
     ],
@@ -159,7 +159,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 const PAGE_TITLES: { prefix: string; title: string; subtitle?: string }[] = [
   { prefix: "/admin/operations", title: "수업 운영 센터", subtitle: "스케줄 조회 및 수업 예외 처리" },
-  { prefix: "/admin/reschedule", title: "승인 요청 현황", subtitle: "시간 변경·신규 가입·입금 확인 승인" },
+  { prefix: "/admin/reschedule", title: "운영 요청 센터", subtitle: "학생·선생님 요청과 관리자 처리 업무를 한곳에서 확인합니다." },
   { prefix: "/admin/students", title: "학생 현황", subtitle: "수강 중 및 과거 수강자" },
   { prefix: "/admin/faq", title: "FAQ 관리", subtitle: "학생 포털 질의응답 편집" },
   { prefix: "/admin/teachers/applications", title: "선생님 지원서", subtitle: "신규 지원 검토" },

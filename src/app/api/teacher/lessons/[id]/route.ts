@@ -6,7 +6,7 @@ import {
   getLessonByIdInDb,
   lessonNeedsFeedback,
 } from "@/lib/lessons/repository";
-import { getFeedbackByLesson } from "@/lib/learning-store";
+import { getFeedbackByLesson } from "@/lib/learning-store-sync";
 
 export async function GET(
   _request: Request,

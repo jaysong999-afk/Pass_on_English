@@ -15,6 +15,7 @@ import { getTimezoneShortLabel } from "@/lib/availability/timezone";
 import type { LessonDisplayContext } from "@/lib/teacher-lesson-context";
 import { formatDate, formatTime } from "@/lib/utils";
 import { adminLessonStatusLabel } from "./admin-lesson-utils";
+import { TextbookHistory } from "@/components/shared/TextbookHistory";
 
 interface AdminLessonDetailCardProps {
   display: LessonDisplayContext;
@@ -56,13 +57,23 @@ export function AdminLessonDetailCard({ display }: AdminLessonDetailCardProps) {
         <DetailItem icon={GraduationCap} label="영어 레벨">
           {display.englishLevel}
         </DetailItem>
+        <DetailItem icon={User} label="성별">
+          {display.gender === "male"
+            ? "남성"
+            : display.gender === "female"
+              ? "여성"
+              : "—"}
+        </DetailItem>
         <DetailItem icon={Video} label="화상 플랫폼">
           <Badge variant="outline" className="font-mono text-xs">
             {display.videoPlatform}
           </Badge>
         </DetailItem>
         <DetailItem icon={BookOpen} label="교재" className="sm:col-span-2">
-          {display.textbook || "—"}
+          <div>
+            {display.textbook || "—"}
+            <TextbookHistory entries={display.textbookHistory} locale="ko" />
+          </div>
         </DetailItem>
         <DetailItem icon={BookOpen} label="최근 진도">
           {display.lastProgressPages ?? "—"}

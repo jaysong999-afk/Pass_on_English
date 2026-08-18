@@ -12,11 +12,10 @@ import {
 import {
   getVerificationLessons,
   previewBulkHourlyRateUpdate,
-  applyBulkHourlyRateUpdate,
-} from "@/lib/teacher-salary-store";
-import { getAdjustmentsForTeacherMonth } from "@/lib/teacher-salary-adjustment-store";
+} from "@/lib/teacher-salary-store-sync";
+import { getAdjustmentsForTeacherMonth } from "@/lib/teacher-salary-adjustment-store-sync";
 import { addSalaryAdjustmentInDb } from "@/lib/teacher-salary-adjustment-repository";
-import { getSalaryBonusPolicy } from "@/lib/teacher-salary-policy-store";
+import { getSalaryBonusPolicy } from "@/lib/teacher-salary-policy-store-sync";
 import { updateSalaryBonusPolicyInDb } from "@/lib/teacher-salary-policy-repository";
 import {
   currentSalaryMonth,
@@ -92,6 +91,9 @@ export async function PATCH(request: Request) {
       if (!id || !status) {
         return NextResponse.json({ error: "invalid_body" }, { status: 400 });
       }
+      if (!["confirmed", "processing", "paid", "completed"].includes(status)) {
+        return NextResponse.json({ error: "invalid_status" }, { status: 400 });
+      }
       const statement = await updateSalaryStatementStatusInDb(id, status, { paymentDate });
       if (!statement) {
         return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -104,7 +106,8 @@ export async function PATCH(request: Request) {
       if (!teacherId || !month) {
         return NextResponse.json({ error: "invalid_body" }, { status: 400 });
       }
-      const statement = await confirmSalaryStatementInDb(teacherId, month, body.adminConfirmedBy);
+      const adminName = guard.profile.fullName?.trim() || guard.email;
+      const statement = await confirmSalaryStatementInDb(teacherId, month, adminName);
       if (!statement) {
         return NextResponse.json({ error: "month_not_ended_or_not_found" }, { status: 400 });
       }
@@ -199,7 +202,12 @@ export async function PATCH(request: Request) {
       if (preview.hasDifferingRates && !force) {
         return NextResponse.json({ error: "differing_rates", preview }, { status: 409 });
       }
-      applyBulkHourlyRateUpdate(Number(hourlyRatePhp), teacherIds);
+      const { updateTeacherHourlyRatePhpInDb } = await import("@/lib/teachers/repository");
+      await Promise.all(
+        preview.targetIds.map((teacherId) =>
+          updateTeacherHourlyRatePhpInDb(teacherId, Number(hourlyRatePhp))
+        )
+      );
       return NextResponse.json({ ok: true, preview });
     }
 

@@ -1,5 +1,3 @@
-"use client";
-
 import { cn } from "@/lib/utils";
 
 export function SectionHeading({
@@ -8,13 +6,16 @@ export function SectionHeading({
   subtitle,
   align = "center",
   className,
+  level = "h2",
 }: {
   eyebrow?: string;
   title: string;
   subtitle?: string;
   align?: "center" | "left";
   className?: string;
+  level?: "h1" | "h2";
 }) {
+  const Heading = level;
   return (
     <div
       className={cn(
@@ -27,7 +28,7 @@ export function SectionHeading({
           {eyebrow}
         </p>
       )}
-      <h2 className="landing-display text-3xl sm:text-4xl lg:text-[2.75rem]">{title}</h2>
+      <Heading className="landing-display text-3xl sm:text-4xl lg:text-[2.75rem]">{title}</Heading>
       {subtitle && (
         <p className={cn("landing-prose mt-4", align === "center" && "mx-auto")}>{subtitle}</p>
       )}

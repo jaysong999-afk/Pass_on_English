@@ -71,6 +71,7 @@ export function createTeacherProfileFromApplication(
     applicationId,
     profileCompleted: true,
     email: input.email,
+    videoPlatforms: input.videoPlatforms ?? ["ZOOM"],
   });
   setPendingTeacherProfile(teacher);
   return { ...teacher, specialties: [...teacher.specialties] };

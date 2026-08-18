@@ -1,7 +1,7 @@
 import { guardApiRole, isGuardResponse } from "@/lib/auth/api-guard";
 import { NextResponse } from "next/server";
 import { assertLearnerAccess, getAuthContext } from "@/lib/auth/session";
-import { getEnrollmentById } from "@/lib/enrollment-store";
+import { getEnrollmentById } from "@/lib/enrollment-store-sync";
 import {
   cancelEnrollmentHoldInDb,
   confirmEnrollmentPaymentInDb,

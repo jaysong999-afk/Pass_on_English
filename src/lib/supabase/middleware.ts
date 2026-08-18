@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import type { NextRequest, NextResponse } from "next/server";
 
 function supabaseUrl() {
@@ -33,10 +34,15 @@ export async function getMiddlewareAuthUser(request: NextRequest, response: Next
   const bearer = request.headers.get("authorization");
 
   if (bearer?.startsWith("Bearer ")) {
+    const accessToken = bearer.slice(7);
     const {
       data: { user },
-    } = await supabase.auth.getUser(bearer.slice(7));
-    return { supabase, user: user ?? null };
+    } = await supabase.auth.getUser(accessToken);
+    const bearerSupabase = createClient(supabaseUrl(), supabaseAnonKey(), {
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    return { supabase: bearerSupabase, user: user ?? null };
   }
 
   const {

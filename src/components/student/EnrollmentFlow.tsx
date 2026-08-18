@@ -15,7 +15,6 @@ import type { SlotStartTime } from "@/lib/availability/types";
 import { sessionEndTime, slotsForSessionMinutes } from "@/lib/availability/time-utils";
 import { formatPlanLabel } from "@/lib/pricing-plan-display";
 import type { Locale } from "@/lib/i18n/config";
-import { usePricingPlans } from "@/hooks/usePricingPlans";
 import {
   formatScheduleDays,
   formatUnifiedSlotLabel,
@@ -25,7 +24,9 @@ import {
   type TeacherScheduleSlot,
 } from "@/lib/teacher-availability";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { addDaysToDateKey } from "@/lib/contract-schedule";
+import { addDaysToDateKey, computeContractEndDate } from "@/lib/contract-schedule";
+import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
+import { getDateKeyInTimezone } from "@/lib/availability/timezone";
 import { useStudentBasePath } from "@/lib/student-paths";
 import { getStudentTimezone, getTimezoneShortLabel } from "@/lib/availability/timezone";
 import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
@@ -34,15 +35,16 @@ import { TeacherSlotPicker } from "@/components/student/TeacherSlotPicker";
 import { PersonAvatar } from "@/components/shared/PersonAvatar";
 import { PaymentDeadlineCountdown } from "@/components/student/PaymentDeadlineCountdown";
 import { PAYMENT_DISPLAY_HOURS, paymentHoldStartsAt, studentFacingPaymentDeadlineAt } from "@/lib/enrollment-hold/constants";
-import { useTeacherOpenSlots } from "@/hooks/useTeacherOpenSlots";
 import {
-  resolveEnrollmentPath,
   isUpcomingTrial,
   trialLessonEndAt,
-  type EnrollmentPath,
 } from "@/lib/enrollments/trial-path";
+import {
+  useEnrollmentFlowState,
+  type EnrollmentFlowMode,
+} from "@/components/student/enrollment/useEnrollmentFlowState";
 
-type FlowMode = "new" | "renew";
+type FlowMode = EnrollmentFlowMode;
 
 interface EnrollmentFlowProps {
   mode: FlowMode;
@@ -50,90 +52,54 @@ interface EnrollmentFlowProps {
   enrollment?: StudentEnrollment;
 }
 
-interface StudentProfileSummary {
-  fullName: string;
-  englishName: string;
-  trialUsed: boolean;
-}
-
 export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowProps) {
   const t = useTranslations("studentPortal.enrollment");
   const tCommon = useTranslations("studentPortal.common");
   const base = useStudentBasePath();
 
-  const { activeLearner, account } = useActiveLearner();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  const [profile, setProfile] = useState<StudentProfileSummary | null>(null);
-  const [trialScheduledAt, setTrialScheduledAt] = useState<string | null>(null);
-  const [trialDurationMinutes, setTrialDurationMinutes] = useState(20);
-  const [profileLoading, setProfileLoading] = useState(mode === "new");
-  const { plans, loading: plansLoading } = usePricingPlans(true);
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(
-    enrollment?.planId ?? null
-  );
-  const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(
-    enrollment?.teacherId ?? null
-  );
-  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [renewHoldConfirmed, setRenewHoldConfirmed] = useState(false);
   const [timeError, setTimeError] = useState("");
+
+  const {
+    activeLearner,
+    profile,
+    profileLoading,
+    trialScheduledAt,
+    setTrialScheduledAt,
+    trialDurationMinutes,
+    setTrialDurationMinutes,
+    plans,
+    plansLoading,
+    selectedPlanId,
+    setSelectedPlanId,
+    selectedTeacherId,
+    setSelectedTeacherId,
+    selectedSlotId,
+    setSelectedSlotId,
+    selectedPlan,
+    selectedTeacher,
+    selectedSlot,
+    depositorName,
+    enrollmentPath,
+    renewPlan,
+    renewTeacher,
+    renewSlotTime,
+    sortedTeachers,
+    openSlots,
+    loadingTeachers,
+    loadingSlots,
+  } = useEnrollmentFlowState({
+    mode,
+    teachers,
+    enrollment,
+    studentFallback: tCommon("studentFallback"),
+  });
 
   const stepLabels = useMemo(
     () => [t("stepPlan"), t("stepTeacher"), t("stepTime"), t("stepPayment")],
     [t]
   );
-
-  useEffect(() => {
-    if (mode !== "new") return;
-
-    fetch("/api/student/account")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.activeLearner) {
-          const pendingAt = data.activeLearner.trialScheduledAt as string | undefined;
-          const pendingUpcoming = isUpcomingTrial(pendingAt);
-          if (pendingUpcoming && pendingAt) {
-            setTrialScheduledAt(pendingAt);
-            setTrialDurationMinutes(data.activeLearner.trialDurationMinutes ?? 20);
-          }
-          setProfile({
-            fullName: data.activeLearner.fullName,
-            englishName: data.activeLearner.englishName,
-            trialUsed: Boolean(data.activeLearner.trialUsed),
-          });
-        } else {
-          setProfile({ fullName: "", englishName: "", trialUsed: true });
-        }
-      })
-      .catch(() => {
-        setProfile({ fullName: "", englishName: "", trialUsed: true });
-      })
-      .finally(() => setProfileLoading(false));
-  }, [mode]);
-
-  useEffect(() => {
-    if (plans.length === 0 || selectedPlanId) return;
-    setSelectedPlanId(plans[0].id);
-  }, [plans, selectedPlanId]);
-
-  const selectedPlan = plans.find((p) => p.id === selectedPlanId);
-  const selectedTeacher = teachers.find((te) => te.id === selectedTeacherId);
-  const depositorName = account?.fullName ?? profile?.fullName ?? tCommon("studentFallback");
-
-  const { sortedTeachers, openSlots, loadingTeachers, loadingSlots } = useTeacherOpenSlots(
-    teachers,
-    selectedPlan?.scheduleDays,
-    selectedPlan?.sessionMinutes ?? 20,
-    selectedTeacher?.id ?? null
-  );
-
-  const selectedSlot = openSlots.find((s) => s.id === selectedSlotId) ?? null;
-
-  const enrollmentPath: EnrollmentPath = resolveEnrollmentPath({
-    mode,
-    trialUsed: profile?.trialUsed ?? true,
-    pendingTrialScheduledAt: trialScheduledAt,
-  });
 
   const title = mode === "renew" ? t("renewTitle") : t("newTitle");
   const subtitle =
@@ -142,14 +108,6 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
       : enrollmentPath === "trial_first"
         ? t("newSubtitleTrial")
         : t("newSubtitle");
-
-  const renewPlan =
-    mode === "renew" && enrollment ? plans.find((p) => p.id === enrollment.planId) : null;
-  const renewTeacher =
-    mode === "renew" && enrollment
-      ? teachers.find((te) => te.id === enrollment.teacherId)
-      : null;
-  const renewSlotTime = (enrollment?.preferredSlotTime ?? "10:00") as SlotStartTime;
 
   function handlePlanSelect(planId: string) {
     setSelectedPlanId(planId);
@@ -274,6 +232,7 @@ export function EnrollmentFlow({ mode, teachers, enrollment }: EnrollmentFlowPro
           depositorName={depositorName}
           learnerId={activeLearner?.id}
           renewFromEnrollmentId={enrollment.id}
+          renewStartDate={renewStartKey}
           trialBooked={false}
           onBack={() => {}}
           enrollmentHref={`${base}/enrollment`}
@@ -686,6 +645,7 @@ function TimeStep({
   const t = useTranslations("studentPortal.enrollment");
   const tCommon = useTranslations("studentPortal.common");
   const locale = useLocale() as Locale;
+  const { account } = useActiveLearner();
 
   return (
     <div className="space-y-4">
@@ -720,7 +680,7 @@ function TimeStep({
         <p className="text-sm font-medium text-ink-muted">
           {t("selectTime")}{" "}
           <span className="font-normal text-ink-muted/80">
-            ({getTimezoneShortLabel(getStudentTimezone(locale), locale)})
+            ({getTimezoneShortLabel(getStudentTimezone(locale, account?.timezone), locale)})
           </span>
         </p>
         <p className="text-xs text-ink-muted">
@@ -773,6 +733,7 @@ function PaymentStep({
   depositorName,
   learnerId,
   renewFromEnrollmentId,
+  renewStartDate,
   trialBooked,
   trialAlreadyBooked = false,
   trialScheduledAt,
@@ -790,6 +751,7 @@ function PaymentStep({
   depositorName: string;
   learnerId?: string;
   renewFromEnrollmentId?: string;
+  renewStartDate?: string;
   trialBooked: boolean;
   trialAlreadyBooked?: boolean;
   trialScheduledAt?: string | null;
@@ -907,12 +869,23 @@ function PaymentStep({
           slot.startTime as SlotStartTime,
           trialLessonEndAt(trialScheduledAt, trialDurationMinutes)
         )
-      : nextPlanSlotOccurrenceIso(plan.scheduleDays, slot.startTime as SlotStartTime);
+      : nextPlanSlotOccurrenceIso(
+          plan.scheduleDays,
+          slot.startTime as SlotStartTime,
+          renewStartDate ? new Date(`${renewStartDate}T00:00:00+09:00`) : new Date()
+        );
   const paidStartLabel = formatOccurrenceDateTimeRange(
     paidStartIso,
     plan.sessionMinutes,
     locale
   );
+  const paidStartDate = getDateKeyInTimezone(new Date(paidStartIso), CANONICAL_TIMEZONE);
+  const paidEndDate = computeContractEndDate(
+    paidStartDate,
+    plan.sessionsCount,
+    plan.scheduleDays as import("@/lib/availability/types").DayLabel[]
+  );
+  const paidPeriodLabel = `${formatDate(paidStartDate, locale)} — ${formatDate(paidEndDate, locale)}`;
 
   async function handleConfirm() {
     setError("");
@@ -1035,8 +1008,8 @@ function PaymentStep({
           <SummaryRow label={t("trialLessonWhen")} value={trialWhen} />
         )}
         <SummaryRow
-          label={trialPath ? t("paidStartLabel") : t("classStartLabel")}
-          value={paidStartLabel}
+          label={mode === "renew" ? t("coursePeriodLabel") : trialPath ? t("paidStartLabel") : t("classStartLabel")}
+          value={mode === "renew" ? paidPeriodLabel : paidStartLabel}
         />
         <SummaryRow
           label={t("paymentAmountLabel")}

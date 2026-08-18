@@ -8,7 +8,7 @@ import {
   adminRescheduleLesson,
   findAvailableTeachersAt,
 } from "@/lib/admin/lesson-operations-store";
-import { getLessonById } from "@/lib/teacher-lesson-store";
+import { getLessonById } from "@/lib/teacher-lesson-store-sync";
 import { buildLessonDisplayContext } from "@/lib/teacher-lesson-context";
 
 type OperationBody =

@@ -1,6 +1,15 @@
 {
+  "metadata": {
+    "home": { "title": "PassOn English | 每天20分钟一对一外教英语", "description": "与菲律宾英语外教每天进行20分钟一对一视频课程。可先免费试听，再决定是否报名。" },
+    "about": { "title": "服务介绍 | PassOn English", "description": "了解 PassOn English 的教师筛选、课程运营方式与学习管理原则。" },
+    "pricing": { "title": "课程价格 | PassOn English", "description": "查看 PassOn English 一对一视频英语课程与最新价格。" },
+    "teachers": { "title": "英语外教 | PassOn English", "description": "查看 PassOn English 经过筛选的菲律宾英语外教资料。" },
+    "terms": { "title": "服务条款 | PassOn English", "description": "PassOn English 服务使用条款。" },
+    "privacy": { "title": "隐私政策 | PassOn English", "description": "PassOn English 个人信息收集与使用政策。" },
+    "refund": { "title": "课程与退款规则 | PassOn English", "description": "PassOn English 关于上课、缺席、改期与退款的规则。" }
+  },
   "common": {
-    "brand": "Pass on English",
+    "brand": "PassOn English",
     "tagline": "英语外教 1 对 1 在线英语",
     "login": "登录",
     "signup": "注册",
@@ -14,7 +23,12 @@
     "next": "下一步",
     "confirm": "确认",
     "search": "搜索",
-    "viewAll": "查看全部"
+    "viewAll": "查看全部",
+    "menuOpen": "打开菜单",
+    "menuClose": "关闭菜单",
+    "pwaInstallTitle": "添加到主屏幕",
+    "pwaInstallDescription": "像应用一样使用，并及时接收聊天与通知。",
+    "pwaInstallClose": "关闭安装提示"
   },
   "nav": {
     "home": "首页",
@@ -38,14 +52,14 @@
     "trust3": "中韩专属定价"
   },
   "stats": {
-    "teachers": "ESL 专业教师",
-    "teachersValue": "30+",
-    "lessons": "累计 1 对 1 课程",
-    "lessonsValue": "10,000+",
-    "rating": "续报率",
-    "ratingValue": "95%",
-    "countries": "口语自信提升反馈",
-    "countriesValue": "98.5%"
+    "teachers": "经过验证的母语教师",
+    "teachersDesc": "确认经验与授课能力",
+    "schedule": "周一至周五固定日程",
+    "scheduleDesc": "同一时间、同一位老师",
+    "duration": "每次20分钟",
+    "durationDesc": "适合专注的短课",
+    "feedback": "课后学习反馈",
+    "feedbackDesc": "了解学习过程与变化"
   },
   "features": {
     "eyebrow": "为什么选择 Pass on English？",
@@ -55,18 +69,39 @@
       "title": "ESL 经验英语母语教师",
       "desc": "只选用有丰富儿童与成人 ESL 经验的教师。根据会话、自然拼读、商务等目标为您匹配。"
     },
-    "flexible": {
-      "title": "按您的时间预约",
-      "desc": "查看每位教师的可约时段，选择适合的星期与时间。为忙碌的家长和学生而设计。"
+    "consistent": {
+      "title": "每周固定时间见面",
+      "desc": "周一至周五在固定时间与同一位老师上课，让英语成为日常习惯。"
     },
-    "trial": {
-      "title": "首节免费试听",
-      "desc": "每个账户 1 次免费课，先体验教师和上课风格，再决定是否正式报名。"
+    "short": {
+      "title": "每天20分钟，轻松坚持",
+      "desc": "考虑孩子专注力的短课，每天积累开口表达的机会。"
     },
-    "pwa": {
-      "title": "像 App 一样方便",
-      "desc": "添加到主屏幕即可接收上课提醒和教师聊天，无需额外安装应用。"
+    "feedback": {
+      "title": "一起了解孩子的变化",
+      "desc": "记录课程内容和学习状态，让家长能够了解学习进度。"
     }
+  },
+  "teacherTrust": {
+    "eyebrow": "教师筛选与管理",
+    "title": "每天陪伴孩子的老师，我们会更认真地选择",
+    "subtitle": "通过四个步骤确认教师资历与教学质量。",
+    "step1": "确认资历与教学经验",
+    "step2": "英语能力与沟通面试",
+    "step3": "实际授课方式演示",
+    "step4": "定期检查课程质量"
+  },
+  "lessonFlow": {
+    "eyebrow": "20分钟课堂流程",
+    "title": "每天20分钟，这样逐步积累",
+    "subtitle": "复习、充分开口和整理表达，在短课中自然衔接。",
+    "time1": "3分钟",
+    "step1": "问候与复习上节课",
+    "time2": "12分钟",
+    "step2": "围绕今日主题听与说",
+    "time3": "5分钟",
+    "step3": "整理表达并预告下节课",
+    "note": "课程通过 Zoom 进行，日程与教师沟通由 PassOn English 统一管理。"
   },
   "curriculum": {
     "eyebrow": "Curriculum",
@@ -123,7 +158,10 @@
     "krw": "韩元",
     "cny": "元",
     "popular": "最多人选",
-    "cta": "选择此方案"
+    "cta": "免费试听后开始",
+    "loadErrorTitle": "无法加载课程费用信息。",
+    "loadErrorDesc": "请稍后重试或联系客户服务。",
+    "retry": "重试"
   },
   "howItWorks": {
     "eyebrow": "四步开始",
@@ -144,6 +182,7 @@
     "subtitle": "查看履历与专长，为孩子选择最合适的老师。",
     "yearsExp": "年经验",
     "specialties": "专长",
+    "verifiedSoon": "正在准备可公开的已验证教师资料。申请免费试听后，我们会根据学习信息和可用时间为您介绍老师。",
     "cta": "查看更多教师"
   },
   "faq": {
@@ -156,8 +195,18 @@
     "a2": "是的，每个账户提供 1 次免费试听。体验后我们会发送缴费说明，您可自主决定是否继续。",
     "q3": "如何付款？",
     "a3": "目前仅支持银行转账。确认到账后，常规课程将被激活。",
-    "q4": "可以改上课时间吗？",
-    "a4": "可以。学生每月最多 2 次申请改期，教师确认后生效。"
+    "q4": "缺席或无法参加课程时怎么办？",
+    "a4": "改期与补课按照课程规则和申请时间处理。",
+    "q5": "由什么样的老师授课？",
+    "a5": "由通过经验、英语能力、沟通和试讲确认的母语教师授课。",
+    "q6": "每天都是同一位老师吗？",
+    "a6": "常规课程原则上在周一至周五由同一位老师在固定时间授课。",
+    "q7": "如何确认孩子的英语水平？",
+    "a7": "根据注册信息和免费试听课确认当前水平并提出课程建议。",
+    "q8": "在哪里查看节假日、补课和退款规则？",
+    "a8": "可在课程与退款规则页面查看，也可在报名前咨询客服。",
+    "contactPrompt": "没有找到需要的答案？",
+    "contactCta": "联系客户服务"
   },
   "ctaBand": {
     "title": "今天就开始第一节免费课",
@@ -165,11 +214,14 @@
     "button": "开始免费试听"
   },
   "footer": {
-    "tagline": "与英语母语教师一起的 1 对 1 视频英语",
+    "tagline": "每天20分钟，与母语教师进行1对1视频英语",
+    "legal": "条款与政策",
     "terms": "服务条款",
     "privacy": "隐私政策",
+    "refund": "课程与退款规则",
     "contact": "support@passonenglish.com",
-    "copyright": "© 2026 Pass on English. All rights reserved."
+    "businessNotice": "运营主体、负责人、注册信息与地址仅在确认后公布。详情请联系客户服务。",
+    "copyright": "© 2026 PassOn English. All rights reserved."
   },
   "auth": {
     "signupTitle": "学生注册",
@@ -184,13 +236,17 @@
     "hasAccount": "已有账户？"
   },
   "heroVisual": {
+    "imageAlt": "学生在家与英语母语教师进行一对一视频课程",
     "live": "直播中",
     "lessonTitle": "今日课程",
     "teacherName": "Sarah M.",
     "topic": "会话 · 问候",
     "nextLesson": "下一节课",
     "nextTime": "明天 上午 10:00",
-    "freeBadge": "首节免费"
+    "freeBadge": "首节免费",
+    "duration": "20分钟课程",
+    "feedbackLabel": "今日反馈",
+    "feedbackValue": "更自信地表达"
   },
   "about": {
     "eyebrow": "About PassOn",

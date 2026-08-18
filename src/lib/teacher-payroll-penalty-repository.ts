@@ -6,6 +6,9 @@ import {
   setTeacherPayrollPenaltyCache,
   upsertTeacherPayrollPenaltyCache,
 } from "@/lib/teacher-payroll-penalty-cache";
+import { getTeacherLessons } from "@/lib/teacher-lesson-store-sync";
+import { getDateKeyInTimezone } from "@/lib/availability/timezone";
+import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 
 interface TeacherPayrollPenaltyRow {
   id: string;
@@ -86,6 +89,14 @@ export async function revertTeacherNoShowPenaltyInDb(
   month: string,
   reasonMatch?: string
 ): Promise<boolean> {
+  const stillHasNoShow = getTeacherLessons(teacherId).some((lesson) =>
+    lesson.teacherNoShow &&
+    getDateKeyInTimezone(new Date(lesson.scheduledAt), CANONICAL_TIMEZONE).slice(0, 7) === month
+  );
+  // A monthly penalty represents all no-shows in that month. Undoing one
+  // operation must not restore bonuses while another no-show remains.
+  if (stillHasNoShow) return false;
+
   const existing = getTeacherPayrollPenaltyCache().find(
     (p) => p.teacherId === teacherId && p.month === month
   );

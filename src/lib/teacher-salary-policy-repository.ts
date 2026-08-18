@@ -18,10 +18,11 @@ interface SalarySettingsRow {
 }
 
 function rowToPolicy(row: SalarySettingsRow): SalaryBonusPolicyConfig {
+  const monthlyRate = Number(row.monthly_bonus_per_hour_php);
   return {
-    perfectAttendancePerHourPhp: Number(row.monthly_bonus_per_hour_php),
+    perfectAttendancePerHourPhp: monthlyRate,
     perfectAttendanceDescription:
-      "Perfect attendance bonus: ₱25/hr (no unapproved absences or schedule changes)",
+      `Perfect attendance bonus: ₱${monthlyRate}/hr from the month after completing one full month with no unapproved absences or schedule changes`,
     quarterlyPeriodMonths: 3,
     quarterlyTiers: [
       { minHours: row.quarter_bonus_tier1_hours, maxHours: null, amountPhp: Number(row.quarter_bonus_tier1_php) },

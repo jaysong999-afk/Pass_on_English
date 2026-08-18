@@ -1,15 +1,15 @@
 # Pass on English — 데이터베이스 설계 명세서
 
-## 0. MVP 구현 현황 (2026-08)
+## 0. MVP 구현 현황 (2026-08-17)
 
 | 단계 | 상태 | 비고 |
 |------|------|------|
 | 스키마 설계 | ✅ | 본 문서 + `supabase/migrations/` |
 | 통합 DDL | ✅ | `001_initial_schema.sql` — ENUM·테이블 27개·인덱스·FK·트리거·시드 |
-| 추가 migration | ✅ | `002`~`024` — plan_type, FAQ, finance, chat Realtime, **production RLS**, demo seed, **teacher applicant RLS**, **E2E rich seed** |
+| 추가 migration | ✅ | `002`~`035` (`024` 제외) — production RLS, profile/timezone, 정산·트랜잭션 보안, 플랫폼·성별·교재 이력·가입 상세·피드백 스냅샷·분기 보너스 수정 |
 | `pricing_plans` 런타임 | ✅ | `@supabase/ssr` + `pricing-plans/repository.ts` |
 | **핵심 도메인 store → Supabase** | **✅** | repository + sync cache 패턴 — **MVP store 전부 이전 완료** (§0.1) |
-| Auth · RLS | ⚠️ **1차** | migration 017~021 production RLS; middleware + login API; bootstrap service role |
+| Auth · RLS | ✅ | migration 017~022 + 028~029; middleware 기본 거부, 역할·소유권, 열 단위 노출 제한 |
 | Realtime (채팅) | ✅ | `chat_messages` INSERT 구독 — migration 006 |
 
 ### 0.1 Supabase 연동 완료 (repository + cache)
@@ -51,6 +51,8 @@
 | `supabase/migrations/004_profiles_active_student_id.sql` | `profiles.active_student_id` FK → `students` |
 | `supabase/migrations/005_student_registration_reviews.sql` | `student_registration_reviews` + `registration_status` ENUM |
 | `supabase/migrations/006_finance_transactions_chat_realtime.sql` | `finance_transactions` + `chat_messages` Realtime publication |
+
+> 전체 운영 migration 목록은 §8.2가 SSOT다. `024_e2e_rich_seed.sql`은 migration에서 제거하고 `supabase/seeds/e2e_rich_seed.sql`로 이동했다.
 
 store → DB 이전 시 본 문서의 컬럼·ENUM을 migration 기준으로 사용한다.
 
@@ -151,6 +153,8 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | avatar_url | text | nullable |
 | locale | text | ko, zh-CN |
 | account_type | account_type | `self` \| `guardian` — 본인 수강 vs 자녀 관리 |
+| country | text | KR / CN / PH / OTHER — 계정 설정 SSOT |
+| timezone | text | 국가 기본 시간대 자동 매핑, 국가와 분리 저장 |
 | created_at | timestamptz | default now() |
 | updated_at | timestamptz | |
 
@@ -167,7 +171,9 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | full_name | text | 한글/中文 실명 |
 | english_name | text | NOT NULL — 수업·채팅 표시 |
 | date_of_birth | date | NOT NULL |
+| gender | text | nullable — `male` \| `female` |
 | country | country_code | KR / CN (account에서 상속 가능) |
+| video_platforms | video_platform[] | 1~2개, default `{ZOOM}` |
 | english_level | text | CEFR 등 |
 | purposes | text[] | |
 | age_group | text | nullable |
@@ -198,6 +204,7 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | status | teacher_status | default pending |
 | hourly_rate_php | numeric(10,2) | 관리자 설정 시급 (페소) |
 | timezone | text | default 'Asia/Manila' |
+| video_platforms | video_platform[] | 1~2개, default `{ZOOM}` |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -723,8 +730,8 @@ Returns: `base_salary`, `monthly_bonus`, `quarterly_bonus`, `manual_bonus`, `tot
 Logic:
 
 1. `base = total_hours × hourly_rate_php`
-2. `monthly_bonus = IF perfect_attendance THEN total_hours × settings.monthly_bonus_per_hour_php ELSE 0`
-3. `quarterly_bonus` from tier table if quarter end
+2. `monthly_bonus = IF previous_full_month_perfect_attendance AND current_month_not_forfeited THEN total_hours × settings.monthly_bonus_per_hour_php ELSE 0`
+3. `quarterly_bonus`: 대상 월이 종료됐고 교사 가입일부터 정책 기간(기본 3개월)의 전체 월을 충족하며, 기간 중 quarterly reset이 없고 누적 완료 수업시간이 0보다 클 때 tier 적용. 당월 live estimate는 0
 4. `manual = SUM(teacher_bonuses)` for month
 
 ### 5.3 check_student_reschedule_limit()
@@ -735,9 +742,9 @@ Trigger before INSERT on `lesson_reschedule_requests`:
 
 ---
 
-## 6. RLS (production — migration 017~022)
+## 6. RLS·열 보안·원자 처리 (production — migration 017~029)
 
-> §6 예시 SQL은 개발 참고용. **실제 적용 정책**은 `017_production_rls.sql` ~ `022_teacher_application_applicant_read.sql`.
+> §6 예시 SQL은 개발 참고용. 실제 정책은 `017`~`022`, `028`, `029` migration과 Route Handler의 역할·소유권 검증을 함께 따른다.
 
 | Migration | 내용 |
 |-----------|------|
@@ -747,10 +754,22 @@ Trigger before INSERT on `lesson_reschedule_requests`:
 | `020_fix_demo_admin_auth.sql` | demo-admin auth.users 수정 |
 | `021_admin_direct_notification_type.sql` | `notification_type` enum `admin_direct` |
 | `022_teacher_application_applicant_read.sql` | `teacher_applications` SELECT — admin · `teacher_id=auth.uid()` · JWT email match |
+| `028_schema_rls_hardening.sql` | salary 정산 컬럼 제약·FK, 누락 테이블 RLS와 정책 정리 |
+| `029_transaction_and_column_security.sql` | 보강 요청/응답과 급여 정산 RPC, profile private/teacher compensation 열 노출 제한 |
 
 **검증**: `npm run apply:rls` · `npm run test:rls`
 
-### 6.1 예시 (개념)
+### 6.1 원자 처리 경계
+
+| RPC | 보장 |
+|-----|------|
+| `create_lesson_reschedule_request` | pending 중복, 월 제한, lesson 상태 전환과 request 생성을 한 트랜잭션에서 처리 |
+| `respond_lesson_reschedule_request` | pending 조건부 승인·거절·취소와 원 수업 시간/상태 갱신을 원자 처리 |
+| 급여 정산 RPC (migration 029) | statement 상태, 지급 시각·금액과 finance transaction 연결을 중간 실패 없이 반영 |
+
+민감 컬럼은 테이블 전체 SELECT에 의존하지 않고 제한된 view/RPC/명시적 select 및 API DTO로 제공한다. 학생·교사는 다른 사용자의 profile private 열과 교사 시급·정산 열을 직접 읽을 수 없다.
+
+### 6.2 예시 (개념)
 
 ```sql
 -- students: own row
@@ -828,7 +847,18 @@ supabase db push
 | 21 | `021_admin_direct_notification_type.sql` | `admin_direct` notification enum |
 | 22 | `022_teacher_application_applicant_read.sql` | teacher applicant own application SELECT (RLS) |
 | 23 | `023_enrollment_payment_hold.sql` | enrollments `confirmed_at` · `payment_deadline_at` (15시간 홀드) |
-| 24 | `024_e2e_rich_seed.sql` | E2E 통합 테스트 시드 (수강신청·홀드·입금·스케줄·보강·피드백·재수강) |
+| 25 | `025_keep_availability_on_reserve.sql` | 예약 시 weekly availability 행을 삭제하지 않고 점유를 enrollment/lesson으로 표현 |
+| 26 | `026_profile_country_timezone.sql` | `profiles.country`, `profiles.timezone`; 국가와 시간대 분리 |
+| 27 | `027_salary_settlement_persistence.sql` | 급여 정산 전체 상태·지급·환율·원화 이체 필드 영속화 |
+| 28 | `028_schema_rls_hardening.sql` | 정산 무결성·FK와 RLS 보강 |
+| 29 | `029_transaction_and_column_security.sql` | 보강/급여 트랜잭션 RPC와 열 단위 보안 |
+| 30 | `030_video_platform_preferences.sql` | 학생·교사·지원서 ZOOM/VOOV 배열(1~2개) |
+| 31 | `031_student_gender.sql` | 학생 성별(`male`/`female`, nullable) |
+| 32 | `032_teacher_student_textbook_history.sql` | 교재 변경 전 값을 JSONB 이력으로 자동 보관 |
+| 33 | `033_student_registration_review_details.sql` | 가입 검토 카드용 성별·플랫폼·설문/메모 등 상세 필드 |
+| 34 | `034_lesson_feedback_textbook_snapshot.sql` | 피드백에 수업 당시 교재 스냅샷 저장 |
+| 35 | `035_fix_ineligible_live_quarterly_bonus.sql` | live estimate에 잘못 저장된 분기 보너스를 0으로 정리 |
+| E2E seed | `supabase/seeds/e2e_rich_seed.sql` | 운영 migration history와 분리된 통합 테스트 시드 (수강신청·홀드·입금·스케줄·보강·피드백·재수강) |
 
 ### 8.3 `001` 포함 항목 (개념적 순서)
 
@@ -840,7 +870,16 @@ supabase db push
 6. salary·attendance·finance·notifications·admin logs
 7. views, functions, triggers
 
-> RLS 정책은 §6 — **production migration 017~022 적용 완료** (bootstrap service role 경로 별도).
+> RLS·트랜잭션·열 보안은 §6 — **production migration 017~022, 028~029 적용 대상** (bootstrap service role 경로 별도).
+
+### 8.8 migrations 026~035 (계정·운영 확장)
+
+- `country`와 `timezone`은 별도 컬럼이며 UI 국가 선택 시 `account-location.ts`의 기본 timezone 매핑을 저장한다.
+- `video_platforms`는 `video_platform[]`이며 1~2개만 허용한다. 매칭은 학생/교사 배열의 교집합으로 판단한다.
+- 학생 `gender`와 가입 `survey_notes`는 관리자 학생 상세·가입 검토 DTO에 포함하되 비밀번호는 어떤 검토 테이블/API에도 저장·노출하지 않는다.
+- `teacher_student_context.textbook_history`는 교재가 실제로 달라질 때 trigger로 이전 교재와 변경 시각을 보관한다.
+- `lesson_feedbacks.textbook`은 수업 로그에서 과거 교재를 정확히 보여주기 위한 스냅샷이다. `progress_pages`와 함께 학생 상세 수업 로그에 표시한다.
+- migration 035는 데이터 정리이며, 이후 계산 로직도 미종료 월·근속 미충족·0시간인 경우 quarterly bonus를 0으로 계산한다.
 
 ### 8.4 migration 003 (`faq_items`, `dashboard_settings`, `teacher_applications`)
 
@@ -888,7 +927,7 @@ supabase db push
 - `faq_items`: FAQ 10건 (`003`)
 - `teacher_applications`: dev 샘플 1건 (`003`)
 - demo 계정 (`007`/`016`): `demo-student@example.org` / `demo-teacher@example.org` / `demo-admin@example.org` — `DemoPass123!`
-- **E2E 풍부 시드** (`024`, `npm run seed:e2e`) — 모든 레슨·availability·`preferred_slot_time`은 KST **:00/:20/:40** 그리드. 기존 demo 계정은 유지.
+- **E2E 풍부 시드** (`supabase/seeds/e2e_rich_seed.sql`, `npm run seed:e2e`) — 운영 migration과 분리. 모든 레슨·availability·`preferred_slot_time`은 KST **:00/:20/:40** 그리드. 기존 demo 계정은 유지.
 
 | 시나리오 | 로그인 | 상태 |
 |----------|--------|------|

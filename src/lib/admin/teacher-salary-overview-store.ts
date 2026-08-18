@@ -1,12 +1,12 @@
 import type { TeacherSalaryStatement } from "@/types";
-import { getPenaltyForMonth } from "@/lib/teacher-payroll-penalty-store";
-import { getAllTeachers, getTeacherById } from "@/lib/teacher-profile-store";
+import { getPenaltyForMonth } from "@/lib/teacher-payroll-penalty-store-sync";
+import { getAllTeachers, getTeacherById } from "@/lib/teacher-profile-store-sync";
 import {
   getSalaryStatement,
   statementTotal,
   getAllSalaryStatements,
   isSalaryMonthEnded,
-} from "@/lib/teacher-salary-store";
+} from "@/lib/teacher-salary-store-sync";
 import { confirmSalaryStatementInDb } from "@/lib/teacher-salary/repository";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";

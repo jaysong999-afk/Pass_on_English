@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { apiRequest } from "@/lib/api/client";
 
 interface TeacherSessionValue {
   teacherId: string | null;
@@ -34,12 +35,11 @@ export function TeacherSessionProvider({ children }: { children: ReactNode }) {
 
   const refreshSession = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/session");
-      const data = (await res.json()) as {
+      const data = await apiRequest<{
         authenticated?: boolean;
         user?: { id: string };
         profile?: { role?: string; fullName?: string | null };
-      };
+      }>("/api/auth/session");
 
       if (data.authenticated && data.profile?.role === "teacher" && data.user?.id) {
         setValue({

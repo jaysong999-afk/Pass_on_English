@@ -14,6 +14,7 @@ import {
   resolveAdminProfileIdInDb,
 } from "@/lib/admin/resolve-admin-sender";
 import { sendNotificationWithOptionalPushInDb } from "@/lib/notifications/repository";
+import { isDisplayableAvatarUrl } from "@/lib/avatar-display";
 import {
   appendChatMessageToCache,
   getChatMessageMeta,
@@ -70,7 +71,10 @@ async function fetchSenderProfile(
   const supabase = await createClient();
   if (senderRole === "teacher") {
     const teacher = getTeacherFromCache(senderId);
-    if (teacher?.displayName) {
+    // The profile cache can be warm before a teacher uploads a photo. Keep the
+    // cached display name, but fall through to the DB when the avatar is absent
+    // so chat messages immediately reflect the saved profile image.
+    if (teacher?.displayName && isDisplayableAvatarUrl(teacher.avatarUrl)) {
       return { name: teacher.displayName, avatarUrl: teacher.avatarUrl };
     }
     const { data } = await supabase
@@ -80,7 +84,7 @@ async function fetchSenderProfile(
       .maybeSingle();
     const profile = Array.isArray(data?.profiles) ? data.profiles[0] : data?.profiles;
     return {
-      name: data?.display_name?.trim() ?? "Teacher",
+      name: teacher?.displayName ?? data?.display_name?.trim() ?? "Teacher",
       avatarUrl: profile?.avatar_url?.trim() || undefined,
     };
   }
@@ -153,8 +157,11 @@ async function buildChatRoomDto(
 ): Promise<ChatRoom> {
   const teacher = getTeacherFromCache(row.teacher_id);
   const studentName = await fetchStudentDisplayNameInDb(row.student_id, "Student");
-  const teacherName = teacher?.displayName ?? "Teacher";
-  const teacherAvatarUrl = teacher?.avatarUrl;
+  const teacherProfile = isDisplayableAvatarUrl(teacher?.avatarUrl)
+    ? null
+    : await fetchSenderProfile(row.teacher_id, "teacher");
+  const teacherName = teacher?.displayName ?? teacherProfile?.name ?? "Teacher";
+  const teacherAvatarUrl = teacher?.avatarUrl ?? teacherProfile?.avatarUrl;
   const studentAvatarUrl = await fetchStudentAvatarUrlInDb(row.student_id);
 
   const roomMessages = messageRows.filter((m) => m.room_id === row.id);
@@ -334,6 +341,7 @@ export async function ensureTeacherChatRoomInDb(input: {
   teacherName: string;
   studentId: string;
   displayName: string;
+  enrollmentId?: string;
 }): Promise<ChatRoom> {
   void input.teacherName;
   void input.displayName;
@@ -353,8 +361,9 @@ export async function ensureTeacherChatRoomInDb(input: {
       (e) => e.teacherId === teacherId && e.status === "active"
     ) ??
     getEnrollmentsByStudent(input.studentId).find((e) => e.teacherId === teacherId);
+  const enrollmentId = input.enrollmentId ?? enrollment?.id;
 
-  if (!enrollment) {
+  if (!enrollmentId) {
     throw new Error("enrollment_not_found_for_chat");
   }
 
@@ -362,7 +371,7 @@ export async function ensureTeacherChatRoomInDb(input: {
   const { data, error } = await supabase
     .from("chat_rooms")
     .insert({
-      enrollment_id: enrollment.id,
+      enrollment_id: enrollmentId,
       student_id: input.studentId,
       teacher_id: teacherId,
     })
@@ -374,7 +383,7 @@ export async function ensureTeacherChatRoomInDb(input: {
       const { data: existingRoom } = await supabase
         .from("chat_rooms")
         .select(ROOM_SELECT)
-        .eq("enrollment_id", enrollment.id)
+        .eq("enrollment_id", enrollmentId)
         .single();
       if (existingRoom) {
         await warmChatCache();
@@ -392,6 +401,78 @@ export async function ensureTeacherChatRoomInDb(input: {
   const room = await buildChatRoomDto(data as ChatRoomRow, "teacher", messageRows);
   patchChatRoomInCache(room);
   return room;
+}
+
+/** Ensure the student can start a conversation with every currently assigned teacher. */
+export async function ensureStudentTeacherChatRoomsInDb(
+  studentId: string
+): Promise<ChatRoom[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select("id, teacher_id, status")
+    .eq("student_id", studentId)
+    .in("status", ["active", "expiring_soon"])
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`student_chat_enrollments_failed: ${error.message}`);
+
+  const activeEnrollments = data ?? [];
+  const rooms: ChatRoom[] = [];
+  const teacherIds = new Set<string>();
+
+  for (const enrollment of activeEnrollments) {
+    if (teacherIds.has(enrollment.teacher_id)) continue;
+    teacherIds.add(enrollment.teacher_id);
+    const teacher = getTeacherFromCache(enrollment.teacher_id);
+    rooms.push(
+      await ensureTeacherChatRoomInDb({
+        teacherId: enrollment.teacher_id,
+        teacherName: teacher?.displayName ?? "Teacher",
+        studentId,
+        displayName: teacher?.displayName ?? "Teacher",
+        enrollmentId: enrollment.id,
+      })
+    );
+  }
+
+  return rooms;
+}
+
+/** Ensure a teacher can start a conversation with every currently enrolled student. */
+export async function ensureTeacherStudentChatRoomsInDb(
+  teacherId: string
+): Promise<ChatRoom[]> {
+  const resolvedTeacherId = resolveTeacherId(teacherId);
+  if (!resolvedTeacherId) throw new Error("teacher_not_found");
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select("id, student_id, status")
+    .eq("teacher_id", resolvedTeacherId)
+    .in("status", ["active", "expiring_soon"])
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`teacher_chat_enrollments_failed: ${error.message}`);
+
+  const rooms: ChatRoom[] = [];
+  const studentIds = new Set<string>();
+  const teacher = getTeacherFromCache(resolvedTeacherId);
+  for (const enrollment of data ?? []) {
+    if (studentIds.has(enrollment.student_id)) continue;
+    studentIds.add(enrollment.student_id);
+    const studentName = await fetchStudentDisplayNameInDb(enrollment.student_id, "Student");
+    rooms.push(
+      await ensureTeacherChatRoomInDb({
+        teacherId: resolvedTeacherId,
+        teacherName: teacher?.displayName ?? "Teacher",
+        studentId: enrollment.student_id,
+        displayName: studentName,
+        enrollmentId: enrollment.id,
+      })
+    );
+  }
+
+  return rooms;
 }
 
 export async function sendChatMessageInDb(input: {

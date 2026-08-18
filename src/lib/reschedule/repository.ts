@@ -8,11 +8,9 @@ import { isTeacherSlotFree } from "@/lib/lessons/schedule-service";
 import { restoreOccupiedWeeklyAvailabilityInDb } from "@/lib/teacher-availability/repository";
 import {
   getLessonById,
-  updateLessonStatusInDb,
   warmLessonCache,
 } from "@/lib/lessons/repository";
 import {
-  getRescheduleCache,
   patchRescheduleInCache,
   setRescheduleCache,
 } from "@/lib/reschedule/reschedule-cache";
@@ -27,6 +25,12 @@ import {
   getStudentRescheduleRemaining,
   getActiveRescheduleRequests,
 } from "@/lib/reschedule-store-sync";
+import {
+  studentNameFromDb,
+  teacherNameFromDb,
+  type StudentNameDbJoin,
+  type TeacherNameDbJoin,
+} from "@/lib/db/join-types";
 
 interface RescheduleRow {
   id: string;
@@ -41,8 +45,8 @@ interface RescheduleRow {
   request_month: string;
   responded_at: string | null;
   created_at: string;
-  teacher?: { display_name: string | null } | null;
-  student?: { english_name: string | null; full_name: string | null } | null;
+  teacher?: TeacherNameDbJoin | null;
+  student?: StudentNameDbJoin | null;
 }
 
 const RESCHEDULE_SELECT = `
@@ -62,18 +66,14 @@ const RESCHEDULE_SELECT = `
   student:students!lesson_reschedule_requests_student_id_fkey(english_name, full_name)
 `;
 
-function studentName(row: RescheduleRow): string {
-  return row.student?.english_name?.trim() || row.student?.full_name?.trim() || "Student";
-}
-
 function rowToRequest(row: RescheduleRow, names?: { teacherName?: string; studentName?: string }): LessonRescheduleRequest {
   return {
     id: row.id,
     lessonId: row.lesson_id,
     teacherId: row.teacher_id,
-    teacherName: names?.teacherName ?? row.teacher?.display_name?.trim() ?? "Teacher",
+    teacherName: names?.teacherName ?? teacherNameFromDb(row.teacher),
     studentId: row.student_id,
-    studentName: names?.studentName ?? studentName(row),
+    studentName: names?.studentName ?? studentNameFromDb(row.student, "Student"),
     originalScheduledAt: row.original_scheduled_at,
     proposedScheduledAt: row.proposed_scheduled_at,
     reason: row.reason ?? undefined,
@@ -91,6 +91,15 @@ function monthKey(date = new Date()): string {
 
 function activeStatuses(): RescheduleRequestStatus[] {
   return ["pending_student_approval", "pending_teacher_approval"];
+}
+
+function rescheduleRpcError(error: { message: string }): string | null {
+  const known = [
+    "lesson_not_found", "lesson_not_eligible", "forbidden", "pending_request_exists",
+    "slot_unavailable", "monthly_limit_reached", "not_found", "not_pending",
+    "not_awaiting_student", "not_awaiting_teacher", "not_initiator", "invalid_action",
+  ];
+  return known.find((code) => error.message.includes(code)) ?? null;
 }
 
 async function fetchRescheduleRows(): Promise<RescheduleRow[]> {
@@ -189,30 +198,25 @@ export async function createRescheduleRequestInDb(
       : "pending_teacher_approval";
 
   const supabase = await createClient();
+  void status;
   const { data, error } = await supabase
-    .from("lesson_reschedule_requests")
-    .insert({
-      lesson_id: lesson.id,
-      teacher_id: lesson.teacherId,
-      student_id: lesson.studentId,
-      initiator: input.initiator,
-      original_scheduled_at: lesson.scheduledAt,
-      proposed_scheduled_at: proposedScheduledAt,
-      status,
-      reason: input.reason?.trim() || null,
-      request_month: requestMonth,
+    .rpc("create_lesson_reschedule_request", {
+      p_lesson_id: lesson.id,
+      p_proposed_scheduled_at: proposedScheduledAt,
+      p_reason: input.reason?.trim() || "",
+      p_initiator: input.initiator,
+      p_request_month: requestMonth,
     })
-    .select(RESCHEDULE_SELECT)
     .single();
 
   if (error) {
     if (error.message.includes("Student reschedule limit exceeded")) {
       return { error: "monthly_limit_reached" };
     }
+    const code = rescheduleRpcError(error);
+    if (code) return { error: code };
     throw new Error(`reschedule_create_failed: ${error.message}`);
   }
-
-  await updateLessonStatusInDb(lesson.id, "reschedule_pending");
 
   const request = rowToRequest(data as unknown as RescheduleRow, {
     teacherName: lesson.teacherName,
@@ -251,15 +255,14 @@ export async function approveRescheduleRequestInDb(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("lesson_reschedule_requests")
-    .update({
-      status: "approved",
-      responded_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  const { error } = await supabase.rpc("respond_lesson_reschedule_request", {
+    p_request_id: id,
+    p_action: "approve",
+  });
 
   if (error) {
+    const code = rescheduleRpcError(error);
+    if (code) return { error: code };
     throw new Error(`reschedule_approve_failed: ${error.message}`);
   }
 
@@ -285,19 +288,17 @@ export async function rejectRescheduleRequestInDb(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("lesson_reschedule_requests")
-    .update({
-      status: "rejected",
-      responded_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  const { error } = await supabase.rpc("respond_lesson_reschedule_request", {
+    p_request_id: id,
+    p_action: "reject",
+  });
 
   if (error) {
+    const code = rescheduleRpcError(error);
+    if (code) return { error: code };
     throw new Error(`reschedule_reject_failed: ${error.message}`);
   }
-
-  await updateLessonStatusInDb(current.lessonId, "scheduled");
+  await warmLessonCache();
   await warmRescheduleCache();
   return { request: getRescheduleRequestById(id) };
 }
@@ -318,15 +319,14 @@ export async function adminApproveRescheduleRequestInDb(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("lesson_reschedule_requests")
-    .update({
-      status: "approved",
-      responded_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  const { error } = await supabase.rpc("respond_lesson_reschedule_request", {
+    p_request_id: id,
+    p_action: "approve",
+  });
 
   if (error) {
+    const code = rescheduleRpcError(error);
+    if (code) return { error: code };
     throw new Error(`reschedule_admin_approve_failed: ${error.message}`);
   }
 
@@ -345,19 +345,17 @@ export async function adminRejectRescheduleRequestInDb(
   if (!activeStatuses().includes(current.status)) return { error: "not_pending" };
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("lesson_reschedule_requests")
-    .update({
-      status: "rejected",
-      responded_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  const { error } = await supabase.rpc("respond_lesson_reschedule_request", {
+    p_request_id: id,
+    p_action: "reject",
+  });
 
   if (error) {
+    const code = rescheduleRpcError(error);
+    if (code) return { error: code };
     throw new Error(`reschedule_admin_reject_failed: ${error.message}`);
   }
-
-  await updateLessonStatusInDb(current.lessonId, "scheduled");
+  await warmLessonCache();
   await warmRescheduleCache();
   return { request: getRescheduleRequestById(id) };
 }
@@ -374,19 +372,17 @@ export async function cancelRescheduleRequestInDb(
   if (current.initiator !== role) return { error: "not_initiator" };
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("lesson_reschedule_requests")
-    .update({
-      status: "cancelled",
-      responded_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  const { error } = await supabase.rpc("respond_lesson_reschedule_request", {
+    p_request_id: id,
+    p_action: "cancel",
+  });
 
   if (error) {
+    const code = rescheduleRpcError(error);
+    if (code) return { error: code };
     throw new Error(`reschedule_cancel_failed: ${error.message}`);
   }
-
-  await updateLessonStatusInDb(current.lessonId, "scheduled");
+  await warmLessonCache();
   await warmRescheduleCache();
   return { request: getRescheduleRequestById(id) };
 }

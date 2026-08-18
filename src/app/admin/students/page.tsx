@@ -104,6 +104,7 @@ export default function AdminStudentsPage() {
           <TableRow>
             <TableHead>이름</TableHead>
             <TableHead>국가</TableHead>
+            <TableHead>성별</TableHead>
             <TableHead>플랜</TableHead>
             <TableHead>선생님</TableHead>
             <TableHead>잔여 수업</TableHead>
@@ -123,6 +124,7 @@ export default function AdminStudentsPage() {
                   )}
                 </TableCell>
                 <TableCell>{student.country}</TableCell>
+                <TableCell>{student.gender === "male" ? "남성" : student.gender === "female" ? "여성" : "—"}</TableCell>
                 <TableCell>{student.planLabel ?? "—"}</TableCell>
                 <TableCell>{student.teacherName ?? "—"}</TableCell>
                 <TableCell className="tabular-nums font-medium">

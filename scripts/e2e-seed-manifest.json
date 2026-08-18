@@ -1,5 +1,5 @@
 {
-  "seededAt": "2026-08-14T11:51:50.111Z",
+  "seededAt": "2026-08-16T08:37:22.365Z",
   "password": "DemoPass123!",
   "scenarios": {
     "enrollment": {
@@ -20,7 +20,7 @@
     },
     "renewal": {
       "email": "e2e-student-renew@example.org",
-      "note": "가장 최근 지난 평일 10:00–10:20 종료 후 12h/15h 재수강 창구 (James 10:00 홀드)"
+      "note": "최근 완료 수업 직후 12h/15h 재수강 창구 (James 10:00 정규 슬롯 홀드)"
     },
     "guardianSibling": {
       "email": "e2e-student-guardian@example.org",

@@ -31,15 +31,22 @@ function formatMonthLabel(month: string, locale: string) {
   }).format(date);
 }
 
+function localizeFeedbackTopic(topic: string | null | undefined, adminScheduleLabel: string) {
+  return topic === "관리자 일정 변경" ? adminScheduleLabel : topic;
+}
+
 function FeedbackCard({
   item,
   onOpen,
+  locale,
 }: {
   item: LessonFeedback;
   onOpen: () => void;
+  locale: string;
 }) {
   const t = useTranslations("studentPortal.learning");
   const isNew = !item.readAt;
+  const topic = localizeFeedbackTopic(item.topic, t("adminScheduleChange"));
 
   return (
     <button
@@ -56,10 +63,10 @@ function FeedbackCard({
             )}
           </div>
           <p className="mt-1 text-sm text-ink-muted">
-            {formatDate(item.lessonDate)} · {formatTime(item.lessonDate)}
+            {formatDate(item.lessonDate, locale)} · {formatTime(item.lessonDate, locale)}
           </p>
-          {item.topic && (
-            <p className="mt-1 text-xs font-medium text-brand-600">{item.topic}</p>
+          {topic && (
+            <p className="mt-1 text-xs font-medium text-brand-600">{topic}</p>
           )}
         </div>
       </div>
@@ -219,7 +226,7 @@ export function LearningResultsHub() {
             />
           ) : (
             feedbacks.map((item) => (
-              <FeedbackCard key={item.id} item={item} onOpen={() => openFeedback(item)} />
+              <FeedbackCard key={item.id} item={item} locale={locale} onOpen={() => openFeedback(item)} />
             ))
           )}
         </TabsContent>
@@ -254,13 +261,15 @@ export function LearningResultsHub() {
               <DialogHeader>
                 <DialogTitle className="pr-8">{t("feedbackDetail")}</DialogTitle>
                 <p className="text-sm text-ink-muted">
-                  {formatDate(selectedFeedback.lessonDate)}{" "}
-                  {formatTime(selectedFeedback.lessonDate)} · {selectedFeedback.teacherName}
+                  {formatDate(selectedFeedback.lessonDate, locale)}{" "}
+                  {formatTime(selectedFeedback.lessonDate, locale)} · {selectedFeedback.teacherName}
                 </p>
               </DialogHeader>
               <div className="space-y-4">
                 {selectedFeedback.topic && (
-                  <Badge variant="secondary">{selectedFeedback.topic}</Badge>
+                  <Badge variant="secondary">
+                    {localizeFeedbackTopic(selectedFeedback.topic, t("adminScheduleChange"))}
+                  </Badge>
                 )}
                 <div className="rounded-xl bg-brand-50/60 p-4">
                   <p className="text-sm font-semibold text-brand-800">{t("teacherComment")}</p>

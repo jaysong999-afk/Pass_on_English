@@ -1,7 +1,7 @@
 import { getAllFinanceTransactionsFromCache } from "@/lib/finance/repository";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
-import { getAllLessons } from "@/lib/teacher-lesson-store";
+import { getAllLessons } from "@/lib/teacher-lesson-store-sync";
 import { getAdminReviewSnapshot } from "@/lib/admin/admin-review-store";
 import { getAdminStudentListItems } from "@/lib/admin/student-overview-store";
 import { getAdminTeacherSummaryCounts } from "@/lib/admin/teacher-overview-store";
@@ -9,7 +9,7 @@ import { getAdminTeacherSummaryCounts } from "@/lib/admin/teacher-overview-store
 export interface AdminDashboardStats {
   todayLessonTotal: number;
   todayLessonCompleted: number;
-  approvalPending: number;
+  actionRequired: number;
   activeStudentCount: number;
   activeTeacherCount: number;
   totalRevenueKrw: number;
@@ -17,8 +17,8 @@ export interface AdminDashboardStats {
 
 export function getAdminDashboardStats(now = new Date()): AdminDashboardStats {
   const snapshot = getAdminReviewSnapshot();
-  const approvalPending =
-    snapshot.reschedule.length +
+  const actionRequired =
+    snapshot.rescheduleAttentionCount +
     snapshot.teacherApplications.length +
     snapshot.studentRegistrations.length +
     snapshot.paymentEnrollments.length;
@@ -33,7 +33,7 @@ export function getAdminDashboardStats(now = new Date()): AdminDashboardStats {
   return {
     todayLessonTotal: todayLessons.length,
     todayLessonCompleted: todayLessons.filter((l) => l.status === "completed").length,
-    approvalPending,
+    actionRequired,
     activeStudentCount: getAdminStudentListItems("active").length,
     activeTeacherCount: getAdminTeacherSummaryCounts().active,
     totalRevenueKrw: getAllFinanceTransactionsFromCache()

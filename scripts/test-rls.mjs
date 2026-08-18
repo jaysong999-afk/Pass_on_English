@@ -138,6 +138,24 @@ async function main() {
     return { note: `teacher=${data[0].id}` };
   });
 
+  await test("anon reads only public teacher profile fields", async () => {
+    const { data: publicProfile, error: publicError } = await anon
+      .from("profiles")
+      .select("id, full_name, avatar_url")
+      .eq("id", manifest.teacher.userId)
+      .maybeSingle();
+    if (publicError) throw new Error(publicError.message);
+    if (!publicProfile) throw new Error("active teacher public profile is unavailable");
+
+    const { error: privateError } = await anon
+      .from("profiles")
+      .select("phone")
+      .eq("id", manifest.teacher.userId)
+      .maybeSingle();
+    if (!privateError) throw new Error("anon can select a private profile column");
+    return { note: "phone blocked" };
+  });
+
   await test("anon can read teacher availability (public)", async () => {
     const { data, error } = await anon
       .from("teachers_weekly_availability")
@@ -166,6 +184,23 @@ async function main() {
     return { note: data.english_name };
   });
 
+  await test("student cannot promote own profile role", async () => {
+    const { error: updateError } = await studentDb
+      .from("profiles")
+      .update({ role: "admin" })
+      .eq("id", manifest.student.userId);
+    if (!updateError) throw new Error("student role update unexpectedly succeeded");
+
+    const { data, error } = await studentDb
+      .from("profiles")
+      .select("role")
+      .eq("id", manifest.student.userId)
+      .single();
+    if (error) throw new Error(error.message);
+    if (data.role !== "student") throw new Error(`student role changed to ${data.role}`);
+    return { note: "role remains student" };
+  });
+
   await test("student cannot read admin_broadcasts", async () => {
     const { data, error } = await studentDb.from("admin_broadcasts").select("id").limit(1);
     if (error) throw new Error(error.message);
@@ -190,6 +225,22 @@ async function main() {
       .limit(5);
     if (error) throw new Error(error.message);
     return { note: `rows=${data?.length ?? 0}` };
+  });
+
+  await test("teacher cannot read or change own hourly rate directly", async () => {
+    const { error: readError } = await teacherDb
+      .from("teachers")
+      .select("hourly_rate_php")
+      .eq("id", manifest.teacher.userId)
+      .single();
+    if (!readError) throw new Error("teacher hourly-rate column read unexpectedly succeeded");
+
+    const { error: updateError } = await teacherDb
+      .from("teachers")
+      .update({ hourly_rate_php: 999 })
+      .eq("id", manifest.teacher.userId);
+    if (!updateError) throw new Error("teacher hourly-rate update unexpectedly succeeded");
+    return { note: "hourly_rate_php blocked" };
   });
 
   await test("teacher can upsert own push subscription", async () => {

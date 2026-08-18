@@ -113,7 +113,7 @@ export default function LoginPage() {
           </CardContent>
         </Card>
       </main>
-      <LandingFooter />
+      <LandingFooter locale={locale} />
     </div>
   );
 }

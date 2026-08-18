@@ -49,8 +49,7 @@ export function countStudentRescheduleRequestsThisMonth(
       r.studentId === studentId &&
       r.initiator === "student" &&
       r.requestMonth === month &&
-      r.status !== "cancelled" &&
-      r.status !== "rejected"
+      r.status !== "cancelled"
   ).length;
 }
 

@@ -11,7 +11,7 @@
 | **DB 상세** | 컬럼·ENUM·인덱스는 [`db.md`](./db.md)를 SSOT로 따른다. 본 문서는 **UI가 실제로 쓰는 테이블·필드**만 강조한다 |
 | **목표 스택** | Next.js Route Handlers + Supabase PostgreSQL + Auth + (선택) Realtime |
 
-> **현재 (2026-08)**: Route Handler **57+**개 + **Supabase PostgreSQL 데이터 레이어** — UI 연동 MVP store **전부** repository + sync cache 패턴으로 이전 완료. **Auth·RLS 1차 연동** (middleware, `/api/auth/*`, migration 017~021, `npm run test:rls` 16/16). **잔여**: 선생님 `CURRENT_TEACHER_ID` 하드코딩, 학생 logout·API 전면 보호, pricing admin middleware.
+> **현재 (2026-08-17)**: Route Handler **60+**개 + Supabase PostgreSQL 데이터 레이어. 세 역할의 세션 UUID 바인딩, API **기본 거부(default deny)**, 열 단위 DTO 제한, RLS·트랜잭션 보강을 완료했다. 운영 migration은 `001`~`035`이며 E2E 시드는 `supabase/seeds/`로 분리한다.
 
 ---
 
@@ -26,9 +26,9 @@
 | **관리자** | `/admin/*` | `/api/admin/*`, `/api/enrollments/*`, `/api/teachers/profile`, `/api/pricing-plans`, `/api/admin/finance/transactions` |
 | **공개** | `/[locale]`, `/[locale]/pricing` | `/api/teachers/public`, `/api/pricing-plans`, `/api/faq` |
 
-### 1.2 Store → DB 이전 현황
+### 1.2 데이터 계층 현황
 
-**패턴**: `*/repository.ts` (server-only Supabase CRUD + `warm*Cache`) → `*-cache.ts` → `*-store-sync.ts` (클라이언트 안전 읽기) → `*-store.ts` (re-export). API Route는 `ensureSchedulesBootstrapped()` 후 `*InDb` / sync store 사용.
+**패턴**: 상태 변경은 Route Handler → server-only `*/repository.ts` → Supabase로 직접 흐른다. cache/store-sync는 기존 동기 도메인 계산과 bootstrap 읽기를 위한 호환 계층으로 제한하며, 삭제된 legacy `*-store.ts`에 새 write 로직을 추가하지 않는다. 읽기 bootstrap과 상태 변경 작업은 분리한다.
 
 | store / 모듈 | DB 테이블 (목표) | 연동 상태 | UI에서 쓰는 기능 |
 |--------------|------------------|-----------|------------------|
@@ -61,13 +61,11 @@
 | `admin/admin-review-log-repository.ts` | `admin_review_logs` | **✅ Supabase** | 검토 처리 로그 |
 | `student-registrations/repository.ts` | `student_registration_reviews` | **✅ Supabase** | 학생 가입 검토 큐·confirm/reject |
 | `admin/student-registration-store-sync.ts` | ↑ (cache) | ✅ | 클라이언트·API sync 읽기 |
-| `admin/student-registration-store.ts` | ↑ (re-export) | ✅ | 하위 호환 re-export |
 | `chat/repository.ts` | `chat_rooms`, `chat_messages` | **✅ Supabase** | 방 목록·unread·ensure room·메시지 CRUD |
 | `chat-store-sync.ts` | ↑ (cache) | ✅ | sync 읽기 |
 | `chat-store.ts` | — | ✅ | href helpers (클라이언트 안전) |
 | `finance/repository.ts` | `finance_transactions`, `finance_snapshots` | **✅ Supabase** | 급여 paid·입금 확인 시 정산 기록 |
 | `finance-store-sync.ts` | ↑ (cache) | ✅ | 재무 대시보드 sync 읽기 |
-| `finance/payroll-finance-store.ts` | ↑ (re-export) | ✅ | 하위 호환 re-export |
 
 ---
 
@@ -77,7 +75,7 @@
 
 | 항목 | 현재 상태 | 비고 |
 |------|-----------|------|
-| Zoom / VOOV / 화상 SDK | `videoPlatform` 필드만 | URL·미팅 생성 없음 |
+| Zoom / VOOV / 화상 SDK | 학생·교사 복수 선호와 매칭은 구현; 외부 SDK·미팅 생성 없음 |
 | PG·카드·위챗페이 | 입금 **신고** + 관리자 **수동 확인**만 | |
 | SMS OTP | 없음 | 이메일 Auth만 (연동 전) |
 | 채팅 Realtime | ✅ (migration 006) | `useChatRealtime` — `chat_messages` INSERT |
@@ -86,7 +84,7 @@
 | 관리자 **메시지 · CS** | `/api/admin/messages/*` ✅ | direct·broadcast·campaigns·notification-rules(저장만) |
 | 관리자 **자동 시스템 알림** | 규칙 DB 저장 ✅ · **발송 엔진 제외** | cron/Edge 자동 발송 미구현 |
 | `GET /api/admin/finance/summary` | — | `/api/admin/finance/transactions` 사용 |
-| 선생님 **자기 프로필 수정** | `/teacher/profile` → redirect | 관리자만 CRUD |
+| 선생님 **자기 프로필 수정** | ✅ `/teacher/profile`, `/api/teacher/settings*` | 허용 DTO만 수정; 시급·법적 정보 제외 |
 | `teacher_availability_exceptions` | UI 없음 | 휴무는 슬롯 Off로 대체 |
 | Edge Function cron (급여 자동 정산 등) | UI 수동 확정 | cron은 Phase 3 |
 
@@ -102,16 +100,16 @@
   └── Route Handlers (/api/*)  ← 본 명세 SSOT
         ↓
 [Supabase]
-  ├── PostgreSQL (migration 001~021)
-  ├── `@supabase/ssr` createClient (Route Handler CRUD)
-  ├── repository + sync cache (ensureSchedulesBootstrapped)
-  ├── Auth (profiles.role) — 미연동
+  ├── PostgreSQL (migration 001~035)
+  ├── `@supabase/ssr` request client + service/bootstrap client 분리
+  ├── repository writes + 제한된 bootstrap/cache reads
+  ├── Auth (profiles.role) + middleware default-deny + RLS
   └── Realtime — `chat_messages` ✅
 ```
 
 - 별도 Express/Nest 서버 **없음**
-- `pricing_plans` 및 핵심 도메인 CRUD: Route Handler → `*/repository.ts` → Supabase (anon key, **RLS 미적용 시 주의**)
-- Service Role Key: 향후 admin-only mutation·RLS bypass용 (현재 pricing CRUD는 `@supabase/ssr` 사용)
+- 핵심 도메인 CRUD: Route Handler → 역할/소유권 검증 → `*/repository.ts` → Supabase
+- request client는 사용자 JWT와 RLS를 적용하고, service/bootstrap client는 명시된 서버 작업에만 제한한다.
 
 ---
 
@@ -125,7 +123,7 @@
 | `/teacher/*` | `teacher` + `teachers.status=active` | en |
 | `/admin/*` | `admin` | ko |
 
-### 4.2 Supabase Auth (연동 완료 — 1차)
+### 4.2 Supabase Auth (연동 완료)
 
 | 항목 | 구현 |
 |------|------|
@@ -140,16 +138,17 @@
 - **선생님 가입**: Step1 `POST /api/teacher/applications` (signUp) → Step2 `POST /api/teachers/profile` (teacher auth) → 검토 센터 `teacher_signup`
 - **pending 선생님**: `/teacher/*` 차단, login `teacher_not_active`, `/teacher/signup/complete` 안내
 
-### 4.3 API 인증 (1차 — middleware + 선택적 guard)
+### 4.3 API 인증 (기본 거부 + route ownership)
 
 | 구분 | 경로 / 동작 |
 |------|-------------|
 | Public | `/api/health`, `/api/teachers/public`, `/api/pricing-plans`(GET), `/api/faq`, `POST /api/teacher/applications`, `/api/auth/login` |
 | Teacher signup step2 | `POST /api/teachers/profile` — teacher role Bearer |
 | Teacher application read | `GET /api/teacher/applications?id=` — teacher (본인) 또는 admin |
-| Middleware 보호 | `/api/admin/*`, `/api/teacher/*` (대부분) — session + role |
-| Route Handler guard | `guardApiRole('admin')` 등 — `confirm_payment`, admin messages 등 일부 |
-| **미보호 (잔여)** | `/api/enrollments`(GET), `/api/learning/*`, `/api/pricing-plans`(POST/PATCH/DELETE) — middleware 미적용 |
+| Middleware 보호 | 공개 allowlist 외 모든 `/api/*`; admin/teacher/student·공용 도메인별 허용 역할 명시 |
+| Route Handler 검증 | `guardApiRole`/`requireRole` + learner·teacher·room·lesson 소유권 확인 |
+| 기본 거부 | `requiredRolesForApi()`에 분류되지 않은 API는 `[]`을 반환해 인증 여부와 무관하게 거부 |
+| 공개 예외 | health, auth, 공개 FAQ/교사/요금 GET, 가입 POST, teacher-slots GET, cron-secret 경로 등 명시 allowlist |
 
 > **DB 클라이언트**: 요청 컨텍스트는 `createRequestDbClient()` (RLS 적용). bootstrap cache warm·admin mutation은 `createBootstrapDbClient()` / `createServiceDbClient()` (`src/lib/supabase/db-client.ts`).
 
@@ -159,7 +158,7 @@
 
 > **범례**: ✅ Route Handler 구현 · 🗄️ Supabase 연동 · ⚠️ DDL 미포함(in-memory) · 🔇 UI 미호출
 
-**집계**: Route Handler **57+**개 · 프론트 `fetch('/api/…')` **고유 경로 ~40** · DDL migration **001~021** · **MVP store 전부 Supabase**
+**집계**: Route Handler **60+**개 · DDL migration **001~035** · 핵심 도메인 Supabase 연동 · API 기본 거부 적용
 
 ### 5.1 Public · 공통
 
@@ -188,11 +187,13 @@
 
 | Method | Path | UI | DB (목표) | Body / Query |
 |--------|------|-----|-----------|--------------|
-| POST | `/api/student/account` | signup | `profiles`, `students` | `accountType`, `fullName`, `email`, `phone`, `country`, learner fields |
+| POST | `/api/student/account` | signup | `profiles`, `students`, registration review | account holder + learner 이름/생년월일/성별, `country`, `videoPlatforms`, 설문·기타메모; password는 Auth에만 전달 |
 | GET | `/api/student/account` | 전역 `ActiveLearnerContext` | ↑ | `{ account, learners[], activeLearnerId }` |
 | PATCH | `/api/student/account` | `switch_learner`, **book_trial** | ↑ + `lessons` | `action` 또는 survey fields |
-| POST | `/api/student/learners` | `/student/learners/new` | `students` | `fullName`, `englishName`, `dateOfBirth` |
+| POST | `/api/student/learners` | `/student/learners/new` | `students` | `fullName`, `englishName`, `dateOfBirth`, `gender`, `videoPlatforms` |
 | PATCH | `/api/student/profile` | onboarding, `EnrollmentFlow` trial | ↑ | **deprecated** — `account`와 동일 계약, 신규 코드는 `account` 사용 |
+| PATCH | `/api/student/settings/profile` | 내 정보 관리 | `profiles`, `students` | 변경된 phone/country 및 learner English Name·videoPlatforms만 수정 |
+| POST | `/api/student/settings/password` | 계정 보안 | Supabase Auth | 현재 비밀번호 재인증 후 새 비밀번호 변경 |
 
 **`book_trial` (PATCH account 또는 profile)**
 
@@ -253,15 +254,19 @@
 | GET | `/api/teacher/lessons` | My Lessons, Schedule, student hub | `lessons` | default hub; `scope=all`; `scope=student&studentId=`; `timeZone` |
 | GET | `/api/teacher/lessons/[id]` | lesson detail, feedback | ↑ + `lesson_feedbacks` | `{ lesson, display, needsFeedback, feedback }` |
 | PATCH | `/api/teacher/lessons/[id]` | feedback page absent | `lessons` | `mark_student_absent` |
-| GET/PUT | `/api/teacher/student-context` | `TeacherLessonDetailCard` | `teacher_student_context` | `studentId`, `teacherId`; PUT: textbook, videoPlatform, specialNotes |
-| GET | `/api/teacher/salary` | `TeacherSalaryDashboard` | `teacher_salary_statements`, `salary_settings` | `teacherId`; `month` → 단월 명세 |
+| GET/PUT | `/api/teacher/student-context` | `TeacherLessonDetailCard` | `teacher_student_context` | 본인 teacherId로 강제; textbook 변경 이력·videoPlatform·specialNotes |
+| GET | `/api/teacher/salary` | `TeacherSalaryDashboard` | `teacher_salary_statements`, `salary_settings` | 세션 교사 단월 명세; live estimate는 완료 수업만 계산 |
+| GET/PATCH | `/api/teacher/settings` | My Profile | `profiles`, `teachers`, application contact | 공개 프로필·연락처·플랫폼 허용 DTO만 |
+| POST | `/api/teacher/settings/password` | My Profile 보안 | Supabase Auth | 현재 비밀번호 재인증 후 변경 |
 | GET | `/api/teacher/feedback` | `TeacherFeedbackHistory` | `lesson_feedbacks` | `teacherId`, `studentId?`, `month?`; `format=csv` |
 | GET | `/api/teacher/applications` | signup profile, admin | 🗄️ `teacher_applications` | `?id=` → teacher/admin; 목록 admin only |
 | POST | `/api/teacher/applications` | signup Step1 | 🗄️ | signUp + application |
 | GET/PATCH | `/api/chat/rooms` | chat list, bells | 🗄️ `chat_rooms` | `role`; PATCH: `action=read`\|`readAll`, `id` |
 | GET/POST | `/api/chat/messages` | `ChatThread` | 🗄️ `chat_messages` | GET: `roomId`; POST: body, senderRole |
 
-**EnrollmentFlow 슬롯**: Step 2는 클라이언트 `useTeacherOpenSlots`(cache). Step 3 trial 후 `PUT … action=reserve` API 호출.
+**신규 수업 배정 알림**: 무료체험 lesson 생성 시 `trial:{lessonId}`, 정규 수강 첫 스케줄 생성 시 `enrollment:{enrollmentId}` 키로 teacher notification을 중복 없이 생성한다. payload에는 첫 lesson, 학생명, 수강목적, trial 여부를 포함한다. My Lessons는 unread `teacher_lesson_assignment`만 반환하며 확인 버튼은 기존 `PATCH /api/notifications?role=teacher`로 `read_at`을 기록한다.
+
+**EnrollmentFlow 슬롯**: 학생과 `teachers.video_platforms`의 교집합이 있는 교사만 후보이며 `/api/enrollment/teacher-slots`가 공통 가능 시간을 정렬한다. 후보 배열은 memoize하여 effect 무한 재요청을 방지하고, 확정 API에서도 호환성을 재검증한다.
 
 ### 5.6 관리자
 
@@ -293,7 +298,7 @@
 
 | category | action | UI | DB side-effects |
 |----------|--------|-----|-----------------|
-| `reschedule` | `approve` / `reject` | 보강 검토 | `lesson_reschedule_requests`, `lessons.scheduled_at` |
+| `reschedule` | 정상 UI에서는 처리하지 않음 | 학생↔교사 진행상태 모니터링 | 장기 미응답·수업 임박만 관리자 `처리 필요`; 예외 조치는 operations로 이동 |
 | `teacher_signup` | `approve` / `reject` | 선생님 가입 | `teacher_applications.teacher_id` → `teachers.status` active/inactive |
 | `student_signup` | `confirm` / `reject` | 학생 가입 | `student_registration_reviews` status update |
 | `payment_activation` | `activate` / `reject` | 입금 확인 | `enrollments`, `payments`, `lessons` schedule |
@@ -319,7 +324,7 @@
 | Method | Path | 용도 |
 |--------|------|------|
 | GET | `/api/health` | 배포·모니터링 |
-| POST | `/api/push/subscribe` | PWA (stub, UI TODO) |
+| POST | `/api/push/subscribe` | PWA 설치 안내/알림 구독 UI |
 | POST | `/api/push/send` | cron/내부 | `push_subscriptions` | CRON_SECRET · VAPID 필수 |
 
 ---
@@ -411,10 +416,11 @@
 
 ### 6.5 보강 · 완료 · 급여
 
-- **보강**: 학생 월 2회 (`cancelled` 제외), pending 중복 불가 — `reschedule-store`
+- **보강**: 학생 월 2회 (`cancelled` 제외), pending 중복 불가. 생성·승인/거절/취소와 lesson 상태 변경은 migration 029 RPC 트랜잭션으로 원자 처리
 - **피드백 POST** → `completeLesson` → `status=completed` → 급여 `duration_minutes` 반영
 - **mark_student_absent** → `student_absent=true`, completed, 피드백 생략
-- **급여**: `estimated` → `processing` → `paid` — 관리자 `/admin/teacher-salary`
+- **급여**: `estimated` → `processing` → `paid`/`completed`; 정산 상태·재무 원장 연결은 migration 027~029 RPC로 원자 처리
+- **분기 보너스**: 종료 월 + 가입일부터 3개 전체 월 충족 + 기간 내 리셋 없음 + 누적 수업시간 > 0일 때만 지급. live estimate에는 항상 0(migration 035 기존 오류 데이터 정리)
 
 ### 6.6 선생님 가입 (UI 2단계 · E2E 완료)
 
@@ -487,7 +493,7 @@
 
 ---
 
-## 8. RLS (production — migration 017~021)
+## 8. RLS·트랜잭션 보안 (production — migration 017~035)
 
 | Migration | 내용 |
 |-----------|------|
@@ -496,8 +502,11 @@
 | `019_fix_rls_recursion.sql` | students↔lessons 재귀 차단 |
 | `020_fix_demo_admin_auth.sql` | demo-admin 로그인 수정 |
 | `021_admin_direct_notification_type.sql` | `admin_direct` notification enum |
+| `022_teacher_application_applicant_read.sql` | 지원자 본인 application 읽기 |
+| `028_schema_rls_hardening.sql` | 스키마 무결성·누락 RLS 보강 |
+| `029_transaction_and_column_security.sql` | 보강/급여 정산 RPC 원자화, profile·교사 단가 열 노출 제한 |
 
-**적용·검증**: `npm run apply:rls` · `npm run test:rls` (16/16)
+**적용·검증**: `npm run apply:rls` · `npm run test:rls` · `npm run test:schema-rls-boundaries` · `npm run test:transactions`
 
 | 테이블 | student | teacher | admin |
 |--------|---------|---------|-------|
@@ -518,8 +527,8 @@
 
 | # | 작업 | 상태 | 검증 (UI) |
 |---|------|------|-----------|
-| 0 | 통합 DDL migration (`001`~`004`) | ✅ | `supabase db push` 또는 SQL Editor |
-| 1 | Auth + `profiles.role` | ⚠️ **1차** | teacher/admin login ✅; student logout·API 전면 보호 ⏳ |
+| 0 | 운영 DDL migration (`001`~`035`, 024는 seed로 이동) | ✅ | `npm run apply:rls` 또는 SQL Editor |
+| 1 | Auth + `profiles.role` + API default deny | ✅ | `test:auth*`, `test:admin-page-auth` |
 | 2 | `students` + activeLearner (`profiles.active_student_id`) | **✅** | StudentSwitcher |
 | 3 | **`pricing_plans` + `session_minutes`** | **✅** | 랜딩·`/admin/pricing` CRUD·40/60분 |
 | 4 | availability + slot continuity | **✅** | TeacherSlotPicker |
@@ -529,7 +538,7 @@
 | 8 | admin reviews 4 categories | **✅** | `/admin/reschedule` — 전 카테고리 Supabase |
 | 9 | salary statements | **✅** | teacher + admin salary |
 | 10 | FAQ | **✅** | student + admin |
-| 11 | `pricing_plans` RLS + admin auth | ⚠️ | RLS ✅; middleware mutation 보호 ⏳ |
+| 11 | `pricing_plans` RLS + admin mutation auth | ✅ | GET public, mutation admin only |
 | 12 | migration **003**: faq, dashboard_settings, teacher_applications | ✅ | `003_*.sql` |
 | 12b | migration **005**: student_registration_reviews | ✅ | `005_*.sql` |
 | 12c | migration **006**: finance_transactions + chat Realtime | ✅ | `006_*.sql` |

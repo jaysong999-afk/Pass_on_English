@@ -28,19 +28,18 @@ async function runWarm(label: string, fn: () => Promise<unknown>) {
   try {
     await fn();
   } catch (error) {
-    console.error(`[ensureSchedulesBootstrapped] ${label}`, error);
+    console.error(`[ensureReadModelsBootstrapped] ${label}`, error);
   }
 }
 
-/** Server-only: load domain caches from Supabase then sync enrollment schedules. */
-export async function ensureSchedulesBootstrapped(): Promise<void> {
+/** Server-only: populate in-memory read models without changing persisted state. */
+export async function ensureReadModelsBootstrapped(): Promise<void> {
   await runWarm("pricing plans", warmPricingPlanCache);
   await runWarm("enrollments", warmEnrollmentCache);
   await runWarm("student directory", warmStudentDirectoryCache);
   await runWarm("admin messaging", warmAdminMessagingCache);
   await runWarm("lessons", warmLessonCache);
   await runWarm("reschedule", warmRescheduleCache);
-  await runWarm("restore occupied availability", () => restoreOccupiedWeeklyAvailabilityInDb());
   await runWarm("teacher availability", warmAllTeacherAvailabilityCache);
   await runWarm("learning", warmLearningCache);
   await runWarm("salary", warmSalaryCache);
@@ -57,14 +56,33 @@ export async function ensureSchedulesBootstrapped(): Promise<void> {
   await runWarm("student registration reviews", warmStudentRegistrationCache);
   await runWarm("chat", warmChatCache);
   await runWarm("finance", warmFinanceCache);
+}
+
+/**
+ * Backward-compatible name used by existing request handlers. This is now
+ * deliberately read-only; persisted maintenance runs only through
+ * runScheduleMaintenanceInDb.
+ */
+export const ensureSchedulesBootstrapped = ensureReadModelsBootstrapped;
+
+export interface ScheduleMaintenanceResult {
+  opened: number;
+  expired: number;
+}
+
+/** Server-only: perform scheduled repairs and lifecycle transitions. */
+export async function runScheduleMaintenanceInDb(): Promise<ScheduleMaintenanceResult> {
+  await ensureReadModelsBootstrapped();
+  await restoreOccupiedWeeklyAvailabilityInDb();
 
   if (!enrollmentSchedulesSynced) {
-    await runWarm("enrollment schedules", bootstrapActiveEnrollmentSchedulesInDb);
+    await bootstrapActiveEnrollmentSchedulesInDb();
     enrollmentSchedulesSynced = true;
   }
 
-  await runWarm("renewal offers", () => ensureRenewalOffersInDb());
-  await runWarm("expire enrollment holds", () => expireEnrollmentHoldsInDb());
+  const opened = await ensureRenewalOffersInDb();
+  const expired = await expireEnrollmentHoldsInDb();
+  return { opened, expired };
 }
 
 /** Lighter bootstrap for public/marketing pages. */

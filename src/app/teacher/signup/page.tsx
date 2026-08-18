@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { GraduationCap } from "lucide-react";
+import type { VideoPlatform } from "@/types";
+import { VideoPlatformSelector } from "@/components/shared/VideoPlatformSelector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +28,7 @@ export default function TeacherSignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [videoPlatforms, setVideoPlatforms] = useState<VideoPlatform[]>(["ZOOM"]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -47,6 +50,7 @@ export default function TeacherSignupPage() {
       setError("Please enter your date of birth.");
       return;
     }
+    if (videoPlatforms.length === 0) { setError("Select at least one lesson platform."); return; }
 
     setSubmitting(true);
     try {
@@ -59,6 +63,7 @@ export default function TeacherSignupPage() {
         address: address.trim(),
         email: email.trim(),
         password,
+        videoPlatforms,
       });
       if (!result.ok) {
         setError(teacherApplicationErrorMessage(result.error));
@@ -215,6 +220,7 @@ export default function TeacherSignupPage() {
                 </div>
               </div>
 
+              <VideoPlatformSelector value={videoPlatforms} onChange={setVideoPlatforms} language="en" />
               {error && <p className="text-sm text-red-600">{error}</p>}
 
               <Button

@@ -8,7 +8,7 @@ import {
   getEnrollmentById,
   getEnrollmentsByStudent,
   getPaymentRecordsByStudent,
-} from "@/lib/enrollment-store";
+} from "@/lib/enrollment-store-sync";
 import { decorateEnrollmentRenewal } from "@/lib/enrollments/renewal-window";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureAccountSession, getActiveLearner, getLearnerById } from "@/lib/account-store";

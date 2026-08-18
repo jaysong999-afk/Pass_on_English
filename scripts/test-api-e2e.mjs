@@ -265,18 +265,39 @@ async function main() {
     if (!teacherToken) {
       return { status: "skip", note: "no teacher token" };
     }
+    const before = await api(
+      `/api/teacher/student-context?studentId=${manifest.student.learnerId}&teacherId=${manifest.teacher.userId}`,
+      { token: teacherToken }
+    );
+    if (before.status !== 200) {
+      throw new Error(`context preflight failed: ${before.status} ${JSON.stringify(before.json)}`);
+    }
+    const previousTextbook = before.json.context?.textbook ?? "";
+    const nextTextbook = `Oxford Phonics 4 (E2E ${Date.now()})`;
     const { status, json } = await api("/api/teacher/student-context", {
       method: "PUT",
       token: teacherToken,
       body: {
         studentId: manifest.student.learnerId,
         teacherId: manifest.teacher.userId,
-        textbook: "Oxford Phonics 4 (E2E updated)",
+        textbook: nextTextbook,
       },
     });
     if (status !== 200) throw new Error(`status ${status}: ${JSON.stringify(json)}`);
-    if (!json.context?.textbook?.includes("E2E")) throw new Error("textbook not updated");
-    return { status, note: json.context.textbook };
+    if (json.context?.textbook !== nextTextbook) throw new Error("textbook not updated");
+    if (!Array.isArray(json.context?.textbookHistory)) {
+      throw new Error("textbook history missing");
+    }
+    if (
+      previousTextbook &&
+      !json.context.textbookHistory.some((entry) => entry.textbook === previousTextbook)
+    ) {
+      throw new Error(`previous textbook not archived: ${JSON.stringify(json.context.textbookHistory)}`);
+    }
+    return {
+      status,
+      note: `${json.context.textbook} (history=${json.context.textbookHistory.length})`,
+    };
   });
 
   await test("PATCH /api/teacher/lessons/:id mark_student_absent", async () => {
@@ -315,12 +336,13 @@ async function main() {
   });
 
   await test("GET /api/learning/feedback (seeded)", async () => {
-    if (!studentToken) {
-      return { status: "skip", note: "no student token" };
-    }
+    const feedbackStudentToken = await signIn(
+      "e2e-student-active@example.org",
+      manifest.password
+    );
     const { status, json } = await api(
-      `/api/learning/feedback?studentId=${manifest.student.learnerId}`,
-      { token: studentToken }
+      "/api/learning/feedback?studentId=b0000001-0000-4000-8000-0000000000cc",
+      { token: feedbackStudentToken }
     );
     if (status !== 200) throw new Error(`status ${status}`);
     if (!json.feedbacks?.length) throw new Error("expected feedbacks from seed");
@@ -328,12 +350,13 @@ async function main() {
   });
 
   await test("GET /api/teacher/feedback (teacher)", async () => {
-    if (!teacherToken) {
-      return { status: "skip", note: "no teacher token" };
-    }
+    const feedbackTeacherToken = await signIn(
+      "e2e-teacher-james@example.org",
+      manifest.password
+    );
     const { status, json } = await api(
-      `/api/teacher/feedback?teacherId=${manifest.teacher.userId}`,
-      { token: teacherToken }
+      "/api/teacher/feedback?teacherId=b0000001-0000-4000-8000-000000000001",
+      { token: feedbackTeacherToken }
     );
     if (status !== 200) throw new Error(`status ${status}`);
     if (!json.feedbacks?.length) throw new Error("expected teacher feedbacks");
@@ -523,7 +546,7 @@ async function main() {
     const { status, json } = await api("/api/teacher/availability", {
       method: "PUT",
       token: teacherToken,
-      body: { teacherId: "teacher-1", slots },
+      body: { teacherId: manifest.teacher.userId, slots },
     });
     if (status === 503 && json.error === "availability_rls_blocked") {
       return { status, note: "RLS blocked — set SUPABASE_SERVICE_ROLE_KEY or run migration 015" };

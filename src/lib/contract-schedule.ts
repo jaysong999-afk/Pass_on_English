@@ -51,6 +51,23 @@ export function addDaysToDateKey(dateKey: string, days: number): string {
   return getDateKeyInTimezone(cursor, CANONICAL_TIMEZONE);
 }
 
+/** Return the first configured class date on or after the supplied date. */
+export function nextScheduledDateOnOrAfter(
+  dateKey: string,
+  scheduleDays: DayLabel[]
+): string {
+  if (scheduleDays.length === 0) return dateKey;
+
+  const cursor = new Date(`${dateKey}T12:00:00+09:00`);
+  for (let i = 0; i < 7; i++) {
+    const candidate = getDateKeyInTimezone(cursor, CANONICAL_TIMEZONE);
+    if (scheduleDays.includes(dayLabelForDateKey(candidate))) return candidate;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dateKey;
+}
+
 export function sortScheduleDays(days: DayLabel[]): DayLabel[] {
   return [...days].sort((a, b) => DAY_LABEL_TO_DOW[a] - DAY_LABEL_TO_DOW[b]);
 }

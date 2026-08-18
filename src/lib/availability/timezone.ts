@@ -56,8 +56,8 @@ export function formatGridTimeLabel(kstTime: SlotStartTime, displayTimeZone: str
   return formatSlotTimeInTimezone("Mon", kstTime, displayTimeZone);
 }
 
-export function getStudentTimezone(locale: Locale): string {
-  return STUDENT_TIMEZONE[locale];
+export function getStudentTimezone(locale: Locale, accountTimezone?: string): string {
+  return accountTimezone?.trim() || STUDENT_TIMEZONE[locale];
 }
 
 export function getTimezoneShortLabel(timeZone: string, locale = "en"): string {

@@ -13,7 +13,6 @@ import {
   copyTeacherDaySlotsInDb,
   ensureTeacherAvailabilityLoaded,
   getTeacherWeeklyAvailabilityFromDb,
-  restoreOccupiedWeeklyAvailabilityInDb,
   reserveTeacherWeeklySlotsInDb,
   setTeacherWeeklyAvailabilityInDb,
   toggleTeacherSlotInDb,
@@ -66,8 +65,6 @@ export async function GET(request: Request) {
     }
 
     await ensureTeacherAvailabilityLoaded(teacherId);
-    await restoreOccupiedWeeklyAvailabilityInDb(teacherId);
-
     if (planDays) {
       const days = planDays.split(",").filter(Boolean);
       const sessionMinutes = searchParams.get("sessionMinutes");

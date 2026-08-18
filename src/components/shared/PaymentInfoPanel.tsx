@@ -1,6 +1,7 @@
 "use client";
 
 import { Building2, Copy } from "lucide-react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,10 +23,13 @@ export function PaymentInfoPanel({
   deadlineNotice,
 }: PaymentInfoPanelProps) {
   const t = useTranslations("studentPortal.paymentPanel");
+  const [copied, setCopied] = useState(false);
 
   async function copyAccount() {
     try {
       await navigator.clipboard.writeText(bankAccount);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2200);
     } catch {
       /* clipboard unavailable */
     }
@@ -58,11 +62,11 @@ export function PaymentInfoPanel({
             </p>
           )}
         </div>
-        <p className="text-sm text-gray-600">{t("note")}</p>
         <Button variant="secondary" className="w-full gap-2" type="button" onClick={copyAccount}>
           <Copy className="h-4 w-4" />
           {t("copyAccount")}
         </Button>
+        {copied && <p role="status" className="text-center text-sm font-medium text-emerald-700">{t("copied")}</p>}
       </CardContent>
     </Card>
   );

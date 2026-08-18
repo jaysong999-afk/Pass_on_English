@@ -4,8 +4,13 @@ import { requireTeacherAuth } from "@/lib/auth/session";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureAccountSession } from "@/lib/account-store";
 import { getAccountSessionCache } from "@/lib/account-session-cache";
-import { getAdminDirectInboxForProfileInDb } from "@/lib/admin/messages/repository";
 import {
+  ensureAdminDirectThreadInDb,
+  getAdminDirectInboxForProfileInDb,
+} from "@/lib/admin/messages/repository";
+import {
+  ensureStudentTeacherChatRoomsInDb,
+  ensureTeacherStudentChatRoomsInDb,
   ensureTeacherChatRoomInDb,
   getChatRoomsFromCache,
   getTotalUnreadFromCache,
@@ -21,10 +26,13 @@ function parseRole(value: string | null): PortalRole | null {
 }
 
 async function resolveStudentId(searchParams: URLSearchParams): Promise<string | undefined> {
+  const session = await ensureAccountSession();
+  if (!session) return undefined;
   const fromQuery = searchParams.get("studentId");
-  if (fromQuery) return fromQuery;
-  await ensureAccountSession();
-  return getAccountSessionCache()?.activeLearnerId ?? undefined;
+  if (fromQuery && session.learners.some((learner) => learner.id === fromQuery)) {
+    return fromQuery;
+  }
+  return session.activeLearnerId ?? undefined;
 }
 
 async function resolveInboxProfileId(
@@ -92,12 +100,31 @@ export async function GET(request: Request) {
       teacherId: role === "teacher" ? teacherId : undefined,
     };
 
+    if (role === "student" && studentId) {
+      await ensureStudentTeacherChatRoomsInDb(studentId);
+    }
+    if (role === "teacher" && teacherId) {
+      await ensureTeacherStudentChatRoomsInDb(teacherId);
+    }
+
     const rooms = getChatRoomsFromCache(context);
     let totalUnread = getTotalUnreadFromCache(context);
     let adminSupport = null;
 
     const profileId = await resolveInboxProfileId(role, teacherId);
     if (profileId && (role === "student" || role === "teacher")) {
+      if (role === "student" && studentId) {
+        await ensureAdminDirectThreadInDb({
+          targetType: "student",
+          targetId: studentId,
+        });
+      }
+      if (role === "teacher" && teacherId) {
+        await ensureAdminDirectThreadInDb({
+          targetType: "teacher",
+          targetId: teacherId,
+        });
+      }
       const inbox = await getAdminDirectInboxForProfileInDb(profileId);
       adminSupport = inbox.thread;
       if (inbox.thread?.unread) {

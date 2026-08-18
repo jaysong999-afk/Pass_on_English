@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ChevronDown, HelpCircle } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,28 +8,19 @@ import { groupFaqByCategory } from "@/lib/faq-display";
 import type { Locale } from "@/lib/i18n/config";
 import type { FaqItem } from "@/types";
 import { cn } from "@/lib/utils";
+import { apiRequest } from "@/lib/api/client";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export function StudentFaqPage() {
   const t = useTranslations("studentPortal.faq");
   const locale = useLocale() as Locale;
-  const [items, setItems] = useState<FaqItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/faq");
-      const data = (await res.json()) as { items?: FaqItem[] };
-      setItems(data.items ?? []);
-    } finally {
-      setLoading(false);
-    }
+    const data = await apiRequest<{ items?: FaqItem[] }>("/api/faq");
+    return data.items ?? [];
   }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data: items, loading } = useApiResource(load, []);
 
   const groups = useMemo(() => groupFaqByCategory(items, locale), [items, locale]);
 

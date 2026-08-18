@@ -7,19 +7,19 @@ import type {
   TeacherSalaryStatement,
 } from "@/types";
 import type { TeacherWeeklyAvailability } from "@/lib/availability/types";
-import { getAllEnrollments } from "@/lib/enrollment-store";
-import { getFeedbacksByTeacher } from "@/lib/learning-store";
+import { getAllEnrollments } from "@/lib/enrollment-store-sync";
+import { getFeedbacksByTeacher } from "@/lib/learning-store-sync";
 import { listTeacherApplications, getTeacherApplicationById } from "@/lib/admin/teacher-application-store";
 import { getTeacherWeeklyAvailability } from "@/lib/teacher-availability-store-sync";
-import { getTeacherPenalties } from "@/lib/teacher-payroll-penalty-store";
-import { getTeacherById } from "@/lib/teacher-profile-store";
+import { getTeacherPenalties } from "@/lib/teacher-payroll-penalty-store-sync";
+import { getTeacherById } from "@/lib/teacher-profile-store-sync";
 import {
   getPayoutAccount,
   getSalaryStatementsForTeacher,
   getSalaryStatement,
   statementTotal,
-} from "@/lib/teacher-salary-store";
-import { getTeacherLessons, getTodayLessons } from "@/lib/teacher-lesson-store";
+} from "@/lib/teacher-salary-store-sync";
+import { getTeacherLessons, getTodayLessons } from "@/lib/teacher-lesson-store-sync";
 import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";

@@ -1,10 +1,19 @@
 {
+  "metadata": {
+    "home": { "title": "PassOn English | 매일 20분 1:1 원어민 화상영어", "description": "필리핀 원어민 선생님과 매일 20분 진행하는 1:1 화상영어. 무료 체험 후 수강을 결정하세요." },
+    "about": { "title": "서비스 소개 | PassOn English", "description": "PassOn English의 선생님 선발, 수업 운영 방식과 학습 관리 원칙을 소개합니다." },
+    "pricing": { "title": "수강료 | PassOn English", "description": "PassOn English 1:1 화상영어 과정과 최신 수강료를 확인하세요." },
+    "teachers": { "title": "원어민 선생님 | PassOn English", "description": "PassOn English의 검증된 필리핀 원어민 선생님 프로필을 확인하세요." },
+    "terms": { "title": "이용약관 | PassOn English", "description": "PassOn English 서비스 이용약관입니다." },
+    "privacy": { "title": "개인정보처리방침 | PassOn English", "description": "PassOn English 개인정보 수집 및 이용 정책입니다." },
+    "refund": { "title": "수강 및 환불 규정 | PassOn English", "description": "PassOn English 수강, 결석, 일정 변경 및 환불 규정입니다." }
+  },
   "common": {
-    "brand": "Pass on English",
-    "tagline": "영어 원어민 1:1 화상영어",
+    "brand": "PassOn English",
+    "tagline": "매일 20분, 1:1 원어민 화상영어",
     "login": "로그인",
     "signup": "회원가입",
-    "freeTrial": "무료 체험 시작",
+    "freeTrial": "무료 체험 수업 신청",
     "learnMore": "서비스 알아보기",
     "getStarted": "지금 시작하기",
     "submit": "제출",
@@ -14,59 +23,85 @@
     "next": "다음",
     "confirm": "확인",
     "search": "검색",
-    "viewAll": "전체 보기"
+    "viewAll": "전체 보기",
+    "menuOpen": "메뉴 열기",
+    "menuClose": "메뉴 닫기",
+    "pwaInstallTitle": "홈 화면에 추가",
+    "pwaInstallDescription": "앱처럼 사용하고 채팅·알림을 바로 받아보세요.",
+    "pwaInstallClose": "설치 안내 닫기"
   },
   "nav": {
     "home": "홈",
     "about": "PassOn 소개",
     "curriculum": "커리큘럼",
-    "pricing": "요금제",
-    "teachers": "강사소개",
-    "howItWorks": "이용 방법",
-    "faq": "FAQ"
+    "pricing": "수강료",
+    "teachers": "선생님",
+    "howItWorks": "수업 안내",
+    "faq": "자주 묻는 질문"
   },
   "hero": {
-    "badge": "한국 · 중국 학생을 위한 맞춤 영어",
-    "titleLine1": "집에서 만나는",
-    "titleHighlight": "영어 원어민",
-    "titleLine2": "1:1 화상 영어",
-    "subtitle": "아이부터 성인까지, ESL 전문 강사와 매일 짧게·꾸준히. 첫 수업은 무료로 부담 없이 시작하세요.",
-    "ctaPrimary": "무료 1회 체험 신청",
-    "ctaSecondary": "요금제 보기",
-    "trust1": "첫 수업 100% 무료",
-    "trust2": "1:1 맞춤 수업",
-    "trust3": "한·중 맞춤 요금"
+    "badge": "월~금, 매일 20분 원어민 영어",
+    "titleLine1": "집에서 유학하는",
+    "titleHighlight": "가장 꾸준한 방법",
+    "titleLine2": "매일 20분, 원어민 선생님과 1:1 영어",
+    "subtitle": "엄격하게 선발한 원어민 선생님과 매주 같은 요일, 같은 시간에 만나요. 짧지만 꾸준한 대화가 아이의 영어 자신감을 만듭니다.",
+    "ctaPrimary": "무료 체험 수업 신청",
+    "ctaSecondary": "수업 방식 알아보기",
+    "trust1": "무료 체험 1회",
+    "trust2": "별도 앱 설치 없음",
+    "trust3": "체험 후 수강 결정"
   },
   "stats": {
-    "teachers": "ESL 전문 강사",
-    "teachersValue": "30+",
-    "lessons": "누적 1:1 수업",
-    "lessonsValue": "10,000+",
-    "rating": "재수강률",
-    "ratingValue": "95%",
-    "countries": "회화 자신감 향상 응답",
-    "countriesValue": "98.5%"
+    "teachers": "검증된 원어민 선생님",
+    "teachersDesc": "경력과 수업 역량 확인",
+    "schedule": "월~금 고정 스케줄",
+    "scheduleDesc": "같은 시간, 같은 선생님",
+    "duration": "한 번에 20분",
+    "durationDesc": "집중하기 좋은 짧은 수업",
+    "feedback": "수업 후 학습 피드백",
+    "feedbackDesc": "학습 과정과 변화를 확인"
   },
   "features": {
-    "eyebrow": "왜 Pass on English?",
-    "title": "템플릿이 아닌, 우리 아이에게 맞는 영어",
-    "subtitle": "화상 수업의 일정·소통·피드백까지 한곳에서. 학부모는 안심하고, 아이는 재미있게 배웁니다.",
+    "eyebrow": "WHY PASSON",
+    "title": "영어 실력은 좋은 선생님과의 꾸준한 대화에서 자랍니다",
+    "subtitle": "매일 이어갈 수 있는 수업 환경과 학습 과정을 함께 설계합니다.",
     "native": {
-      "title": "ESL 경력 영어 원어민",
-      "desc": "아동·성인 ESL 경험이 풍부한 강사만 선발합니다. 회화, 파닉스, 비즈니스 등 목적에 맞게 매칭해 드립니다."
+      "title": "좋은 선생님을 엄격하게 선발합니다",
+      "desc": "영어 구사력뿐 아니라 수업 경력, 아동 친화성, 커뮤니케이션 능력을 확인하고 시범 수업을 거쳐 선발합니다."
     },
-    "flexible": {
-      "title": "내 일정에 맞춘 예약",
-      "desc": "선생님별 가능 시간을 확인하고 원하는 요일·시간에 예약하세요. 바쁜 학부모와 학생 모두를 위해 설계했습니다."
+    "consistent": {
+      "title": "매주 같은 시간에 만납니다",
+      "desc": "월요일부터 금요일까지 정해진 시간에 같은 선생님을 만나 영어가 일상의 습관이 됩니다."
     },
-    "trial": {
-      "title": "첫 수업 무료 체험",
-      "desc": "계정당 1회 무료 수업으로 선생님·수업 스타일을 직접 경험한 뒤, 정규 수강을 결정할 수 있습니다."
+    "short": {
+      "title": "매일 20분, 부담 없이 이어갑니다",
+      "desc": "아이의 집중력을 고려한 짧은 수업으로 말할 기회를 매일 쌓습니다."
     },
-    "pwa": {
-      "title": "앱처럼 편한 채팅·알림",
-      "desc": "홈 화면에 추가하면 수업 알림과 선생님 채팅을 바로 확인. 별도 앱 설치 없이 이용할 수 있습니다."
+    "feedback": {
+      "title": "아이의 변화를 함께 확인합니다",
+      "desc": "수업 내용과 학습 상태를 기록하고 학부모가 진도를 이해할 수 있도록 피드백을 제공합니다."
     }
+  },
+  "teacherTrust": {
+    "eyebrow": "선생님 선발과 관리",
+    "title": "아이에게 매일 만날 선생님이기에, 더 꼼꼼하게 선택합니다",
+    "subtitle": "실제 운영 과정에서 확인하는 네 단계의 선발·품질 관리 절차입니다.",
+    "step1": "지원 자격 및 경력 확인",
+    "step2": "영어 구사력·커뮤니케이션 인터뷰",
+    "step3": "실제 수업 방식 시연",
+    "step4": "정기적인 수업 품질 확인"
+  },
+  "lessonFlow": {
+    "eyebrow": "20분 수업 흐름",
+    "title": "매일 20분은 이렇게 쌓입니다",
+    "subtitle": "짧은 시간 안에서도 복습, 충분한 말하기, 정리가 자연스럽게 이어집니다.",
+    "time1": "3분",
+    "step1": "인사와 지난 수업 복습",
+    "time2": "12분",
+    "step2": "오늘의 주제로 듣고 말하기",
+    "time3": "5분",
+    "step3": "표현 정리와 다음 수업 안내",
+    "note": "수업은 Zoom으로 진행하고, 일정과 선생님 소통은 PassOn English에서 관리합니다."
   },
   "curriculum": {
     "eyebrow": "Curriculum",
@@ -110,9 +145,9 @@
     "note": "가입 설문과 체험 수업 후 학습자 수준·목표에 맞는 커리큘럼과 강사를 매칭해 드립니다. 여러 과목을 병행하거나 수준에 따라 조정할 수 있습니다."
   },
   "pricing": {
-    "eyebrow": "투명한 요금",
-    "title": "생활 패턴에 맞는 요금제",
-    "subtitle": "매일 조금씩, 주 3회, 주말까지 — 우리 가족 루틴에 맞게 선택하세요.",
+    "eyebrow": "수강료",
+    "title": "매일 20분을 부담 없는 수강료로 시작하세요",
+    "subtitle": "월요일부터 금요일까지, 매주 같은 시간에 원어민 선생님과 1:1로 수업합니다.",
     "weekday5": "주 5회 · 20분",
     "weekday5Desc": "20회 / 매일 꾸준히 · 인기",
     "mwf": "월·수·금 · 20분",
@@ -123,20 +158,23 @@
     "krw": "원",
     "cny": "위안",
     "popular": "가장 많이 선택",
-    "cta": "이 플랜으로 시작"
+    "cta": "무료 체험 후 시작하기",
+    "loadErrorTitle": "수강료 정보를 불러오지 못했습니다.",
+    "loadErrorDesc": "잠시 후 다시 시도하거나 고객센터에 문의해 주세요.",
+    "retry": "다시 시도"
   },
   "howItWorks": {
     "eyebrow": "4단계로 시작",
-    "title": "가입부터 첫 수업까지, 이렇게 진행돼요",
-    "subtitle": "복잡한 절차 없이 10분이면 첫 체험 예약까지 완료할 수 있습니다.",
-    "step1Title": "가입 & 간단 설문",
-    "step1Desc": "영어 수준과 목적(회화·파닉스 등)을 알려주시면 맞춤 추천을 드립니다.",
-    "step2Title": "선생님 · 시간 선택",
-    "step2Desc": "프로필을 보고 마음에 드는 선생님과 수업 시간을 골라 예약합니다.",
-    "step3Title": "무료 1회 체험",
-    "step3Desc": "Zoom 화상으로 1:1 수업을 경험해 보세요. 일정·채팅은 플랫폼에서 관리됩니다.",
-    "step4Title": "입금 후 정규 수업",
-    "step4Desc": "체험 후 만족하시면 계좌이체로 수업료를 납부하고 정기 수업을 시작합니다."
+    "title": "무료 체험부터 정규 수업까지",
+    "subtitle": "아이와 잘 맞는 수업인지 직접 확인한 뒤 고정 스케줄을 확정합니다.",
+    "step1Title": "간단한 학습 정보 입력",
+    "step1Desc": "연령, 영어 수준, 학습 목표와 가능한 시간을 알려주세요.",
+    "step2Title": "선생님과 체험 시간 확인",
+    "step2Desc": "입력한 정보를 바탕으로 적합한 선생님과 시간을 안내합니다.",
+    "step3Title": "20분 무료 체험 수업",
+    "step3Desc": "실제 수업 방식과 아이와 선생님의 호흡을 확인합니다.",
+    "step4Title": "고정 스케줄 확정",
+    "step4Desc": "만족하시면 월~금 정해진 시간으로 정규 수업을 시작합니다."
   },
   "teachers": {
     "eyebrow": "강사진",
@@ -144,6 +182,7 @@
     "subtitle": "경력과 전문 분야를 확인하고, 우리 아이에게 맞는 선생님을 직접 선택하세요.",
     "yearsExp": "년 경력",
     "specialties": "전문 분야",
+    "verifiedSoon": "현재 공개 가능한 검증된 선생님 프로필을 준비하고 있습니다. 무료 체험을 신청하시면 학습 정보와 가능한 시간을 바탕으로 선생님을 안내해 드립니다.",
     "cta": "선생님 더 보기"
   },
   "faq": {
@@ -151,25 +190,38 @@
     "title": "자주 묻는 질문",
     "subtitle": "궁금한 점이 더 있으시면 언제든 문의해 주세요.",
     "q1": "화상 수업은 어떻게 진행되나요?",
-    "a1": "Zoom 등 화상 프로그램으로 1:1 수업이 진행됩니다. 수업 일정, 선생님과의 채팅, 피드백 확인은 Pass on English 플랫폼에서 관리합니다.",
+    "a1": "Zoom으로 1:1 수업이 진행됩니다. 수업 일정, 선생님과의 채팅, 피드백 확인은 PassOn English에서 관리합니다.",
     "q2": "첫 수업은 정말 무료인가요?",
     "a2": "네. 계정당 1회 무료 체험 수업을 제공합니다. 체험 후 수업료 입금 안내를 드리며, 원하실 때만 정규 수강을 시작하시면 됩니다.",
     "q3": "결제는 어떻게 하나요?",
     "a3": "현재 계좌이체로만 결제 가능합니다. 입금 후 관리자 확인이 완료되면 정규 수업이 활성화됩니다.",
-    "q4": "수업 시간 변경(보강)이 가능한가요?",
-    "a4": "네. 학생은 월 2회까지 일정 변경을 요청할 수 있으며, 선생님 승인 후 변경됩니다."
+    "q4": "결석하거나 수업에 참여하지 못하면 어떻게 되나요?",
+    "a4": "수업 변경과 보강 가능 여부는 수강 규정 및 신청 시점에 따라 달라집니다. 포털에서 변경을 요청하면 선생님 확인 후 반영됩니다.",
+    "q5": "어떤 선생님이 수업하나요?",
+    "a5": "경력과 영어 구사력, 커뮤니케이션 능력, 실제 수업 방식을 확인한 원어민 선생님이 수업합니다.",
+    "q6": "매일 같은 선생님과 수업하나요?",
+    "a6": "정규 수업은 원칙적으로 월요일부터 금요일까지 같은 시간에 같은 선생님과 진행합니다.",
+    "q7": "아이의 영어 수준은 어떻게 확인하나요?",
+    "a7": "가입 시 입력한 학습 정보와 무료 체험 수업을 바탕으로 현재 수준과 적합한 수업 방향을 안내합니다.",
+    "q8": "공휴일·보강·환불 규정은 어디에서 확인하나요?",
+    "a8": "수강 규정 페이지에서 확인할 수 있으며, 등록 전 고객센터를 통해 상세 안내를 받을 수 있습니다.",
+    "contactPrompt": "원하는 답을 찾지 못하셨나요?",
+    "contactCta": "고객센터에 문의하기"
   },
   "ctaBand": {
-    "title": "오늘, 첫 무료 수업을 예약해 보세요",
-    "subtitle": "10분이면 가입부터 체험 예약까지. 아이의 영어, 미루지 마세요.",
-    "button": "무료 체험 시작하기"
+    "title": "우리 아이와 잘 맞는 수업인지, 20분 동안 직접 확인해 보세요",
+    "subtitle": "선생님과 실제로 대화해 본 뒤 정규 수강을 결정할 수 있습니다.",
+    "button": "무료 체험 수업 신청"
   },
   "footer": {
-    "tagline": "영어 원어민과 함께하는 1:1 화상 영어",
+    "tagline": "매일 20분, 원어민 선생님과 함께하는 1:1 화상영어",
+    "legal": "약관 및 정책",
     "terms": "이용약관",
     "privacy": "개인정보처리방침",
+    "refund": "수강 및 환불 규정",
     "contact": "support@passonenglish.com",
-    "copyright": "© 2026 Pass on English. All rights reserved."
+    "businessNotice": "상호·대표자·사업자등록번호·주소 등 운영자 정보는 확정된 실제 정보만 게시합니다. 자세한 내용은 고객센터로 문의해 주세요.",
+    "copyright": "© 2026 PassOn English. All rights reserved."
   },
   "auth": {
     "signupTitle": "학생 회원가입",
@@ -184,13 +236,17 @@
     "hasAccount": "이미 계정이 있으신가요?"
   },
   "heroVisual": {
-    "live": "Live",
-    "lessonTitle": "Today's Lesson",
-    "teacherName": "Sarah M.",
-    "topic": "Conversation · Greetings",
-    "nextLesson": "Next lesson",
-    "nextTime": "Tomorrow 10:00 AM",
-    "freeBadge": "1st FREE"
+    "imageAlt": "집에서 원어민 선생님과 일대일 화상 영어 수업을 하는 학생",
+    "live": "수업 중",
+    "lessonTitle": "오늘의 수업",
+    "teacherName": "원어민 선생님",
+    "topic": "생활 회화 · 인사하기",
+    "nextLesson": "다음 수업",
+    "nextTime": "내일 오전 10:00",
+    "freeBadge": "무료 체험",
+    "duration": "20분 수업",
+    "feedbackLabel": "오늘의 피드백",
+    "feedbackValue": "자신 있게 말했어요"
   },
   "about": {
     "eyebrow": "About PassOn",

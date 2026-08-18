@@ -8,27 +8,54 @@ import {
   getNextLesson,
   getTeacherLessons,
   getTodayLessons,
-} from "@/lib/teacher-lesson-store";
+} from "@/lib/teacher-lesson-store-sync";
 import { resolveTeacherId } from "@/lib/teachers/resolve-teacher-id";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureStudentEnrollmentLessonsInDb } from "@/lib/lessons/schedule-service";
 import { listStudentLessonsInDb } from "@/lib/lessons/repository";
-import type { Lesson } from "@/types";
+import { listNotificationsForUserInDb } from "@/lib/notifications/repository";
+import { TEACHER_LESSON_ASSIGNMENT_KIND } from "@/lib/notifications/teacher-lesson-assignment";
+import type { CoursePurpose, Lesson } from "@/types";
 
 function mapWithContext(lesson: Lesson) {
   const display = buildLessonDisplayContext(lesson);
   return { lesson, display };
 }
 
-function hubPayload(teacherId: string, timeZone: string) {
+async function hubPayload(teacherId: string, userId: string, timeZone: string) {
   const next = getNextLesson(teacherId);
   const todayLessons = getTodayLessons(teacherId, timeZone);
   const actionRequired = getActionRequiredLessons(teacherId);
+  const lessonsById = new Map(getTeacherLessons(teacherId).map((lesson) => [lesson.id, lesson]));
+  const notifications = await listNotificationsForUserInDb(userId);
+  const newAssignments = notifications.flatMap((notification) => {
+    if (notification.readAt || notification.payload.kind !== TEACHER_LESSON_ASSIGNMENT_KIND) {
+      return [];
+    }
+    const lessonId = typeof notification.payload.lessonId === "string"
+      ? notification.payload.lessonId
+      : "";
+    const lesson = lessonsById.get(lessonId);
+    if (!lesson || lesson.status === "cancelled") return [];
+    const display = buildLessonDisplayContext(lesson);
+    if (!display) return [];
+    const purposes = Array.isArray(notification.payload.purposes)
+      ? notification.payload.purposes.filter((purpose): purpose is CoursePurpose => typeof purpose === "string")
+      : [];
+    return [{
+      notificationId: notification.id,
+      lesson,
+      display,
+      purposes,
+      createdAt: notification.createdAt,
+    }];
+  });
 
   return {
     nextLesson: next ? mapWithContext(next) : null,
     todayLessons: todayLessons.map(mapWithContext),
     actionRequired: actionRequired.map(mapWithContext),
+    newAssignments,
   };
 }
 
@@ -68,12 +95,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { teacherId: sessionTeacherId } = await requireTeacherAuth();
+    const { teacherId: sessionTeacherId, userId } = await requireTeacherAuth();
     const rawTeacherId = searchParams.get("teacherId");
     const resolvedId = rawTeacherId ? resolveTeacherId(rawTeacherId) : sessionTeacherId;
     const teacherId = resolvedId === sessionTeacherId ? resolvedId : sessionTeacherId;
 
-    return NextResponse.json(hubPayload(teacherId, timeZone));
+    return NextResponse.json(await hubPayload(teacherId, userId, timeZone));
   } catch (error) {
     return authErrorResponse(error);
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ interface RescheduleRequestFormProps {
   makeupRemaining?: number;
   /** Wall-clock zone for datetime-local (teachers: PHT, students: KST). */
   inputTimeZone?: string;
+  /** Locale hint for the browser's native date/time control. */
+  inputLocale?: string;
   onSubmitted?: () => void;
   onCancel?: () => void;
   labels: {
@@ -33,6 +35,10 @@ interface RescheduleRequestFormProps {
     limitReached?: string;
     pendingExists?: string;
     slotUnavailable?: string;
+    date?: string;
+    time?: string;
+    loadingSlots?: string;
+    noAvailableSlots?: string;
   };
 }
 
@@ -41,18 +47,23 @@ export function RescheduleRequestForm({
   initiator,
   makeupRemaining,
   inputTimeZone = CANONICAL_TIMEZONE,
+  inputLocale = "en",
   onSubmitted,
   onCancel,
   labels,
 }: RescheduleRequestFormProps) {
   const [proposedTime, setProposedTime] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState("");
+  const [availableSlots, setAvailableSlots] = useState<Array<{ startTime: string; endTime: string }>>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!proposedTime.trim()) return;
+    if (!effectiveProposedTime.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -62,7 +73,7 @@ export function RescheduleRequestForm({
         body: JSON.stringify({
           lessonId: lesson.id,
           proposedScheduledAt: snapIsoToSlotGrid(
-            fromDatetimeLocalInTimeZone(proposedTime, inputTimeZone),
+            fromDatetimeLocalInTimeZone(effectiveProposedTime, inputTimeZone),
             CANONICAL_TIMEZONE
           ),
           reason,
@@ -85,6 +96,47 @@ export function RescheduleRequestForm({
     }
   };
 
+  const disabledByLimit =
+    initiator === "student" && makeupRemaining !== undefined && makeupRemaining <= 0;
+
+  useEffect(() => {
+    if (initiator !== "student" || !selectedDate || disabledByLimit) {
+      setAvailableSlots([]);
+      setSelectedSlot("");
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingSlots(true);
+    setSelectedSlot("");
+    setError(null);
+    void fetch(
+      `/api/enrollment/teacher-slots?teacherId=${encodeURIComponent(lesson.teacherId)}&lessonId=${encodeURIComponent(lesson.id)}&date=${encodeURIComponent(selectedDate)}&timeZone=${encodeURIComponent(inputTimeZone)}&sessionMinutes=${lesson.durationMinutes}`
+    )
+      .then(async (res) =>
+        res.ok
+          ? ((await res.json()) as { openSlots?: Array<{ startTime: string; endTime: string }> })
+          : { openSlots: [] }
+      )
+      .then((data) => {
+        if (!cancelled) setAvailableSlots(data.openSlots ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableSlots([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSlots(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [disabledByLimit, initiator, inputTimeZone, lesson.durationMinutes, lesson.id, lesson.teacherId, selectedDate]);
+
+  const studentProposedTime =
+    selectedDate && selectedSlot ? `${selectedDate}T${selectedSlot}` : "";
+  const effectiveProposedTime = initiator === "student" ? studentProposedTime : proposedTime;
+
   if (submitted) {
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
@@ -92,9 +144,6 @@ export function RescheduleRequestForm({
       </div>
     );
   }
-
-  const disabledByLimit =
-    initiator === "student" && makeupRemaining !== undefined && makeupRemaining <= 0;
 
   return (
     <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
@@ -112,17 +161,61 @@ export function RescheduleRequestForm({
 
       <div className="space-y-2">
         <Label>{labels.proposedTime}</Label>
-        <Input
-          type="datetime-local"
-          step={1200}
-          value={proposedTime}
-          onChange={(e) => setProposedTime(e.target.value)}
-          className="rounded-xl"
-          disabled={disabledByLimit}
-        />
-        <p className="text-xs text-gray-500">
-          :00 · :20 · :40 (20-minute slots, {getTimezoneShortLabel(inputTimeZone)})
-        </p>
+        {initiator === "student" ? (
+          <>
+            <Input
+              type="date"
+              lang={inputLocale}
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="rounded-xl"
+              disabled={disabledByLimit}
+            />
+            <p className="text-xs text-gray-500">{labels.date ?? "Date"}</p>
+            {loadingSlots ? (
+              <p className="py-2 text-sm text-gray-500">
+                {labels.loadingSlots ?? "Loading available times…"}
+              </p>
+            ) : selectedDate && availableSlots.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2" aria-label={labels.time ?? "Available times"}>
+                {availableSlots.map((slot) => (
+                  <button
+                    key={slot.startTime}
+                    type="button"
+                    onClick={() => setSelectedSlot(slot.startTime)}
+                    className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                      selectedSlot === slot.startTime
+                        ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                        : "border-gray-200 bg-white text-gray-700 hover:border-emerald-300"
+                    }`}
+                  >
+                    {slot.startTime}–{slot.endTime}
+                  </button>
+                ))}
+              </div>
+            ) : selectedDate ? (
+              <p className="py-2 text-sm text-gray-500">
+                {labels.noAvailableSlots ?? "No available times."}
+              </p>
+            ) : null}
+            <p className="text-xs text-gray-500">{getTimezoneShortLabel(inputTimeZone)}</p>
+          </>
+        ) : (
+          <>
+            <Input
+              type="datetime-local"
+              lang={inputLocale}
+              step={1200}
+              value={proposedTime}
+              onChange={(e) => setProposedTime(e.target.value)}
+              className="rounded-xl"
+              disabled={disabledByLimit}
+            />
+            <p className="text-xs text-gray-500">
+              :00 · :20 · :40 (20-minute slots, {getTimezoneShortLabel(inputTimeZone)})
+            </p>
+          </>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -143,7 +236,7 @@ export function RescheduleRequestForm({
       <div className="flex gap-2">
         <Button
           className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-          disabled={!proposedTime.trim() || submitting || disabledByLimit}
+          disabled={!effectiveProposedTime.trim() || submitting || disabledByLimit}
           onClick={handleSubmit}
         >
           {submitting ? labels.submitting : labels.submit}

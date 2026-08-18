@@ -1,7 +1,9 @@
-import { getPublicTeachers } from "@/lib/teacher-profile-store";
+import { getPublicTeachers } from "@/lib/teacher-profile-store-sync";
 import { ensurePublicContentBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { HeroSection } from "@/components/landing/HeroSection";
 import { StatsBar } from "@/components/landing/StatsBar";
+import { TeacherTrustSection } from "@/components/landing/TeacherTrustSection";
+import { LessonFlowSection } from "@/components/landing/LessonFlowSection";
 import { FeaturesSection } from "@/components/landing/FeaturesSection";
 import { CurriculumSection } from "@/components/landing/CurriculumSection";
 import { PricingSection } from "@/components/landing/PricingSection";
@@ -28,15 +30,17 @@ export default async function LandingPage({
         <HeroSection locale={locale} />
         <StatsBar />
         <FeaturesSection />
+        <TeacherTrustSection />
+        <TeachersSection teachers={teachers} locale={locale} />
+        <LessonFlowSection />
         <CurriculumSection />
         <PricingSection locale={locale} />
-        <TeachersSection teachers={teachers} locale={locale} />
         <HowItWorksSection />
         <FaqSection />
         <CtaBand locale={locale} />
       </main>
 
-      <LandingFooter />
+      <LandingFooter locale={locale} />
     </div>
   );
 }

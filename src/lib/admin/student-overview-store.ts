@@ -1,5 +1,5 @@
-import type { CountryCode, PaymentStatus } from "@/types";
-import { getEnrollmentsByStudent } from "@/lib/enrollment-store";
+import type { CountryCode, PaymentStatus, StudentGender } from "@/types";
+import { getEnrollmentsByStudent } from "@/lib/enrollment-store-sync";
 import { getAllStudentDirectoryEntries } from "@/lib/students/student-directory-store-sync";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { sumSessionBalance } from "@/lib/sessions";
@@ -9,6 +9,7 @@ export interface AdminStudentListItem {
   displayName: string;
   legalName: string;
   country: CountryCode;
+  gender?: StudentGender;
   planLabel?: string;
   teacherName?: string;
   paymentStatus: PaymentStatus;
@@ -50,6 +51,7 @@ export function getAdminStudentListItems(tab: "active" | "past" = "active"): Adm
       displayName: getStudentDisplayName(entry.student),
       legalName: entry.student.fullName,
       country: entry.student.country,
+      gender: entry.student.gender,
       planLabel: primary?.planLabel ?? entry.student.planLabel,
       teacherName: primary?.teacherName ?? entry.student.teacherName,
       paymentStatus: primary?.paymentStatus ?? entry.student.paymentStatus,

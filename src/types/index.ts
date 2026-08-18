@@ -1,5 +1,6 @@
 export type UserRole = "student" | "teacher" | "admin";
-export type CountryCode = "KR" | "CN" | "OTHER";
+export type CountryCode = "KR" | "CN" | "PH" | "OTHER";
+export type StudentGender = "male" | "female";
 export type CefrLevel = "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 export type CoursePurpose =
   | "daily_conversation"
@@ -85,7 +86,7 @@ export interface StudentEnrollment {
   renewedFromEnrollmentId?: string;
   /** Student confirmed application (hold starts) */
   confirmedAt?: string;
-  /** Server deadline for payment (15h from confirm, trial end, or last-lesson end) */
+  /** Server slot-hold deadline (15h); students may report payment for the first 12h. */
   paymentDeadlineAt?: string;
   /** Student may apply for renewal (lessons exist through last-lesson-end + 12h). API-computed. */
   canStudentRenew?: boolean;
@@ -125,6 +126,8 @@ export interface LessonFeedback {
   topic?: string;
   feedback: string;
   homework?: string;
+  /** Textbook snapshot when feedback for the lesson was recorded. */
+  textbook?: string;
   /** Textbook page progress e.g. "p. 12–14" */
   progressPages?: string;
   createdAt: string;
@@ -165,11 +168,14 @@ export interface Teacher {
   status: "pending" | "active" | "on_leave" | "terminated";
   availableDays: string[];
   hourlyRatePhp: number;
+  /** Teacher profile creation date, used for tenure-based payroll eligibility. */
+  createdAt?: string;
   /** Linked signup application (pending teachers) */
   applicationId?: string;
   /** Public profile filled (signup step 2 or admin) */
   profileCompleted: boolean;
   email?: string;
+  videoPlatforms: VideoPlatform[];
 }
 
 export interface TeacherProfileInput {
@@ -180,6 +186,7 @@ export interface TeacherProfileInput {
   avatarUrl?: string;
   status?: Teacher["status"];
   hourlyRatePhp?: number;
+  videoPlatforms?: VideoPlatform[];
 }
 
 /** Teacher self-registration payload (pending admin approval) */
@@ -196,6 +203,7 @@ export interface TeacherApplication {
   submittedAt: string;
   /** Linked teachers.id after signup profile step (Package B) */
   teacherId?: string | null;
+  videoPlatforms: VideoPlatform[];
 }
 
 export interface TeacherSignupInput {
@@ -207,6 +215,7 @@ export interface TeacherSignupInput {
   address: string;
   email: string;
   password: string;
+  videoPlatforms: VideoPlatform[];
 }
 
 export interface PricingPlan {
@@ -230,6 +239,7 @@ export interface Student {
   englishName?: string;
   email?: string;
   dateOfBirth?: string;
+  gender?: StudentGender;
   phone?: string;
   country: CountryCode;
   englishLevel: CefrLevel;
@@ -250,6 +260,8 @@ export interface AccountHolder {
   email: string;
   phone: string;
   country: CountryCode;
+  /** IANA timezone derived from the selected account country/region. */
+  timezone: string;
   accountType: AccountType;
   createdAt: string;
 }
@@ -263,6 +275,8 @@ export interface Learner {
   /** 수업·채팅 표시명 */
   englishName: string;
   dateOfBirth: string;
+  gender?: StudentGender;
+  videoPlatforms: VideoPlatform[];
   englishLevel?: CefrLevel;
   purposes?: CoursePurpose[];
   surveyNotes?: string;
@@ -346,8 +360,11 @@ export interface StudentRegistrationReview {
   learnerFullName: string;
   learnerEnglishName: string;
   learnerDateOfBirth: string;
+  learnerGender?: StudentGender;
+  videoPlatforms: VideoPlatform[];
   englishLevel?: CefrLevel;
   purposes?: CoursePurpose[];
+  surveyNotes?: string;
   submittedAt: string;
   status: RegistrationStatus;
 }
@@ -360,11 +377,17 @@ export interface AccountSession {
 
 export type VideoPlatform = "ZOOM" | "VOOV";
 
+export interface TextbookHistoryEntry {
+  textbook: string;
+  replacedAt: string;
+}
+
 /** Teacher-maintained context per student (textbook persists until changed) */
 export interface TeacherStudentContext {
   studentId: string;
   teacherId: string;
   textbook: string;
+  textbookHistory: TextbookHistoryEntry[];
   videoPlatform: VideoPlatform;
   specialNotes?: string;
 }

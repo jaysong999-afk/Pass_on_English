@@ -1,5 +1,3 @@
-"use client";
-
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
@@ -13,16 +11,16 @@ export function HeroSection({ locale }: { locale: string }) {
 
   return (
     <section className="landing-gradient-hero relative overflow-hidden">
-      <div className="landing-grid-pattern absolute inset-0 opacity-40" />
+      <div className="landing-grid-pattern absolute inset-0 opacity-20" />
       <div className="landing-container relative pb-16 pt-12 md:pb-24 md:pt-16 lg:pt-20">
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+        <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_.9fr] lg:gap-14">
           {/* Copy */}
           <div className="max-w-xl">
             <span className="inline-flex items-center rounded-full border border-brand-200 bg-white/80 px-4 py-1.5 text-sm font-semibold text-brand-800 shadow-sm backdrop-blur">
               {t("badge")}
             </span>
 
-            <h1 className="landing-display mt-6 text-[2rem] sm:text-5xl lg:text-[3.25rem]">
+            <h1 className="landing-display mt-6 max-w-[650px] text-[2.25rem] sm:text-5xl lg:text-[3.5rem]">
               {t("titleLine1")}{" "}
               <span className="bg-gradient-to-r from-brand-700 to-brand-500 bg-clip-text text-transparent">
                 {t("titleHighlight")}
@@ -50,7 +48,7 @@ export function HeroSection({ locale }: { locale: string }) {
                 size="lg"
                 className="h-12 rounded-2xl border-brand-100 bg-white px-8 text-base hover:bg-mint-50"
               >
-                <Link href={`/${locale}/pricing`}>{t("ctaSecondary")}</Link>
+                <Link href={`/${locale}#lesson-flow`}>{t("ctaSecondary")}</Link>
               </Button>
             </div>
 

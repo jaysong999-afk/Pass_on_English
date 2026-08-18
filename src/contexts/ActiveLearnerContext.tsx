@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { AccountHolder, AccountSession, Learner } from "@/types";
 import { getStudentDisplayName } from "@/lib/student-display-name";
+import { apiRequest } from "@/lib/api/client";
 
 interface AccountContextValue {
   account: AccountHolder | null;
@@ -33,9 +34,9 @@ export function ActiveLearnerProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/student/account");
-      if (!res.ok) return;
-      const data = (await res.json()) as AccountSession & { activeLearner: Learner };
+      const data = await apiRequest<AccountSession & { activeLearner: Learner }>(
+        "/api/student/account"
+      );
       setAccount(data.account);
       setLearners(data.learners);
       setActiveLearner(data.activeLearner);

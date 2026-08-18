@@ -39,6 +39,7 @@ import {
   listFuturePaidLessonsForEnrollmentInDb,
   removeFutureScheduledLessonsForEnrollmentInDb,
 } from "@/lib/lessons/repository";
+import { notifyTeacherOfLessonAssignmentInDb } from "@/lib/notifications/teacher-lesson-assignment";
 
 export interface GenerateEnrollmentLessonsResult {
   created: Lesson[];
@@ -320,6 +321,13 @@ async function scheduleLessonsForConfirmedEnrollmentInDbUnlocked(
 
   if (result.created.length > 0) {
     await updateEnrollmentEndDateInDb(enrollmentId, result.endDate);
+    const firstCreatedLesson = [...result.created].sort((a, b) =>
+      a.scheduledAt.localeCompare(b.scheduledAt)
+    )[0];
+    await notifyTeacherOfLessonAssignmentInDb({
+      assignmentKey: `enrollment:${enrollmentId}`,
+      lesson: firstCreatedLesson,
+    });
   }
 
   return result;

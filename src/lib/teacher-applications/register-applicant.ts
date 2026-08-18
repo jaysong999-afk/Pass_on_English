@@ -118,6 +118,7 @@ async function recoverExistingApplicant(
     facebookMessengerId: input.facebookMessengerId,
     address: input.address,
     email: input.email,
+    videoPlatforms: input.videoPlatforms,
   });
 }
 
@@ -230,6 +231,7 @@ export async function registerTeacherApplicantInDb(
       facebookMessengerId: input.facebookMessengerId,
       address: input.address,
       email: input.email,
+      videoPlatforms: input.videoPlatforms,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";

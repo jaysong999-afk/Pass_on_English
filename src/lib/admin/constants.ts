@@ -1,3 +1,1 @@
 export const ADMIN_SENDER_DISPLAY_NAME = "Pass on English";
-
-export const DEMO_ADMIN_SENDER_ID = "a0000002-0000-4000-8000-000000000002";

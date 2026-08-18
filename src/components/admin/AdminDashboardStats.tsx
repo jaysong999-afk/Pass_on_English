@@ -16,7 +16,7 @@ import { formatCurrency } from "@/lib/utils";
 const EMPTY_STATS: AdminDashboardStats = {
   todayLessonTotal: 0,
   todayLessonCompleted: 0,
-  approvalPending: 0,
+  actionRequired: 0,
   activeStudentCount: 0,
   activeTeacherCount: 0,
   totalRevenueKrw: 0,
@@ -64,9 +64,10 @@ export function AdminDashboardStats() {
       <StatCard
         href="/admin/reschedule"
         icon={CheckSquare}
-        label="승인 필요"
-        value={ready ? `${display.approvalPending}건` : "…"}
-        highlight={ready && display.approvalPending > 0}
+        label="처리 필요"
+        value={ready ? `${display.actionRequired}건` : "…"}
+        detail="확인·처리가 필요한 업무"
+        highlight={ready && display.actionRequired > 0}
       />
       <StatCard
         href="/admin/students"

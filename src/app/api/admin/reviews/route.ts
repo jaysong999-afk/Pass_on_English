@@ -28,7 +28,7 @@ export async function PATCH(request: Request) {
       | "payment_activation";
     const action = body.action as "approve" | "reject" | "confirm" | "activate";
     const targetId = String(body.targetId ?? "").trim();
-    const adminName = body.adminName != null ? String(body.adminName) : undefined;
+    const adminName = guard.profile.fullName?.trim() || guard.email;
 
     if (!category || !action || !targetId) {
       return NextResponse.json({ error: "invalid_body" }, { status: 400 });

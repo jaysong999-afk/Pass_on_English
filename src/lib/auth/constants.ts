@@ -8,15 +8,6 @@ export const AUTH_PUBLIC_PAGE_PREFIXES = [
   "/auth/callback",
 ] as const;
 
-export const AUTH_PUBLIC_API_PREFIXES = [
-  "/api/health",
-  "/api/auth/",
-  "/api/cron/",
-  "/api/faq",
-  "/api/teachers/public",
-  "/api/teacher/applications",
-] as const;
-
 export function loginPathForRole(role: UserRole, locale = "ko"): string {
   switch (role) {
     case "student":
@@ -56,13 +47,47 @@ export function isPublicPagePath(pathname: string): boolean {
 }
 
 export function isPublicApiPath(pathname: string, method: string): boolean {
-  if (AUTH_PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+  const isReadMethod = method === "GET" || method === "HEAD";
+
+  if (pathname === "/api/health" && isReadMethod) {
+    return true;
+  }
+
+  if (pathname === "/api/auth/login" && method === "POST") {
+    return true;
+  }
+
+  if (pathname === "/api/auth/logout" && method === "POST") {
+    return true;
+  }
+
+  if (pathname === "/api/auth/session" && isReadMethod) {
+    return true;
+  }
+
+  if (
+    (pathname === "/api/cron/expire-enrollment-holds" ||
+      pathname === "/api/cron/process-scheduled-broadcasts") &&
+    (isReadMethod || method === "POST")
+  ) {
+    return true;
+  }
+
+  if (pathname === "/api/faq" && isReadMethod) {
+    return true;
+  }
+
+  if (pathname === "/api/teachers/public" && isReadMethod) {
+    return true;
+  }
+
+  if (pathname === "/api/teacher/applications" && method === "POST") {
     return true;
   }
 
   if (
     (pathname === "/api/pricing-plans" || /^\/api\/pricing-plans\/[^/]+$/.test(pathname)) &&
-    method === "GET"
+    isReadMethod
   ) {
     return true;
   }
@@ -71,11 +96,11 @@ export function isPublicApiPath(pathname: string, method: string): boolean {
     return true;
   }
 
-  if (pathname === "/api/enrollment/teacher-slots" && method === "GET") {
+  if (pathname === "/api/enrollment/teacher-slots" && isReadMethod) {
     return true;
   }
 
-  if (pathname === "/api/push/send") {
+  if (pathname === "/api/push/send" && method === "POST") {
     return true;
   }
 
@@ -104,7 +129,7 @@ export function requiredRoleForApi(pathname: string, method: string): UserRole |
   return roles[0];
 }
 
-/** Returns allowed roles, or `null` when the path is public. */
+/** Returns allowed roles, `null` for explicitly public routes, or `[]` to deny unclassified APIs. */
 export function requiredRolesForApi(pathname: string, method: string): UserRole[] | null {
   if (isPublicApiPath(pathname, method)) {
     return null;
@@ -118,13 +143,21 @@ export function requiredRolesForApi(pathname: string, method: string): UserRole[
     return ["admin"];
   }
 
-  // Mixed callers: teacher edits, admin reads, student reserves slots.
+  // The route performs action-level ownership checks after this role boundary.
   if (pathname === "/api/teacher/availability") {
-    return null;
+    return ["student", "teacher", "admin"];
   }
 
-  if (pathname === "/api/teachers/profile" && method === "POST") {
-    return ["teacher"];
+  if (pathname === "/api/teacher/applications" && method === "GET") {
+    return ["teacher", "admin"];
+  }
+
+  if (pathname === "/api/teachers/profile") {
+    return method === "POST" ? ["teacher"] : ["admin"];
+  }
+
+  if (pathname.startsWith("/api/teachers/profile/")) {
+    return ["admin"];
   }
 
   if (pathname.startsWith("/api/teacher/")) {
@@ -169,5 +202,5 @@ export function requiredRolesForApi(pathname: string, method: string): UserRole[
     return ["student", "teacher"];
   }
 
-  return null;
+  return [];
 }

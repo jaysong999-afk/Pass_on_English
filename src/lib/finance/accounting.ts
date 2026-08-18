@@ -1,4 +1,5 @@
 import type {
+  CountryCode,
   ExchangeRates,
   FinanceTransaction,
   MonthlyPlSummary,
@@ -51,7 +52,7 @@ export function calcVatFromSupply(supply: number) {
 }
 
 function planAmountForStudent(
-  country: "KR" | "CN" | "OTHER",
+  country: CountryCode,
   planIndex: number,
   plans: PricingPlan[]
 ) {
@@ -106,40 +107,8 @@ export function buildAutoTransactions(
   const payrollTxs = getPayrollFinanceTransactions();
   txs.push(...payrollTxs);
 
-  txs.push({
-    id: "auto-server-1",
-    date: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10),
-    type: "expense",
-    category: "server_infra",
-    description: "Tencent Cloud HK — 월 서버·DB 비용",
-    currency: "KRW",
-    amount: 450000,
-    amountKrw: 450000,
-    supplyAmount: 409091,
-    vatAmount: 40909,
-    taxTreatment: "taxable",
-    source: "auto",
-  });
-
   return txs.sort((a, b) => b.date.localeCompare(a.date));
 }
-
-export const SEED_MANUAL_TRANSACTIONS: FinanceTransaction[] = [
-  {
-    id: "manual-1",
-    date: "2026-07-12",
-    type: "expense",
-    category: "other",
-    description: "마케팅 제작비",
-    currency: "KRW",
-    amount: 220000,
-    amountKrw: 220000,
-    supplyAmount: 200000,
-    vatAmount: 20000,
-    taxTreatment: "taxable",
-    source: "manual",
-  },
-];
 
 export function computeMonthlySummary(
   transactions: FinanceTransaction[],

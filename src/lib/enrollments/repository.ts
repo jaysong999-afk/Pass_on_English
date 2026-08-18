@@ -12,7 +12,11 @@ import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
 import { getTeacherFromCache } from "@/lib/teachers/teacher-profile-cache";
 import { getAccountSessionCache } from "@/lib/account-session-cache";
 import { updateLearnerEnrollmentMeta } from "@/lib/account-store-sync";
-import { computeContractEndDate, addDaysToDateKey } from "@/lib/contract-schedule";
+import {
+  computeContractEndDate,
+  addDaysToDateKey,
+  nextScheduledDateOnOrAfter,
+} from "@/lib/contract-schedule";
 import { createBootstrapDbClient, createRequestDbClient } from "@/lib/supabase/db-client";
 import { createClient } from "@/lib/supabase/server";
 import { recordEnrollmentPaymentFinanceTransactionInDb } from "@/lib/finance/repository";
@@ -39,11 +43,15 @@ import {
   updateEnrollmentTeacher,
   reassignEnrollmentsTeacher,
   resetEnrollments,
-  getEnrollmentSeed,
 } from "@/lib/enrollment-store-sync";
 import { scheduleLessonsForConfirmedEnrollmentInDb } from "@/lib/lessons/schedule-service";
 import { listFuturePaidLessonsForEnrollmentInDb } from "@/lib/lessons/repository";
-import { computeHoldDeadlineFrom, computePaymentDeadline, computePaymentDeadlineAfterTrial } from "@/lib/enrollment-hold/constants";
+import {
+  computeHoldDeadlineFrom,
+  computePaymentDeadline,
+  computePaymentDeadlineAfterTrial,
+  studentFacingPaymentDeadlineAt,
+} from "@/lib/enrollment-hold/constants";
 import { getAllLessons } from "@/lib/teacher-lesson-store-sync";
 import {
   findRenewalHoldFor,
@@ -94,7 +102,10 @@ interface EnrollmentRow {
   payment_deadline_at?: string | null;
   cancel_reason?: string | null;
   is_trial?: boolean | null;
-  teacher?: { display_name: string | null } | null;
+  teacher?:
+    | { display_name: string | null }
+    | Array<{ display_name: string | null }>
+    | null;
 }
 
 interface PaymentRow {
@@ -143,14 +154,35 @@ function toDateKey(value: string | null | undefined): string {
   return getDateKeyInTimezone(new Date(value), CANONICAL_TIMEZONE);
 }
 
+function normalizeSessionAdjustments(value: unknown): SessionAdjustment[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter((item): item is SessionAdjustment => {
+    if (!item || typeof item !== "object") return false;
+    const adjustment = item as Partial<SessionAdjustment>;
+    return (
+      typeof adjustment.id === "string" &&
+      typeof adjustment.at === "string" &&
+      Number.isFinite(new Date(adjustment.at).getTime()) &&
+      typeof adjustment.adminName === "string" &&
+      typeof adjustment.deltaRemaining === "number" &&
+      typeof adjustment.previousRemaining === "number" &&
+      typeof adjustment.newRemaining === "number" &&
+      typeof adjustment.previousTotal === "number" &&
+      typeof adjustment.newTotal === "number"
+    );
+  });
+}
+
 function rowToEnrollment(row: EnrollmentRow, planLabel?: string): StudentEnrollment {
   const plan = getCachedPricingPlanById(row.plan_id);
   const teacher = getTeacherFromCache(row.teacher_id);
+  const joinedTeacher = Array.isArray(row.teacher) ? row.teacher[0] : row.teacher;
   return {
     id: row.id,
     studentId: row.student_id,
     teacherId: row.teacher_id,
-    teacherName: row.teacher?.display_name?.trim() || teacher?.displayName || "Teacher",
+    teacherName: joinedTeacher?.display_name?.trim() || teacher?.displayName || "Teacher",
     teacherAvatarUrl: teacher?.avatarUrl,
     planId: row.plan_id,
     planLabel: planLabel ?? (plan ? formatPlanLabel(plan, "ko") : row.plan_id),
@@ -167,7 +199,7 @@ function rowToEnrollment(row: EnrollmentRow, planLabel?: string): StudentEnrollm
     scheduleDays: plan?.scheduleDays?.length ? [...plan.scheduleDays] : undefined,
     sessionMinutes: plan?.sessionMinutes,
     renewedFromEnrollmentId: row.renewed_from_enrollment_id ?? undefined,
-    adjustments: [...(row.session_adjustments ?? [])],
+    adjustments: normalizeSessionAdjustments(row.session_adjustments),
     confirmedAt: row.confirmed_at ?? undefined,
     paymentDeadlineAt: row.payment_deadline_at ?? undefined,
     cancelReason: row.cancel_reason ?? undefined,
@@ -207,7 +239,7 @@ async function fetchEnrollmentRows(): Promise<EnrollmentRow[]> {
   if (error) {
     throw new Error(`enrollments_fetch_failed: ${error.message}`);
   }
-  return (data ?? []) as unknown as unknown as EnrollmentRow[];
+  return (data ?? []) as EnrollmentRow[];
 }
 
 async function fetchPaymentRows(): Promise<PaymentRow[]> {
@@ -230,7 +262,6 @@ export {
   updateEnrollmentTeacher,
   reassignEnrollmentsTeacher,
   resetEnrollments,
-  getEnrollmentSeed,
 };
 
 export async function warmEnrollmentCache(): Promise<StudentEnrollment[]> {
@@ -315,7 +346,7 @@ async function fetchRenewalHoldsForParentInDb(
 
   const holds: StudentEnrollment[] = [];
   for (const row of (data ?? []) as EnrollmentRow[]) {
-    const enrollment = rowToEnrollment(row as EnrollmentRow);
+    const enrollment = rowToEnrollment(row);
     patchEnrollmentInCache(enrollment);
     holds.push(enrollment);
   }
@@ -585,10 +616,14 @@ export async function confirmRenewalEnrollmentInDb(
 
   const holdStart = lastLessonEnd;
   const deadline = computeHoldDeadlineFrom(holdStart);
-  const todayKey = now.toISOString().slice(0, 10);
-  const startDate =
-    previous.endDate >= todayKey ? addDaysToDateKey(previous.endDate, 1) : todayKey;
+  const todayKey = getDateKeyInTimezone(now, CANONICAL_TIMEZONE);
   const scheduleDays = (plan.scheduleDays ?? ["Mon", "Wed", "Fri"]) as DayLabel[];
+  const lastLessonDateKey = getDateKeyInTimezone(lastLessonEnd, CANONICAL_TIMEZONE);
+  const previousCourseEnd =
+    previous.endDate > lastLessonDateKey ? previous.endDate : lastLessonDateKey;
+  const earliestContinuationDate =
+    previousCourseEnd >= todayKey ? addDaysToDateKey(previousCourseEnd, 1) : todayKey;
+  const startDate = nextScheduledDateOnOrAfter(earliestContinuationDate, scheduleDays);
   const endDate = computeContractEndDate(startDate, plan.sessionsCount, scheduleDays);
   const planLabel = formatPlanLabel(plan, input.locale ?? "ko");
 
@@ -677,7 +712,8 @@ export async function reportEnrollmentPaymentInDb(
   if (current.paymentStatus === "reported") return cloneEnrollment(current);
 
   const now = new Date();
-  if (current.paymentDeadlineAt && new Date(current.paymentDeadlineAt) <= now) {
+  const studentDeadlineAt = studentFacingPaymentDeadlineAt(current);
+  if (studentDeadlineAt && new Date(studentDeadlineAt) <= now) {
     throw new Error("payment_deadline_passed");
   }
   if (

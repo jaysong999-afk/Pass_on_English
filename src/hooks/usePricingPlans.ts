@@ -1,29 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useApiResource } from "@/hooks/useApiResource";
+import { apiRequest } from "@/lib/api/client";
 import type { PricingPlan } from "@/types";
 
 export function usePricingPlans(activeOnly = true) {
-  const [plans, setPlans] = useState<PricingPlan[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/pricing-plans${activeOnly ? "?active=true" : ""}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "load_failed");
-      setPlans(data.plans ?? []);
-    } catch {
-      setError("요금제를 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
-    }
+  const load = useCallback(async () => {
+    const data = await apiRequest<{ plans?: PricingPlan[] }>(
+      `/api/pricing-plans${activeOnly ? "?active=true" : ""}`
+    );
+    return data.plans ?? [];
   }, [activeOnly]);
 
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const { data: plans, loading, error: loadError, reload } = useApiResource(load, []);
+  const error = loadError ? "요금제를 불러오지 못했습니다." : null;
 
   return { plans, loading, error, reload };
 }

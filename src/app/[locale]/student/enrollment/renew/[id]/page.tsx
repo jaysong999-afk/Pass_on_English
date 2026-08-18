@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { studentPath } from "@/lib/student-paths";
 import { getEnrollmentById } from "@/lib/enrollment-store-sync";
 import { decorateEnrollmentRenewal } from "@/lib/enrollments/renewal-window";
-import { getPublicTeachers } from "@/lib/teacher-profile-store";
+import { getPublicTeachers } from "@/lib/teacher-profile-store-sync";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export default async function RenewEnrollmentPage({

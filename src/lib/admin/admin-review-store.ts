@@ -2,7 +2,7 @@ import { appendAdminReviewLogInDb, getAdminReviewLogsByCategorySync } from "@/li
 import {
   getPendingStudentRegistrations,
   getStudentRegistrationById,
-} from "@/lib/admin/student-registration-store";
+} from "@/lib/admin/student-registration-store-sync";
 import {
   updateStudentRegistrationStatusInDb,
 } from "@/lib/student-registrations/repository";
@@ -23,21 +23,15 @@ import {
   getEnrollmentById,
   getPaymentByEnrollmentId,
   getPendingPaymentEnrollments,
-} from "@/lib/enrollment-store";
+} from "@/lib/enrollment-store-sync";
 import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import {
-  adminApproveRescheduleRequestInDb,
-  adminRejectRescheduleRequestInDb,
-} from "@/lib/reschedule/repository";
-import {
-  getActiveRescheduleRequests,
-  getRescheduleRequestById,
-} from "@/lib/reschedule-store";
+  getAllRescheduleRequests,
+} from "@/lib/reschedule-store-sync";
+import { countReschedulesRequiringAdminAttention } from "@/lib/reschedule/admin-monitoring";
 import { updateLearnerRegistrationStatus } from "@/lib/account-store-sync";
 import { updateTeacherStatusInDb, warmTeacherProfileCache } from "@/lib/teachers/repository";
-import { formatDate, formatTime } from "@/lib/utils";
-import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import { decorateEnrollmentRenewal, getRenewalWindowState, isRenewalSystemAutoOffer } from "@/lib/enrollments/renewal-window";
 import { getAllLessons } from "@/lib/teacher-lesson-store-sync";
 import { getAllEnrollments } from "@/lib/enrollment-store-sync";
@@ -89,8 +83,10 @@ function toPaymentReviewItem(enrollment: StudentEnrollment): AdminPaymentReviewI
 }
 
 export function getAdminReviewSnapshot() {
+  const reschedule = getAllRescheduleRequests();
   return {
-    reschedule: getActiveRescheduleRequests(),
+    reschedule,
+    rescheduleAttentionCount: countReschedulesRequiringAdminAttention(reschedule),
     teacherApplications: getPendingTeacherApplications(),
     studentRegistrations: getPendingStudentRegistrations(),
     paymentEnrollments: getPendingPaymentEnrollments().map(toPaymentReviewItem),
@@ -115,35 +111,6 @@ export async function processAdminReviewAction(input: {
   const adminName = input.adminName?.trim() || "관리자";
 
   if (input.category === "reschedule") {
-    if (input.action === "approve") {
-      const before = getRescheduleRequestById(input.targetId);
-      if (!before) return { error: "not_found" };
-      const result = await adminApproveRescheduleRequestInDb(input.targetId);
-      if (result.error) return { error: result.error };
-      const log = await appendAdminReviewLogInDb({
-        category: "reschedule",
-        action: "approved",
-        targetId: input.targetId,
-        targetLabel: `${before.studentName} · ${before.teacherName}`,
-        detail: `${formatDate(before.originalScheduledAt, "ko")} ${formatTime(before.originalScheduledAt, "ko", CANONICAL_TIMEZONE)} → ${formatDate(before.proposedScheduledAt, "ko")} ${formatTime(before.proposedScheduledAt, "ko", CANONICAL_TIMEZONE)}`,
-        adminName,
-      });
-      return { log };
-    }
-    if (input.action === "reject") {
-      const before = getRescheduleRequestById(input.targetId);
-      if (!before) return { error: "not_found" };
-      const result = await adminRejectRescheduleRequestInDb(input.targetId);
-      if (result.error) return { error: result.error };
-      const log = await appendAdminReviewLogInDb({
-        category: "reschedule",
-        action: "rejected",
-        targetId: input.targetId,
-        targetLabel: `${before.studentName} · ${before.teacherName}`,
-        adminName,
-      });
-      return { log };
-    }
     return { error: "invalid_action" };
   }
 

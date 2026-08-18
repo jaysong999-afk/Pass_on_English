@@ -1,4 +1,9 @@
-import type { CountryCode, TeacherStudentContext, VideoPlatform } from "@/types";
+import type {
+  CountryCode,
+  TeacherStudentContext,
+  TextbookHistoryEntry,
+  VideoPlatform,
+} from "@/types";
 import { createClient } from "@/lib/supabase/server";
 import {
   getTeacherStudentContextCache,
@@ -11,9 +16,22 @@ interface TeacherStudentContextRow {
   teacher_id: string;
   student_id: string;
   textbook: string;
+  textbook_history: unknown;
   video_platform: VideoPlatform;
   special_notes: string | null;
   updated_at: string;
+}
+
+function parseTextbookHistory(value: unknown): TextbookHistoryEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const textbook = "textbook" in entry ? entry.textbook : null;
+    const replacedAt = "replacedAt" in entry ? entry.replacedAt : null;
+    return typeof textbook === "string" && typeof replacedAt === "string"
+      ? [{ textbook, replacedAt }]
+      : [];
+  });
 }
 
 export function defaultVideoPlatformForCountry(
@@ -27,6 +45,7 @@ function rowToContext(row: TeacherStudentContextRow): TeacherStudentContext {
     studentId: row.student_id,
     teacherId: row.teacher_id,
     textbook: row.textbook,
+    textbookHistory: parseTextbookHistory(row.textbook_history),
     videoPlatform: row.video_platform,
     specialNotes: row.special_notes ?? undefined,
   };
@@ -36,7 +55,7 @@ async function fetchContextRows(): Promise<TeacherStudentContextRow[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("teacher_student_context")
-    .select("id, teacher_id, student_id, textbook, video_platform, special_notes, updated_at");
+    .select("id, teacher_id, student_id, textbook, textbook_history, video_platform, special_notes, updated_at");
 
   if (error) {
     throw new Error(`teacher_student_context_fetch_failed: ${error.message}`);
@@ -55,7 +74,7 @@ async function fetchContextRow(studentId: string, teacherId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("teacher_student_context")
-    .select("id, teacher_id, student_id, textbook, video_platform, special_notes, updated_at")
+    .select("id, teacher_id, student_id, textbook, textbook_history, video_platform, special_notes, updated_at")
     .eq("student_id", studentId)
     .eq("teacher_id", teacherId)
     .maybeSingle();
@@ -86,6 +105,7 @@ export async function getTeacherStudentContextInDb(
     studentId,
     teacherId,
     textbook: defaults?.textbook ?? "",
+    textbookHistory: [],
     videoPlatform: defaults?.videoPlatform ?? "ZOOM",
   };
   return { ...fallback };
@@ -121,7 +141,7 @@ export async function updateTeacherStudentContextInDb(
       },
       { onConflict: "teacher_id,student_id" }
     )
-    .select("id, teacher_id, student_id, textbook, video_platform, special_notes, updated_at")
+    .select("id, teacher_id, student_id, textbook, textbook_history, video_platform, special_notes, updated_at")
     .single();
 
   if (error) {

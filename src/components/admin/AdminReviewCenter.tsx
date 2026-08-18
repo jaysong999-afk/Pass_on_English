@@ -1,62 +1,39 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   CalendarClock,
   Check,
-  ClipboardList,
   GraduationCap,
   RefreshCw,
   UserPlus,
   Wallet,
+  AlertTriangle,
+  ArrowRight,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  actionLabel,
-  type AdminReviewLogsByCategory,
-} from "@/lib/admin/admin-review-log-store";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import {
   initiatorLabel,
   rescheduleStatusLabel,
 } from "@/lib/reschedule-labels";
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils";
-import type {
-  AdminReviewLogEntry,
-  LessonRescheduleRequest,
-  StudentEnrollment,
-  StudentRegistrationReview,
-  TeacherApplication,
-} from "@/types";
-
-interface PaymentReviewEnrollment extends StudentEnrollment {
-  studentName: string;
-  studentLegalName?: string;
-  depositorName?: string;
-  accountHolderName?: string;
-  renewalUnapplied?: boolean;
-}
-
-interface ReviewSnapshot {
-  reschedule: LessonRescheduleRequest[];
-  teacherApplications: TeacherApplication[];
-  studentRegistrations: StudentRegistrationReview[];
-  paymentEnrollments: PaymentReviewEnrollment[];
-  logs: AdminReviewLogsByCategory;
-}
+import { getRescheduleMonitoringState } from "@/lib/reschedule/admin-monitoring";
+import { formatCefrLevel, formatCoursePurposes } from "@/lib/student-survey-labels";
+import {
+  useAdminReviewCenter,
+  type ReviewSnapshot,
+  type RescheduleFilter,
+} from "@/components/admin/reviews/useAdminReviewCenter";
+import {
+  ReviewLogSection,
+  ReviewQueueCard,
+} from "@/components/admin/reviews/ReviewSectionCards";
 
 type ReviewTab = "reschedule" | "teacher" | "student" | "payment";
 
@@ -69,35 +46,11 @@ const TAB_META: { id: ReviewTab; label: string; icon: typeof RefreshCw }[] = [
 
 export function AdminReviewCenter() {
   const [tab, setTab] = useState<ReviewTab>("reschedule");
-  const [snapshot, setSnapshot] = useState<ReviewSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
   const [actingKey, setActingKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/admin/reviews");
-      const data = (await res.json()) as ReviewSnapshot;
-      setSnapshot(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const counts = useMemo(
-    () => ({
-      reschedule: snapshot?.reschedule.length ?? 0,
-      teacher: snapshot?.teacherApplications.length ?? 0,
-      student: snapshot?.studentRegistrations.length ?? 0,
-      payment: snapshot?.paymentEnrollments.length ?? 0,
-    }),
-    [snapshot]
-  );
+  const [rescheduleFilter, setRescheduleFilter] = useState<RescheduleFilter>("all");
+  const { snapshot, setSnapshot, loading, counts, rescheduleRows, load } =
+    useAdminReviewCenter(rescheduleFilter);
 
   const totalPending = counts.reschedule + counts.teacher + counts.student + counts.payment;
 
@@ -150,7 +103,7 @@ export function AdminReviewCenter() {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={totalPending > 0 ? "warning" : "secondary"}>
-            대기 {totalPending}건
+            처리 필요 {totalPending}건
           </Badge>
           <Button variant="outline" size="sm" className="gap-1" onClick={load} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -175,19 +128,31 @@ export function AdminReviewCenter() {
         </TabsList>
 
         <TabsContent value="reschedule" className="mt-4 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Card><CardContent className="p-4"><p className="text-xs text-gray-500">전체 요청</p><p className="mt-1 text-2xl font-bold">{snapshot?.reschedule.length ?? 0}건</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-gray-500">상대방 응답 대기</p><p className="mt-1 text-2xl font-bold">{snapshot?.reschedule.filter((r) => getRescheduleMonitoringState(r).isPending).length ?? 0}건</p></CardContent></Card>
+            <Card className={(snapshot?.rescheduleAttentionCount ?? 0) > 0 ? "border-amber-300 bg-amber-50/50" : ""}><CardContent className="p-4"><p className="text-xs text-gray-500">관리자 확인 필요</p><p className="mt-1 text-2xl font-bold text-amber-700">{snapshot?.rescheduleAttentionCount ?? 0}건</p></CardContent></Card>
+          </div>
+          <div className="flex flex-wrap gap-2" aria-label="수업 변경 상태 필터">
+            {([
+              ["all", "전체"], ["pending", "승인 대기"], ["completed", "변경 완료"],
+              ["closed", "거절/취소"], ["attention", `관리자 확인 필요 ${snapshot?.rescheduleAttentionCount ?? 0}`],
+            ] as const).map(([value, label]) => (
+              <Button key={value} size="sm" variant={rescheduleFilter === value ? "default" : "outline"} onClick={() => setRescheduleFilter(value)}>{label}</Button>
+            ))}
+          </div>
           <ReviewQueueCard
-            title="수업 시간 변경 요청"
-            empty="진행 중인 변경 요청이 없습니다."
+            title="수업 변경 모니터링"
+            empty="선택한 조건의 변경 요청이 없습니다."
             loading={loading}
-            isEmpty={!snapshot?.reschedule.length}
+            isEmpty={!rescheduleRows.length}
           >
-            {snapshot?.reschedule.map((req) => {
-              const keyApprove = `reschedule:approve:${req.id}`;
-              const keyReject = `reschedule:reject:${req.id}`;
+            {rescheduleRows.map((req) => {
+              const monitoring = getRescheduleMonitoringState(req);
               return (
                 <div
                   key={req.id}
-                  className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm"
+                  className={`rounded-xl border p-4 text-sm ${monitoring.requiresAdminAttention ? "border-amber-300 bg-amber-50/50" : "border-gray-200 bg-white"}`}
                 >
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-ink">{req.studentName}</span>
@@ -199,6 +164,7 @@ export function AdminReviewCenter() {
                     <Badge variant="outline" className="text-[10px]">
                       {rescheduleStatusLabel(req.status, "ko")}
                     </Badge>
+                    {monitoring.requiresAdminAttention && <Badge variant="warning" className="gap-1 text-[10px]"><AlertTriangle className="h-3 w-3" />관리자 확인 필요</Badge>}
                   </div>
                   <dl className="space-y-1 text-xs text-gray-600">
                     <div className="flex gap-2">
@@ -222,45 +188,21 @@ export function AdminReviewCenter() {
                       </div>
                     )}
                   </dl>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      className="gap-1 bg-emerald-600 hover:bg-emerald-700"
-                      disabled={actingKey === keyApprove}
-                      onClick={() =>
-                        runAction({
-                          category: "reschedule",
-                          action: "approve",
-                          targetId: req.id,
-                        })
-                      }
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                      승인
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1 text-red-600"
-                      disabled={actingKey === keyReject}
-                      onClick={() =>
-                        runAction({
-                          category: "reschedule",
-                          action: "reject",
-                          targetId: req.id,
-                        })
-                      }
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      거절
-                    </Button>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                    <span className="font-medium">{req.initiator === "student" ? "학생 요청 완료" : "선생님 요청 완료"}</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                    <span className={monitoring.isPending ? "font-semibold text-violet-700" : ""}>{req.status === "pending_teacher_approval" ? "선생님 승인 대기" : req.status === "pending_student_approval" ? "학생 승인 대기" : req.status === "approved" ? "상대방 승인 완료" : req.status === "rejected" ? "상대방 거절" : "요청 취소"}</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                    <span>{req.status === "approved" ? "일정 변경 완료" : req.status === "rejected" || req.status === "cancelled" ? "기존 일정 유지" : "일정 변경 대기"}</span>
                   </div>
+                  {monitoring.requiresAdminAttention && <p className="mt-2 text-xs font-medium text-amber-800">{monitoring.attentionReasons.includes("stale") ? `요청 후 ${Math.floor(monitoring.elapsedHours)}시간 동안 응답이 없습니다. ` : ""}{monitoring.attentionReasons.includes("lesson_imminent") ? `기존 수업까지 ${Math.max(0, Math.ceil(monitoring.hoursUntilLesson))}시간 남았습니다.` : ""}</p>}
+                  <div className="mt-3 flex justify-end"><Link href={`/admin/operations?lessonId=${encodeURIComponent(req.lessonId)}`}><Button size="sm" variant="outline">상세 확인·관리자 조치</Button></Link></div>
                 </div>
               );
             })}
           </ReviewQueueCard>
           <ReviewLogSection
-            title="수업 시간 변경 처리 로그"
+            title="최근 수업 변경 기록"
             logs={snapshot?.logs.reschedule ?? []}
             empty="처리된 수업 시간 변경 내역이 없습니다."
           />
@@ -372,9 +314,13 @@ export function AdminReviewCenter() {
                       확인 대기
                     </Badge>
                   </div>
-                  <dl className="grid gap-1 text-xs text-gray-600 sm:grid-cols-2">
+                  <dl className="grid gap-x-5 gap-y-2 text-xs text-gray-600 sm:grid-cols-2">
                     <div>
-                      <span className="font-medium">보호자/본인:</span> {reg.accountHolderName}
+                      <span className="font-medium">가입 유형:</span>{" "}
+                      {reg.accountType === "guardian" ? "보호자 가입" : "학생 본인 가입"}
+                    </div>
+                    <div>
+                      <span className="font-medium">가입자 이름:</span> {reg.accountHolderName}
                     </div>
                     <div>
                       <span className="font-medium">이메일:</span> {reg.accountEmail}
@@ -383,14 +329,52 @@ export function AdminReviewCenter() {
                       <span className="font-medium">연락처:</span> {reg.accountPhone}
                     </div>
                     <div>
+                      <span className="font-medium">국가/지역:</span>{" "}
+                      {reg.country === "KR"
+                        ? "대한민국"
+                        : reg.country === "CN"
+                          ? "중국"
+                          : reg.country === "PH"
+                            ? "필리핀"
+                            : "기타"}
+                    </div>
+                    <div>
+                      <span className="font-medium">학생 이름:</span> {reg.learnerFullName}
+                    </div>
+                    <div>
+                      <span className="font-medium">학생 영문 이름:</span> {reg.learnerEnglishName}
+                    </div>
+                    <div>
+                      <span className="font-medium">생년월일:</span>{" "}
+                      {formatDate(reg.learnerDateOfBirth, "ko")}
+                    </div>
+                    <div>
+                      <span className="font-medium">성별:</span>{" "}
+                      {reg.learnerGender === "male"
+                        ? "남성"
+                        : reg.learnerGender === "female"
+                          ? "여성"
+                          : "—"}
+                    </div>
+                    <div>
+                      <span className="font-medium">수업 플랫폼:</span>{" "}
+                      {reg.videoPlatforms.join(", ")}
+                    </div>
+                    <div>
+                      <span className="font-medium">영어 레벨:</span>{" "}
+                      {reg.englishLevel ? formatCefrLevel(reg.englishLevel) : "—"}
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="font-medium">수강 목적:</span>{" "}
+                      {reg.purposes?.length ? formatCoursePurposes(reg.purposes) : "—"}
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="font-medium">기타 메모:</span> {reg.surveyNotes || "—"}
+                    </div>
+                    <div>
                       <span className="font-medium">가입일:</span>{" "}
                       {formatDate(reg.submittedAt, "ko")}
                     </div>
-                    {reg.englishLevel && (
-                      <div>
-                        <span className="font-medium">레벨:</span> {reg.englishLevel}
-                      </div>
-                    )}
                   </dl>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
@@ -601,92 +585,5 @@ export function AdminReviewCenter() {
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-function ReviewLogSection({
-  title,
-  logs,
-  empty,
-}: {
-  title: string;
-  logs: AdminReviewLogEntry[];
-  empty: string;
-}) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <ClipboardList className="h-5 w-5 text-emerald-600" />
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {!logs.length ? (
-          <p className="py-6 text-center text-sm text-gray-400">{empty}</p>
-        ) : (
-          <div className="overflow-x-auto rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>처리 시각</TableHead>
-                  <TableHead>처리</TableHead>
-                  <TableHead>대상</TableHead>
-                  <TableHead>상세</TableHead>
-                  <TableHead>담당</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="whitespace-nowrap text-xs">
-                      {formatDate(log.at, "ko")}{" "}
-                      {formatTime(log.at, "ko", CANONICAL_TIMEZONE)}
-                    </TableCell>
-                    <TableCell className="text-xs">{actionLabel(log.action)}</TableCell>
-                    <TableCell className="font-medium">{log.targetLabel}</TableCell>
-                    <TableCell className="max-w-[240px] truncate text-xs text-gray-500">
-                      {log.detail ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-gray-500">{log.adminName}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ReviewQueueCard({
-  title,
-  empty,
-  loading,
-  isEmpty,
-  children,
-}: {
-  title: string;
-  empty: string;
-  loading: boolean;
-  isEmpty: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {loading ? (
-          <p className="py-8 text-center text-sm text-gray-400">불러오는 중…</p>
-        ) : isEmpty ? (
-          <p className="py-8 text-center text-sm text-gray-400">{empty}</p>
-        ) : (
-          children
-        )}
-      </CardContent>
-    </Card>
   );
 }

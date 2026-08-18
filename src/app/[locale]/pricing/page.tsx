@@ -2,6 +2,12 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { PricingSection } from "@/components/landing/PricingSection";
 import { LandingHeader, LandingFooter } from "@/components/landing/LandingSections";
+import { buildLocalizedMetadata } from "@/lib/i18n/metadata";
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  return buildLocalizedMetadata(locale, "pricing", "/pricing");
+}
 
 export default async function PricingPage({
   params,
@@ -15,7 +21,7 @@ export default async function PricingPage({
     <div className={`min-h-screen locale-${locale}`}>
       <LandingHeader locale={locale} />
       <main className="pt-4">
-        <PricingSection locale={locale} />
+        <PricingSection locale={locale} standalone />
         <div className="landing-container -mt-8 pb-16 text-center">
           <Link
             href={`/${locale}/signup`}
@@ -25,7 +31,7 @@ export default async function PricingPage({
           </Link>
         </div>
       </main>
-      <LandingFooter />
+      <LandingFooter locale={locale} />
     </div>
   );
 }

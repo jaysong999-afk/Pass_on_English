@@ -4,7 +4,7 @@ import type { DayLabel, SlotStartTime } from "@/lib/availability/types";
 import { occupiedBlocksForSession } from "@/lib/availability/slot-continuity";
 import { lessonScheduledAtToKstSlot } from "@/lib/availability/timezone";
 import { parseSlotKey, slotKey, occupiedSlotStarts, normalizeSlotStart } from "@/lib/availability/time-utils";
-import { getAllLessons } from "@/lib/teacher-lesson-store";
+import { getAllLessons } from "@/lib/teacher-lesson-store-sync";
 import { getAllEnrollments } from "@/lib/enrollment-store-sync";
 import {
   buildEnrollmentSlotTime,

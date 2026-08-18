@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { TEACHER_SPECIALTY_OPTIONS } from "@/lib/teacher-specialties";
 import { TeacherAvatarUpload, type TeacherAvatarUploadResult } from "@/components/teacher/TeacherAvatarUpload";
-import type { TeacherProfileInput, TeacherSpecialty } from "@/types";
+import type { TeacherProfileInput, TeacherSpecialty, VideoPlatform } from "@/types";
+import { VideoPlatformSelector } from "@/components/shared/VideoPlatformSelector";
 import { cn } from "@/lib/utils";
 
 interface TeacherProfileFormProps {
@@ -33,6 +34,7 @@ export function TeacherProfileForm({
   );
   const [status, setStatus] = useState<TeacherProfileInput["status"]>(initial.status ?? "pending");
   const [avatarUrl, setAvatarUrl] = useState(initial.avatarUrl ?? "");
+  const [videoPlatforms, setVideoPlatforms] = useState<VideoPlatform[]>(initial.videoPlatforms ?? ["ZOOM"]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -58,6 +60,7 @@ export function TeacherProfileForm({
       setError("Select at least one specialty.");
       return;
     }
+    if (videoPlatforms.length === 0) { setError("Select at least one lesson platform."); return; }
 
     const years = Number(experienceYears);
     if (!Number.isFinite(years) || years < 0) {
@@ -73,6 +76,7 @@ export function TeacherProfileForm({
         specialties,
         experienceYears: years,
         avatarUrl: avatarUrl.trim() ? avatarUrl : undefined,
+        videoPlatforms,
         ...(showAdminFields
           ? {
               hourlyRatePhp: hourlyRatePhp ? Number(hourlyRatePhp) : undefined,
@@ -177,6 +181,8 @@ export function TeacherProfileForm({
           </div>
         )}
       </div>
+
+      <VideoPlatformSelector value={videoPlatforms} onChange={setVideoPlatforms} language="en" />
 
       <div className="space-y-2">
         <Label htmlFor="experienceYears">Years of experience</Label>

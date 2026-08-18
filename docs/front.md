@@ -1,6 +1,6 @@
 # Pass on English — 프론트엔드 명세서
 
-## 0. MVP 구현 현황 (2026-08)
+## 0. MVP 구현 현황 (2026-08-17)
 
 | 영역 | 상태 | 비고 |
 |------|------|------|
@@ -15,13 +15,15 @@
 | **학생 모바일 헤더** | ✅ | `StudentAppShell` 2-row 레이아웃 |
 | **관리자 수업 횟수 관리** | ✅ | `EnrollmentSessionEditor` — ± draft → 확인 → batch 적용 |
 | **요금제 (`pricing_plans`)** | ✅ | Supabase CRUD — `/api/pricing-plans`, `usePricingPlans` |
-| **MVP store → Supabase** | ✅ | chat·finance 포함 전 도메인 — repository + sync cache |
+| **데이터 계층 → Supabase** | ✅ | 도메인 repository가 DB write/read를 담당하고, cache/store-sync는 서버 bootstrap·동기 읽기에만 제한 |
 | **채팅 (Realtime)** | ✅ | `ChatThread` + `useChatRealtime` — `/api/chat/messages` |
 | **재무 대시보드** | ✅ | `/api/admin/finance/transactions` |
-| **Auth (teacher/admin)** | ✅ | `/teacher/login`, `/admin/login` → `/api/auth/login`; `LogoutButton` |
-| **Auth (student)** | ⚠️ | Supabase client 직접 로그인; logout UI 없음 |
-| **선생님 세션 바인딩** | ⏳ | `CURRENT_TEACHER_ID = "teacher-1"` 하드코딩 (~18곳) |
-| PWA / Push | ⚠️ | manifest, subscribe API ✅; install prompt stub, 수동 `public/sw.js` |
+| **Auth · API 기본 거부** | ✅ | 세 역할 모두 `/api/auth/login`; middleware 역할 가드 + 미분류 API deny |
+| **학생·선생님 내 정보 관리** | ✅ | 연락처·국가/시간대·자녀 English Name·플랫폼, 교사 공개 프로필·연락처·비밀번호 |
+| **플랫폼 호환 매칭** | ✅ | 가입/설정에서 ZOOM·VOOV 복수 선택, 수강신청 시 교집합이 있는 선생님만 노출 |
+| **성별·가입 메모·교재 이력** | ✅ | 가입→관리자/교사 학생 정보, 과거 교재와 수업별 교재·진도 스냅샷 |
+| **선생님 세션 바인딩** | ✅ | 인증 세션 UUID → `resolveTeacherIdForAuthUser`; 하드코딩 제거 |
+| PWA / Push | ✅ 기본 기능 | manifest, 설치 안내 배너, subscribe/send API, 수동 `public/sw.js`; 실기기 검증은 배포 단계 |
 
 ---
 
@@ -30,11 +32,11 @@
 | 항목 | 내용 |
 |------|------|
 | 프로젝트명 | Pass on English |
-| 프레임워크 | Next.js 14+ (App Router, TypeScript) |
+| 프레임워크 | Next.js 15 (App Router, TypeScript) |
 | UI | Tailwind CSS + Shadcn UI |
 | 다국어 | next-intl |
 | PWA | 수동 `public/sw.js` + Web Push API (명세: `@ducanh2912/next-pwa` — 미적용) |
-| 인증 | Supabase Auth + `/api/auth/*` (teacher/admin); student는 client SDK 직접 |
+| 인증 | Supabase Auth + `/api/auth/*`; middleware 페이지·API 역할 가드와 RLS |
 
 본 문서는 학생·선생님·관리자 웹 UI 및 랜딩페이지의 화면 구성, 라우팅, 컴포넌트, 상태 관리, i18n, PWA 요구사항을 정의한다.
 
@@ -97,6 +99,10 @@
 /[locale]/teachers          → 선생님 소개 (공개 프로필 요약)
 /[locale]/signup            → 학생 회원가입
 /[locale]/login             → 학생 로그인
+/[locale]/about             → 서비스 소개
+/[locale]/privacy           → 개인정보 처리방침
+/[locale]/terms             → 이용약관
+/[locale]/refund-policy     → 환불 정책
 
 /student/*                  → 학생 포털 (인증 필요, ko/zh-CN)
 
@@ -109,6 +115,7 @@
 /teacher/reports            → Monthly Growth Report (학생별 작성·편집)
 /teacher/salary             → 월별 급여 명세서 (Estimated/Processing/Paid)
 /teacher/chat               → 채팅
+/teacher/profile            → My Profile·연락처·수업 플랫폼·비밀번호 변경
 
 /admin/login                → ★ 관리자 전용 로그인 (랜딩 UI 없음)
 /admin                      → 관리자 대시보드 (인증·역할 필요)
@@ -128,9 +135,8 @@
 /student                    → My Lessons (다음 수업·오늘 일정·보강 진행)
 /student/learning           → Learning Results (피드백·월 성장 레포트)
 /student/chat               → 채팅
+/student/settings           → 내 정보·자녀 정보·계정 보안
 ```
-
-> ~~`/teacher/profile`~~ — 네비에서 제거. 프로필은 관리자 `/admin/teacher-profiles` 에서 관리.
 
 ---
 
@@ -170,6 +176,10 @@
 | FAQ | 자주 묻는 질문 |
 | Footer | 이용약관, 개인정보, 연락처, 언어 전환 |
 
+- self-host 이미지와 Lucide 아이콘, 절제된 reveal/hover 효과를 사용하며 Google Fonts·차단 가능 외부 CDN에 의존하지 않는다.
+- Server Component에서 활성 요금제 전체를 조회해 `PricingSection`에 전달하므로 관리자에서 활성화한 복수 플랜이 랜딩과 수강신청에 동일하게 노출된다.
+- locale별 metadata/canonical·정책 페이지를 제공하며 UI 텍스트는 ko/zh-CN 번역 파일을 사용한다.
+
 **요금표 (Supabase `pricing_plans` — `GET /api/pricing-plans?active=true`)**
 
 | plan_type (시드) | 한국 | 중국 | 회차 |
@@ -190,8 +200,10 @@
 #### 5.2.1 회원가입·로그인
 
 - **계정 유형 선택**: 본인 수강(`self`) / 자녀 수강(`guardian`)
-- **Guardian**: 학부모 이름·연락처 + **자녀** 이름·영문 이름·생년월일 분리 입력
+- **Guardian**: 학부모 이름·연락처 + **자녀** 이름·영문 이름·생년월일·성별 분리 입력
 - **Self**: 성인 본인 — 계정=learner 1:1
+- **수업 플랫폼**: ZOOM/VOOV 중 1~2개 선택, 각 플랫폼 안내 제공
+- **국가/지역**: `country`와 `timezone`을 분리 저장하며 국가 변경 시 기본 시간대를 자동 설정
 - `POST /api/student/account` → 첫 learner 생성 → onboarding
 - **자녀 추가**: `/student/learners/new` → `POST /api/student/learners`
 - **헤더 전환기**: `StudentSwitcher` — learner별 포털 데이터 전환
@@ -210,7 +222,7 @@
 **신규 가입 플로우 (MVP)**
 
 1. 회원가입 → 온보딩 설문
-2. `EnrollmentFlow` 4단계: 요금제 → 선생님 → **20분 슬롯** → 결제
+2. `EnrollmentFlow` 4단계: 요금제 → 플랫폼 호환 선생님 → **20분 슬롯** → 결제
 3. 첫 가입: 선택 슬롯에 **무료 체험 1회** 예약 (`book_trial` → trial lesson 생성)
 4. 결제 안내 → 입금 완료 신고 (`POST /api/enrollments`)
 5. 관리자 입금 확인 → 수강 `active` (**신청 완료**)
@@ -223,6 +235,7 @@
 - 입금 확인 시 슬롯 예약 + 잔여 회차 스케줄 자동 생성
 
 - 선생님 카드: 프로필 사진, 이름, 소개, 전문 분야
+- 학생의 ZOOM/VOOV 선택과 교집합이 있는 선생님만 표시하며 서버 확정 단계에서도 다시 검증
 - **일정 선택**: 20분 단위 슬롯 (`:00` / `:20` / `:40`) — plan `scheduleDays` 와 availability 교집합
 - **요금제**: 4종 (주5 20회 / MWF 12 / 화목 8 / 주말 8), 기본 **20분** (`sessionMinutes`; 관리자 CRUD로 25/30/40 확장 가능)
 - 요금제·가격: `/admin/pricing` CRUD (랜딩·학생 UI는 API 연동)
@@ -258,9 +271,17 @@
 
 #### 5.2.7 채팅
 
-- 수강 신청(매칭) 완료 후 해당 선생님과 1:1 채팅방 생성
+- 수강 중인 선생님 목록을 위에, 관리자 문의를 아래에 배치
+- 수강 신청(매칭) 완료 후 해당 선생님과 1:1 채팅방 생성; 관리자는 별도 문의 방 생성 가능
 - Instagram DM 유사 UI: 버블, 시간, 읽음 표시
 - Web Push로 새 메시지 알림
+
+#### 5.2.8 내 정보 관리 (`/[locale]/student/settings`)
+
+- **내 정보**: 이메일·본명 readonly, 휴대폰·국가/지역 수정; 국가 변경 시 timezone 자동 갱신
+- **자녀 정보**: guardian 계정의 모든 learner를 카드로 반복 표시; 본명·생년월일 readonly, English Name·ZOOM/VOOV 수정
+- **계정 보안**: 현재 비밀번호·새 비밀번호·확인 입력 후 별도 password API 호출
+- 실제 변경 필드만 PATCH하며 성공/실패 메시지는 학생 포털 번역 키를 사용
 
 ---
 
@@ -277,12 +298,18 @@
 | Action Required | 피드백 대기 수업 → `/teacher/lessons/[id]/feedback` |
 | Reschedule Progress | 보강 진행 패널 (승인·거절·취소) |
 
+- 신규 무료체험 또는 결제 확정 수강의 첫 스케줄이 등록되면 **New lesson assignment** 박스를 표시한다.
+- 박스에는 학생명·첫 수업·수강목적을 항상 표시하며, `View lesson`은 수업 카드 모달을 열고 `Acknowledge`는 서버 알림을 읽음 처리해 재표시하지 않는다.
+- 무료체험 수업은 Next Lesson 카드와 Today's Schedule 행에 `NEW` 배지를 표시한다.
+
 #### 5.3.2 수업 상세 카드 (`TeacherLessonDetailCard`)
 
 - 학생명 + `StudentChatLink`
 - 일시: **시작–종료** (`formatLessonTimeRange`, 예: 10:00–10:20)
 - **Textbook**: Edit/Save 인라인 편집 → `PUT /api/teacher/student-context`
+- **Textbook history**: 교재 변경 시 DB 트리거가 이전 값을 최신순으로 보관하고 간단한 접기 UI로 표시
 - **Special Notes**: 동일 Edit/Save 패턴
+- 학생 성별을 선생님 수업 정보에서 표시
 - Video platform: ZOOM / VOOV
 - Request Reschedule 버튼
 
@@ -322,9 +349,15 @@
 
 상태: `estimated` (당월 live) → `processing` → `paid`
 
+- 분기 보너스는 대상 월이 종료됐고, 가입일 기준 3개월 전체 근무 기간을 충족하며, 해당 기간 노쇼/근태 리셋이 없고 수업시간이 0보다 큰 경우에만 계산
+- 당월 live estimate와 신규 가입 교사에는 분기 보너스를 표시·지급하지 않음
+
 #### 5.3.7 프로필
 
-- 선생님 네비 **Profile 탭 없음** — `/admin/teacher-profiles` 에서 관리자가 CRUD
+- `/teacher/profile`의 **My Profile**에서 공개 이름·소개·전문분야·경력·사진, 연락처·주소·Messenger ID, ZOOM/VOOV를 수정
+- 이메일·법적 이름·시급 등 민감하거나 운영상 통제되는 값은 교사가 직접 수정할 수 없음
+- 비밀번호 변경은 별도 `/api/teacher/settings/password` 흐름 사용
+- 관리자 `/admin/teacher-profiles`의 운영용 CRUD와 동일 DB row를 사용하되, 교사 DTO는 허용된 열만 노출
 
 ---
 
@@ -334,18 +367,18 @@
 - **선생님 현황**: 프로필, 진행 수업, 시급 설정
 - **선생님 프로필 관리** (`/admin/teacher-profiles`): displayName, bio, specialties, hourlyRatePhp CRUD
 - **요금제** (`/admin/pricing`): PricingPlan CRUD — Supabase `pricing_plans` (`sessionMinutes`, `scheduleDays`, i18n name)
-- **학생 상세** (`/admin/students/[id]`): **수업 횟수 관리** — `EnrollmentSessionEditor` (± draft → 확인 Dialog → `adjust_sessions`)
-- **검토 센터** (`/admin/reschedule`): `AdminReviewCenter` — 4탭 + 하단 처리 로그
+- **학생 상세** (`/admin/students/[id]`): 가입 메모·성별·플랫폼, 수업 로그의 교재·진도, **수업 횟수 관리** (`EnrollmentSessionEditor`)
+- **검토 센터** (`/admin/reschedule`): 수업 변경은 상대방 승인 상태를 모니터링하고 장기 미응답·수업 임박 건만 `처리 필요`에 집계; 가입·입금은 관리자 처리 업무
 - **수업 운영 센터** (`/admin/operations`): `AdminOperationsCenter` — 아래 §5.4.1
 - **강사 급여** (`/admin/teacher-salary`): 월별 명세, live estimate → processing 확정, paid 처리
 - **FAQ** (`/admin/faq`): FAQ CRUD
-- **재무**: 수입·지출 차트 (mock + accounting 데이터)
+- **재무**: `/api/admin/finance/transactions` 기반 수입·지출·정산 집계와 차트
 - **메시지 · CS 센터** (`/admin/messages`): `AdminMessagesHub` — §5.4.3
 
 #### 5.4.3 메시지 · CS 센터 (`AdminMessagesHub`)
 
 **경로**: `/admin/messages`  
-**상태**: 프론트엔드 프로토타입 ✅ · 발송/저장 API ⏳
+**상태**: UI·발송/저장 API·예약 발송 cron ✅ (자동 규칙 실행 엔진만 제외)
 
 | 탭 | 컴포넌트 | 설명 |
 |----|----------|------|
@@ -354,8 +387,10 @@
 | Push · 알림 | `PushNotificationsPanel` | KPI·발송 내역(샘플) + **자동 시스템 알림 UI 미리보기 (향후 구축 예정)** |
 
 **채팅 모니터링**: `GET /api/chat/rooms?role=admin` · `ChatMonitorThread` · `/admin/chat/[roomId]` 참여  
-**관리자 1:1**: students/teachers API로 대상 선택 · 전송은 로컬 프로토타입  
-**Quick Replies**: `messages-mock-data.ts`  
+**관리자 1:1**: students/teachers API로 대상 선택 · DB thread/message 저장
+
+**Quick Replies**: `/api/admin/messages/quick-replies`
+
 **단체 발송**: 전체·학생(KR/CN)·선생님 + 수강 상태 필터  
 상세: `docs/원어민 화상영어 플랫폼 서비스 앱 개발 요구사항 정리.md` §6
 
@@ -429,7 +464,6 @@
 | `ChatNotificationBell` | 헤더 미읽음 알림 |
 | `PaymentInfoPanel` | 계좌이체 안내 |
 | `DataTable` | 관리자 리스트 (Shadcn Table) |
-| `FinanceChart` | 재무 시각화 |
 
 Shadcn UI 기준 설치: Button, Card, Dialog, Form, Input, Select, Tabs, Toast, Calendar, Sheet, Avatar, Badge, Table, Chart.
 
@@ -438,12 +472,12 @@ Shadcn UI 기준 설치: Button, Card, Dialog, Form, Input, Select, Tabs, Toast,
 ## 7. 상태 관리·데이터 fetching
 
 - **요금제**: `usePricingPlans` → `GET /api/pricing-plans` → Supabase PostgreSQL
-- **핵심 도메인**: Route Handler → `*/repository.ts` → Supabase; 클라이언트·RSC는 `*-store-sync.ts` (cache) 읽기
-- **Bootstrap**: 서버 페이지·API는 `ensureSchedulesBootstrapped()` / `ensurePublicContentBootstrapped()` 선행
-- **목표**: TanStack Query (React Query) + Supabase client (Auth 연동 후)
-- **폼**: React Hook Form + Zod (점진 적용)
-- **실시간**: Supabase Realtime (채팅, 알림) — 추후
-- **인증 세션**: `@supabase/ssr` — middleware에서 세션 갱신, 역할별 라우트 가드 (미연동)
+- **상태 변경**: Route Handler → 역할·소유권 검증 → server-only `*/repository.ts` → Supabase
+- **읽기/Bootstrap**: 필요한 도메인만 `ensureSchedulesBootstrapped()` / `ensurePublicContentBootstrapped()`로 warm; cache/store-sync는 동기 표시 호환 계층
+- **API client**: `src/lib/api/client.ts`의 JSON/빈 응답 파싱과 `ApiClientError`, `useApiResource`를 공통 사용
+- **폼**: 현재 React state + Route Handler validation; 신규 UI 라이브러리 추가 없음
+- **실시간**: Supabase Realtime (`chat_messages`) + 공통 채팅 훅
+- **인증 세션**: `@supabase/ssr` — middleware 세션 갱신, 역할별 페이지/API 가드와 RLS 적용
 
 ---
 
@@ -468,7 +502,7 @@ Shadcn UI 기준 설치: Button, Card, Dialog, Form, Input, Select, Tabs, Toast,
 
 | 역할 | 로그인 URL | 접근 경로 | 로그아웃 |
 |------|------------|-----------|----------|
-| `student` | `/[locale]/login` | `/student/*`, `/[locale]/*` (공개) | ⏳ UI 없음 |
+| `student` | `/[locale]/login` | `/[locale]/student/*` | ✅ `StudentAppShell` |
 | `teacher` | `/teacher/login` | `/teacher/*` (login 제외) | ✅ `LogoutButton` |
 | `admin` | `/admin/login` | `/admin/*` (login 제외) | ✅ `LogoutButton` |
 
@@ -480,13 +514,14 @@ Shadcn UI 기준 설치: Button, Card, Dialog, Form, Input, Select, Tabs, Toast,
 - `/teacher/login`, `/admin/login`은 AppShell·랜딩 레이아웃 미적용
 - RLS는 Supabase에서 enforcement — UI는 UX 차원의 가드
 
-### 9.1 잔여 (Auth 2차)
+### 9.1 완료된 인증 통합
 
-| 항목 | 현재 | 목표 |
-|------|------|------|
-| 선생님 ID | `CURRENT_TEACHER_ID` 상수 | `GET /api/auth/session` → `teacherId` |
-| 학생 로그인 | Supabase client `signInWithPassword` | `/api/auth/login` + role 검증 통일 |
-| 학생 logout | 없음 | `StudentAppShell`에 `LogoutButton` |
+| 항목 | 구현 |
+|------|------|
+| 선생님 ID | 인증 user UUID를 `resolveTeacherIdForAuthUser`로 교사 row에 바인딩 |
+| 학생 로그인·로그아웃 | `/api/auth/login`, `/api/auth/logout` + role 검증 통일 |
+| API 정책 | 공개 allowlist 외 기본 거부; 도메인별 역할과 route ownership 검증 |
+| 관리자 페이지 | `/admin/login` 제외 전 경로에 admin role 가드, 세션 없으면 로그인으로 이동 |
 
 ---
 

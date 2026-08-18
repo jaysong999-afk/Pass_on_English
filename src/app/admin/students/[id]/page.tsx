@@ -116,6 +116,9 @@ export default function AdminStudentDetailPage() {
   const { student, displayName, legalName, accountHolder, learner } = detail;
   const paymentStatus = pendingEnrollment?.paymentStatus ?? student.paymentStatus;
   const activeEnrollments = detail.enrollments.filter((e) => e.status !== "completed");
+  const feedbackByLessonId = new Map(
+    detail.feedbacks.map((feedback) => [feedback.lessonId, feedback])
+  );
 
   return (
     <div className="space-y-6">
@@ -159,6 +162,7 @@ export default function AdminStudentDetailPage() {
             <CardTitle className="text-base">학습자 프로필</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <Row label="성별" value={student.gender === "male" ? "남성" : student.gender === "female" ? "여성" : "—"} />
             <Row label="영어 이름" value={displayName} />
             <Row label="실명" value={legalName} />
             <Row label="생년월일" value={student.dateOfBirth ? formatDate(student.dateOfBirth, "ko") : "—"} />
@@ -166,7 +170,7 @@ export default function AdminStudentDetailPage() {
             <Row label="수강 목적" value={formatCoursePurposes(student.purposes)} />
             <Row label="연락 이메일" value={student.email ?? "—"} />
             <Row label="연락 전화" value={student.phone ?? "—"} />
-            {learner?.surveyNotes && <Row label="설문 메모" value={learner.surveyNotes} />}
+            <Row label="기타 메모" value={learner?.surveyNotes || "—"} />
             {learner?.createdAt && (
               <Row label="등록일" value={formatDate(learner.createdAt, "ko")} />
             )}
@@ -280,6 +284,14 @@ export default function AdminStudentDetailPage() {
                 header: "일시",
                 cell: (l) =>
                   `${formatDate(l.scheduledAt, "ko")} ${formatTime(l.scheduledAt, "ko", CANONICAL_TIMEZONE)}`,
+              },
+              {
+                header: "교재",
+                cell: (l) => feedbackByLessonId.get(l.id)?.textbook || "—",
+              },
+              {
+                header: "진도(페이지)",
+                cell: (l) => feedbackByLessonId.get(l.id)?.progressPages || "—",
               },
               { header: "선생님", cell: (l) => l.teacherName },
               { header: "상태", cell: (l) => LESSON_STATUS[l.status] },

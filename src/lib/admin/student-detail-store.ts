@@ -15,12 +15,12 @@ import { getChatRooms } from "@/lib/chat/chat-store-sync";
 import {
   getEnrollmentsByStudent,
   getPaymentRecordsByStudent,
-} from "@/lib/enrollment-store";
-import { getFeedbacksByStudent, getReportsByStudent } from "@/lib/learning-store";
-import { getRescheduleRequestsForStudent } from "@/lib/reschedule-store";
+} from "@/lib/enrollment-store-sync";
+import { getFeedbacksByStudent, getReportsByStudent } from "@/lib/learning-store-sync";
+import { getRescheduleRequestsForStudent } from "@/lib/reschedule-store-sync";
 import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
 import { getStudentDisplayName } from "@/lib/student-display-name";
-import { getStudentLessons } from "@/lib/teacher-lesson-store";
+import { getStudentLessons } from "@/lib/teacher-lesson-store-sync";
 import { formatDate } from "@/lib/utils";
 
 export interface SessionAdjustmentLogEntry extends SessionAdjustment {

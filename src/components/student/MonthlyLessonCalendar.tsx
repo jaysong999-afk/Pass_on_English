@@ -5,17 +5,10 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type { Lesson } from "@/types";
-import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import { getDateKeyInTimezone, getStudentTimezone } from "@/lib/availability/timezone";
 import type { Locale } from "@/lib/i18n/config";
 
 const WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
 
 function formatTimeShort(iso: string, locale: string, timeZone: string) {
   return new Intl.DateTimeFormat(locale, {
@@ -41,6 +34,12 @@ function buildMonthGrid(year: number, month: number) {
   return cells;
 }
 
+function calendarDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`;
+}
+
 interface MonthlyLessonCalendarProps {
   lessons: Lesson[];
   onLessonSelect: (lesson: Lesson) => void;
@@ -58,8 +57,7 @@ export function MonthlyLessonCalendar({
   const t = useTranslations("studentPortal.calendar");
   const displayTz = timeZone ?? getStudentTimezone(locale as Locale);
   const [viewDate, setViewDate] = useState(() => initialMonth ?? new Date());
-  const today = useMemo(() => startOfDay(new Date()), []);
-  const todayKey = getDateKeyInTimezone(new Date(), CANONICAL_TIMEZONE);
+  const todayKey = getDateKeyInTimezone(new Date(), displayTz);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -75,7 +73,7 @@ export function MonthlyLessonCalendar({
   const lessonsByDay = useMemo(() => {
     const map = new Map<string, Lesson[]>();
     for (const lesson of lessons) {
-      const key = getDateKeyInTimezone(new Date(lesson.scheduledAt), CANONICAL_TIMEZONE);
+      const key = getDateKeyInTimezone(new Date(lesson.scheduledAt), displayTz);
       const list = map.get(key) ?? [];
       list.push(lesson);
       map.set(key, list);
@@ -84,7 +82,7 @@ export function MonthlyLessonCalendar({
       list.sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
     }
     return map;
-  }, [lessons]);
+  }, [lessons, displayTz]);
 
   const goPrev = () => setViewDate(new Date(year, month - 1, 1));
   const goNext = () => setViewDate(new Date(year, month + 1, 1));
@@ -143,11 +141,11 @@ export function MonthlyLessonCalendar({
             return <div key={`empty-${idx}`} className="min-h-[4.5rem] border-b border-r border-brand-50/80 bg-surface/30 sm:min-h-[5.25rem]" />;
           }
 
-          const key = getDateKeyInTimezone(day, CANONICAL_TIMEZONE);
+          const key = calendarDateKey(day);
           const dayLessons = (lessonsByDay.get(key) ?? []).slice(0, 2);
           const extra = (lessonsByDay.get(key)?.length ?? 0) - dayLessons.length;
           const isToday = key === todayKey;
-          const isPastDay = day < today;
+          const isPastDay = key < todayKey;
 
           return (
             <div

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { AccountType, CefrLevel, CountryCode, CoursePurpose } from "@/types";
+import type { AccountType, CefrLevel, CountryCode, CoursePurpose, VideoPlatform, StudentGender } from "@/types";
 import {
   bookTrialForLearner,
   ensureAccountSession,
@@ -17,6 +17,8 @@ import { reserveTeacherWeeklySlotsInDb } from "@/lib/teacher-availability/reposi
 import type { DayLabel, SlotStartTime } from "@/lib/availability/types";
 import { lessonScheduledAtToKstSlot } from "@/lib/availability/timezone";
 import { VALID_CEFR_LEVELS, VALID_COURSE_PURPOSES } from "@/lib/student-survey-labels";
+import { getTeacherFromCache } from "@/lib/teachers/teacher-profile-cache";
+import { areVideoPlatformsCompatible } from "@/lib/video-platforms";
 
 export async function GET() {
   try {
@@ -49,6 +51,8 @@ export async function POST(request: Request) {
   const learnerFullName = String(body.learnerFullName ?? body.fullName ?? "").trim();
   const learnerEnglishName = String(body.learnerEnglishName ?? body.englishName ?? "").trim();
   const learnerDateOfBirth = String(body.learnerDateOfBirth ?? body.dateOfBirth ?? "").trim();
+  const learnerGender = String(body.learnerGender ?? "") as StudentGender;
+  const videoPlatforms = Array.isArray(body.videoPlatforms) ? body.videoPlatforms as VideoPlatform[] : [];
 
   if (
     !fullName ||
@@ -60,6 +64,10 @@ export async function POST(request: Request) {
     !learnerDateOfBirth
   ) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
+  }
+  if (learnerGender !== "male" && learnerGender !== "female") return NextResponse.json({ error: "invalid_gender" }, { status: 400 });
+  if (videoPlatforms.length === 0 || !videoPlatforms.every((item) => item === "ZOOM" || item === "VOOV")) {
+    return NextResponse.json({ error: "invalid_video_platforms" }, { status: 400 });
   }
 
   if (password.length < 8) {
@@ -85,6 +93,8 @@ export async function POST(request: Request) {
       learnerFullName,
       learnerEnglishName,
       learnerDateOfBirth,
+      learnerGender,
+      videoPlatforms,
     });
 
     return NextResponse.json({ session }, { status: 201 });
@@ -105,8 +115,8 @@ export async function POST(request: Request) {
       }
       return NextResponse.json({ error: "signup_failed" }, { status: 409 });
     }
-    if (message.includes("auth_signin_failed")) {
-      return NextResponse.json({ error: "email_already_registered" }, { status: 409 });
+    if (message.includes("auth_email_confirmation_required")) {
+      return NextResponse.json({ error: "email_confirmation_required" }, { status: 409 });
     }
     return NextResponse.json({ error: "signup_failed" }, { status: 500 });
   }
@@ -161,6 +171,10 @@ export async function PATCH(request: Request) {
       }
       if (learner.trialUsed) {
         return NextResponse.json({ error: "trial_already_used" }, { status: 400 });
+      }
+      const teacher = getTeacherFromCache(teacherId);
+      if (!teacher || !areVideoPlatformsCompatible(learner.videoPlatforms, teacher.videoPlatforms)) {
+        return NextResponse.json({ error: "video_platform_mismatch" }, { status: 409 });
       }
 
       const durationMinutes = sessionMinutes && sessionMinutes > 0 ? sessionMinutes : 20;

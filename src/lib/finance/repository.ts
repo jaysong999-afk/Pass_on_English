@@ -1,4 +1,5 @@
 import type {
+  CountryCode,
   FinanceTransaction,
   StudentEnrollment,
   TaxTreatment,
@@ -96,64 +97,7 @@ async function fetchFinanceRows(): Promise<FinanceTransactionRow[]> {
   return (data ?? []) as FinanceTransactionRow[];
 }
 
-const DEMO_SERVER_INFRA_ID = "00000000-0000-4000-8000-000000000001";
-const DEMO_MANUAL_EXPENSE_ID = "00000000-0000-4000-8000-000000000002";
-
-/** Idempotent demo rows so finance dashboard is usable on empty DB. */
-async function ensureDefaultFinanceSeedInDb(): Promise<void> {
-  const supabase = createBootstrapDbClient();
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    .toISOString()
-    .slice(0, 10);
-
-  const seeds = [
-    {
-      id: DEMO_SERVER_INFRA_ID,
-      transaction_date: monthStart,
-      type: "expense",
-      category: "server_infra",
-      description: "Tencent Cloud HK — 월 서버·DB 비용",
-      currency: "KRW",
-      amount: 450000,
-      amount_krw: 450000,
-      supply_amount: 409091,
-      vat_amount: 40909,
-      tax_treatment: "taxable",
-      source: "manual",
-    },
-    {
-      id: DEMO_MANUAL_EXPENSE_ID,
-      transaction_date: "2026-07-12",
-      type: "expense",
-      category: "other",
-      description: "마케팅 제작비",
-      currency: "KRW",
-      amount: 220000,
-      amount_krw: 220000,
-      supply_amount: 200000,
-      vat_amount: 20000,
-      tax_treatment: "taxable",
-      source: "manual",
-    },
-  ];
-
-  for (const seed of seeds) {
-    const { data } = await supabase
-      .from("finance_transactions")
-      .select("id")
-      .eq("id", seed.id)
-      .maybeSingle();
-    if (data) continue;
-
-    const { error } = await supabase.from("finance_transactions").insert(seed);
-    if (error && error.code !== "23505") {
-      console.error("[ensureDefaultFinanceSeedInDb]", error.message);
-    }
-  }
-}
-
 export async function warmFinanceCache(): Promise<void> {
-  await ensureDefaultFinanceSeedInDb();
   const rows = await fetchFinanceRows();
   setFinanceTransactionCache(rows.map(rowToTransaction));
 }
@@ -199,10 +143,16 @@ export async function recordSalaryFinanceTransactionInDb(
     10
   );
 
-  const byStatement = getFinanceTransactionCache().find(
-    (t) => t.teacherId === statement.teacherId && t.description.includes(statement.month)
-  );
-  const existingId = statement.financeTransactionId ?? byStatement?.id;
+  const supabase = await createClient();
+  const { data: linkedRow, error: linkedError } = await supabase
+    .from("finance_transactions")
+    .select(SELECT_COLUMNS)
+    .eq("salary_statement_id", statement.id)
+    .maybeSingle();
+  if (linkedError) {
+    throw new Error(`finance_transaction_lookup_failed: ${linkedError.message}`);
+  }
+  const existingId = statement.financeTransactionId ?? linkedRow?.id;
 
   const payload: FinanceTransaction = {
     id: existingId ?? crypto.randomUUID(),
@@ -220,8 +170,6 @@ export async function recordSalaryFinanceTransactionInDb(
     teacherId: statement.teacherId,
     teacherName: statement.teacherName,
   };
-
-  const supabase = await createClient();
 
   if (existingId) {
     const { data, error } = await supabase
@@ -269,7 +217,7 @@ export async function recordSalaryFinanceTransactionInDb(
 export async function recordEnrollmentPaymentFinanceTransactionInDb(
   enrollment: StudentEnrollment,
   studentDisplayName: string,
-  country?: "KR" | "CN" | "OTHER"
+  country?: CountryCode
 ): Promise<FinanceTransaction | null> {
   const isKr = country !== "CN";
   const currency = isKr ? "KRW" : "CNY";

@@ -1,16 +1,13 @@
 import type {
   AccountHolder,
   AccountType,
-  CefrLevel,
   CountryCode,
-  CoursePurpose,
   Learner,
-  PaymentStatus,
   Student,
 } from "@/types";
+import { countryToTimezone } from "@/lib/account-location";
 import { getEnrollmentsByStudent } from "@/lib/enrollment-store-sync";
 import { createBootstrapDbClient } from "@/lib/supabase/db-client";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getStudentDirectoryCache,
@@ -18,21 +15,11 @@ import {
   setStudentDirectoryCache,
   type StudentDirectoryEntry,
 } from "@/lib/students/student-directory-cache";
-
-interface StudentRow {
-  id: string;
-  account_holder_id: string;
-  full_name: string | null;
-  english_name: string;
-  date_of_birth: string;
-  country: "KR" | "CN" | null;
-  english_level: string | null;
-  purposes: string[] | null;
-  onboarding_note: string | null;
-  trial_used: boolean;
-  is_active: boolean;
-  created_at: string;
-}
+import { studentDbRowToLearner, type StudentDbRow } from "@/lib/students/db-types";
+import {
+  fetchLatestEnrollmentMetaByStudent,
+  fetchUpcomingTrialLessonsByStudent,
+} from "@/lib/students/db-readers";
 
 interface ProfileRow {
   id: string;
@@ -42,101 +29,11 @@ interface ProfileRow {
   created_at: string;
 }
 
-interface EnrollmentMetaRow {
-  student_id: string;
-  payment_status: PaymentStatus;
-}
-
-interface TrialLessonRow {
-  student_id: string;
-  id: string;
-  scheduled_at: string;
-  duration_minutes?: number;
-}
-
-function mapRowToLearner(
-  row: StudentRow,
-  meta?: {
-    paymentStatus?: PaymentStatus;
-    trialScheduledAt?: string;
-    trialLessonId?: string;
-    trialDurationMinutes?: number;
-  }
-): Learner {
-  return {
-    id: row.id,
-    accountHolderId: row.account_holder_id,
-    fullName: row.full_name?.trim() || row.english_name,
-    englishName: row.english_name,
-    dateOfBirth: row.date_of_birth,
-    englishLevel: (row.english_level as CefrLevel | null) ?? undefined,
-    purposes: row.purposes?.length ? (row.purposes as CoursePurpose[]) : undefined,
-    surveyNotes: row.onboarding_note ?? undefined,
-    trialUsed: row.trial_used,
-    trialScheduledAt: meta?.trialScheduledAt,
-    trialLessonId: meta?.trialLessonId,
-    trialDurationMinutes: meta?.trialDurationMinutes,
-    paymentStatus: meta?.paymentStatus ?? "pending",
-    createdAt: row.created_at,
-  };
-}
-
-async function fetchEnrollmentMeta(studentIds: string[]) {
-  const meta = new Map<string, { paymentStatus: PaymentStatus }>();
-  if (studentIds.length === 0) return meta;
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("enrollments")
-    .select("student_id, payment_status, created_at")
-    .in("student_id", studentIds)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw new Error(`enrollments_meta_fetch_failed: ${error.message}`);
-  }
-
-  for (const row of (data ?? []) as EnrollmentMetaRow[]) {
-    if (!meta.has(row.student_id)) {
-      meta.set(row.student_id, { paymentStatus: row.payment_status });
-    }
-  }
-
-  return meta;
-}
-
-async function fetchTrialLessons(studentIds: string[]) {
-  const trials = new Map<string, TrialLessonRow>();
-  if (studentIds.length === 0) return trials;
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("lessons")
-    .select("id, student_id, scheduled_at, duration_minutes, status")
-    .in("student_id", studentIds)
-    .eq("is_trial", true)
-    .eq("status", "scheduled")
-    .gte("scheduled_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
-    .order("scheduled_at", { ascending: true });
-
-  if (error) {
-    throw new Error(`trial_lessons_fetch_failed: ${error.message}`);
-  }
-
-  for (const row of (data ?? []) as TrialLessonRow[]) {
-    if (!trials.has(row.student_id)) {
-      trials.set(row.student_id, row);
-    }
-  }
-
-  return trials;
-}
-
 async function fetchProfileMap(holderIds: string[]) {
   const map = new Map<string, ProfileRow>();
   if (holderIds.length === 0) return map;
 
-  const supabase = await createClient();
+  const supabase = createBootstrapDbClient();
   const { data, error } = await supabase
     .from("profiles")
     .select("id, full_name, phone, account_type, created_at")
@@ -175,7 +72,7 @@ async function fetchAccountEmails(holderIds: string[]) {
 }
 
 function buildStudentProfile(
-  row: StudentRow,
+  row: StudentDbRow,
   learner: Learner,
   accountEmail?: string
 ): Student {
@@ -196,6 +93,7 @@ function buildStudentProfile(
     englishName: learner.englishName,
     email: accountEmail,
     dateOfBirth: learner.dateOfBirth,
+    gender: learner.gender,
     country: (row.country ?? "KR") as CountryCode,
     englishLevel: learner.englishLevel ?? "A1",
     purposes: learner.purposes ?? [],
@@ -217,6 +115,7 @@ function buildAccountHolder(
     email,
     phone: profile.phone?.trim() || "",
     country,
+    timezone: countryToTimezone(country),
     accountType: profile.account_type ?? "self",
     createdAt: profile.created_at,
   };
@@ -227,7 +126,7 @@ export async function warmStudentDirectoryCache(): Promise<void> {
   const { data, error } = await supabase
     .from("students")
     .select(
-      "id, account_holder_id, full_name, english_name, date_of_birth, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at"
+      "id, account_holder_id, full_name, english_name, date_of_birth, gender, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at, video_platforms"
     )
     .order("created_at", { ascending: true });
 
@@ -235,20 +134,20 @@ export async function warmStudentDirectoryCache(): Promise<void> {
     throw new Error(`students_directory_fetch_failed: ${error.message}`);
   }
 
-  const rows = (data ?? []) as StudentRow[];
+  const rows = (data ?? []) as StudentDbRow[];
   const studentIds = rows.map((row) => row.id);
   const holderIds = [...new Set(rows.map((row) => row.account_holder_id))];
 
   const [enrollmentMeta, trialLessons, profileMap, emailMap] = await Promise.all([
-    fetchEnrollmentMeta(studentIds),
-    fetchTrialLessons(studentIds),
+    fetchLatestEnrollmentMetaByStudent(studentIds),
+    fetchUpcomingTrialLessonsByStudent(studentIds),
     fetchProfileMap(holderIds),
     fetchAccountEmails(holderIds),
   ]);
 
   const next: StudentDirectoryEntry[] = rows.map((row) => {
     const trial = trialLessons.get(row.id);
-    const learner = mapRowToLearner(row, {
+    const learner = studentDbRowToLearner(row, {
       paymentStatus: enrollmentMeta.get(row.id)?.paymentStatus,
       trialScheduledAt: trial?.scheduled_at,
       trialLessonId: trial?.id,

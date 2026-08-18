@@ -11,13 +11,14 @@ export function formatCurrency(amount: number, currency: "KRW" | "CNY" | "PHP") 
   return `₱${amount.toLocaleString()}`;
 }
 
-export function formatDate(date: string | Date, locale = "ko") {
+export function formatDate(date: string | Date, locale = "ko", timeZone = "Asia/Seoul") {
   const value =
     typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)
       ? new Date(`${date}T12:00:00+09:00`)
       : new Date(date);
+  if (!Number.isFinite(value.getTime())) return "—";
   return new Intl.DateTimeFormat(locale, {
-    timeZone: "Asia/Seoul",
+    timeZone,
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -26,11 +27,13 @@ export function formatDate(date: string | Date, locale = "ko") {
 }
 
 export function formatTime(date: string | Date, locale = "ko", timeZone?: string) {
+  const value = new Date(date);
+  if (!Number.isFinite(value.getTime())) return "—";
   return new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
     ...(timeZone ? { timeZone } : {}),
-  }).format(new Date(date));
+  }).format(value);
 }
 
 export function formatLessonTimeRange(
@@ -40,6 +43,7 @@ export function formatLessonTimeRange(
   timeZone?: string
 ): string {
   const start = new Date(scheduledAt);
+  if (!Number.isFinite(start.getTime())) return "—";
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
   return `${formatTime(start, locale, timeZone)} – ${formatTime(end, locale, timeZone)}`;
 }

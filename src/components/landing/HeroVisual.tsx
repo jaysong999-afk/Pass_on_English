@@ -1,79 +1,42 @@
-"use client";
-
+import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { Video, Calendar, MessageCircle } from "lucide-react";
+import { CalendarCheck2, MessageCircleHeart, Video } from "lucide-react";
 
 export function HeroVisual() {
   const t = useTranslations("heroVisual");
 
   return (
-    <div className="relative mx-auto w-full max-w-lg lg:max-w-none">
-      {/* Glow */}
-      <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-brand-400/15 to-mint-200/25 blur-2xl" />
-
-      {/* Main video card */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/80 bg-white shadow-2xl shadow-brand-900/10">
-        <div className="flex items-center justify-between bg-gradient-to-r from-brand-700 to-brand-600 px-5 py-3 text-white">
-          <div className="flex items-center gap-2">
-            <Video className="h-4 w-4" />
-            <span className="text-sm font-semibold">{t("lessonTitle")}</span>
-          </div>
-          <span className="flex items-center gap-1.5 rounded-full bg-red-500/90 px-2.5 py-0.5 text-xs font-bold">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+    <div className="landing-reveal relative mx-auto w-full max-w-[38rem] lg:max-w-none">
+      <div className="absolute -inset-5 -z-10 rounded-[2.5rem] bg-mint-200/20 blur-3xl" />
+      <figure className="relative overflow-hidden rounded-[1.75rem] border border-white/80 bg-white p-2 shadow-[0_28px_80px_-36px_rgba(18,47,22,0.45)] sm:p-3">
+        <div className="relative aspect-[3/2] overflow-hidden rounded-[1.35rem] bg-brand-50">
+          <Image
+            src="/images/landing/hero-online-lesson-v1.webp"
+            alt={t("imageAlt")}
+            fill
+            priority
+            sizes="(max-width: 1024px) 92vw, 45vw"
+            className="object-cover"
+          />
+          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-brand-900/35 to-transparent" />
+          <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-full bg-white/95 px-3.5 py-2 text-xs font-bold text-brand-800 shadow-sm backdrop-blur sm:text-sm">
+            <span className="relative flex h-2.5 w-2.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-60" /><span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" /></span>
             {t("live")}
-          </span>
-        </div>
-
-        <div className="relative aspect-[4/3] bg-gradient-to-br from-brand-50 via-white to-mint-50 p-6">
-          <div className="landing-grid-pattern absolute inset-0 opacity-60" />
-
-          {/* Teacher avatar area */}
-          <div className="relative flex h-full flex-col items-center justify-center">
-            <div className="relative">
-              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-3xl font-bold text-white shadow-lg ring-4 ring-white">
-                SM
-              </div>
-            </div>
-            <p className="mt-4 text-lg font-bold text-ink">{t("teacherName")}</p>
-            <p className="mt-1 text-sm text-ink-muted">{t("topic")}</p>
-
-            {/* Fake video UI bars */}
-            <div className="mt-6 flex gap-1">
-              {[40, 65, 45, 80, 55, 70, 50].map((h, i) => (
-                <div
-                  key={i}
-                  className="w-1.5 rounded-full bg-mint-300/70"
-                  style={{ height: `${h * 0.3}px` }}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Student pip */}
-          <div className="absolute bottom-4 right-4 flex h-14 w-20 items-center justify-center rounded-xl border-2 border-white bg-brand-900 text-xs font-medium text-white shadow-lg">
-            You
           </div>
         </div>
+        <figcaption className="flex items-center justify-between gap-3 px-2 pb-1 pt-3 sm:px-3">
+          <div className="flex items-center gap-2.5"><Video className="h-5 w-5 text-brand-600" aria-hidden="true" /><div><p className="text-sm font-bold text-ink">{t("lessonTitle")}</p><p className="text-xs text-ink-muted">{t("topic")}</p></div></div>
+          <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">{t("duration")}</span>
+        </figcaption>
+      </figure>
+
+      <div className="landing-float absolute -left-2 top-8 hidden items-center gap-2 rounded-2xl border border-brand-100 bg-white/95 p-3 shadow-lg backdrop-blur sm:flex lg:-left-8">
+        <MessageCircleHeart className="h-5 w-5 text-brand-600" aria-hidden="true" />
+        <div><p className="text-[11px] text-ink-muted">{t("feedbackLabel")}</p><p className="text-sm font-bold text-ink">{t("feedbackValue")}</p></div>
       </div>
-
-      {/* Floating: free badge */}
-      <div className="absolute -left-2 top-8 z-10 rounded-2xl border border-mint-200 bg-white px-4 py-2.5 shadow-lg sm:-left-6">
-        <p className="text-xs font-bold text-brand-600">{t("freeBadge")}</p>
-        <p className="text-lg font-black text-ink">Trial</p>
-      </div>
-
-      {/* Floating: next lesson */}
-      <div className="absolute -bottom-4 left-4 right-4 z-10 rounded-2xl border border-brand-100 bg-white p-4 shadow-xl sm:left-8 sm:right-auto sm:w-64">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-mint-50 text-brand-700">
-            <Calendar className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-brand-600">{t("nextLesson")}</p>
-            <p className="font-bold text-ink">{t("nextTime")}</p>
-          </div>
-          <MessageCircle className="ml-auto h-5 w-5 text-brand-200" />
-        </div>
+      <div className="landing-float-delayed absolute -bottom-5 right-3 flex items-center gap-2 rounded-2xl border border-brand-100 bg-white/95 p-3 shadow-lg backdrop-blur sm:right-8">
+        <CalendarCheck2 className="h-5 w-5 text-brand-600" aria-hidden="true" />
+        <div><p className="text-[11px] text-ink-muted">{t("nextLesson")}</p><p className="text-sm font-bold text-ink">{t("nextTime")}</p></div>
       </div>
     </div>
   );

@@ -114,6 +114,7 @@ function SignupProfileContent() {
     bio: "",
     specialties: [],
     experienceYears: 0,
+    videoPlatforms: application.videoPlatforms,
   };
 
   return (

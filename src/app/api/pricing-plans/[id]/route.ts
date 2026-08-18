@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAllEnrollments } from "@/lib/enrollment-store";
+import { getAllEnrollments } from "@/lib/enrollment-store-sync";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
   deletePricingPlan,

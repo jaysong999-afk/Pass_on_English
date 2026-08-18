@@ -2,14 +2,13 @@ import type {
   AccountHolder,
   AccountSession,
   AccountType,
-  CefrLevel,
   CountryCode,
-  CoursePurpose,
   Learner,
-  PaymentStatus,
-  RegistrationStatus,
 } from "@/types";
-import { registerStudentForReviewInDb } from "@/lib/student-registrations/repository";
+import {
+  registerStudentForReviewInDb,
+  updateStudentRegistrationSurveyInDb,
+} from "@/lib/student-registrations/repository";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { createClient, getBearerAccessToken } from "@/lib/supabase/server";
 import { createPrivilegedClient } from "@/lib/supabase/admin";
@@ -28,90 +27,42 @@ import type {
   LearnerSurveyInput,
   RegisterAccountInput,
 } from "@/lib/account-store.types";
+import { countryToTimezone } from "@/lib/account-location";
+import { studentDbRowToLearner, type StudentDbRow } from "@/lib/students/db-types";
+import {
+  fetchLatestEnrollmentMetaByStudent,
+  fetchUpcomingTrialLessonsByStudent,
+} from "@/lib/students/db-readers";
 
 interface ProfileRow {
   id: string;
   role: string;
   full_name: string | null;
   phone: string | null;
+  country?: CountryCode | null;
+  timezone?: string | null;
   account_type: AccountType | null;
   active_student_id: string | null;
   created_at: string;
 }
 
-interface StudentRow {
-  id: string;
-  account_holder_id: string;
-  full_name: string | null;
-  english_name: string;
-  date_of_birth: string;
-  country: "KR" | "CN" | null;
-  english_level: string | null;
-  purposes: string[] | null;
-  onboarding_note: string | null;
-  trial_used: boolean;
-  is_active: boolean;
-  created_at: string;
-}
-
-interface EnrollmentMetaRow {
-  student_id: string;
-  payment_status: PaymentStatus;
-}
-
-interface TrialLessonRow {
-  student_id: string;
-  id: string;
-  scheduled_at: string;
-  duration_minutes?: number;
-}
-
-function mapDbCountry(country: CountryCode): "KR" | "CN" | null {
-  if (country === "KR" || country === "CN") return country;
+function mapDbCountry(country: CountryCode): "KR" | "CN" | "PH" | null {
+  if (country === "KR" || country === "CN" || country === "PH") return country;
   return null;
 }
 
 function resolveAccountCountry(
-  students: StudentRow[],
+  profileCountry: CountryCode | null,
+  students: StudentDbRow[],
   metadataCountry?: string
 ): CountryCode {
+  if (["KR", "CN", "PH", "OTHER"].includes(profileCountry ?? "")) return profileCountry!;
   const fromStudent = students.find((s) => s.country)?.country;
-  if (fromStudent === "KR" || fromStudent === "CN") return fromStudent;
-  if (metadataCountry === "KR" || metadataCountry === "CN" || metadataCountry === "OTHER") {
+  if (fromStudent === "KR" || fromStudent === "CN" || fromStudent === "PH") return fromStudent;
+  if (metadataCountry === "KR" || metadataCountry === "CN" || metadataCountry === "PH" || metadataCountry === "OTHER") {
     return metadataCountry;
   }
   return "KR";
-}
-
-function rowToLearner(
-  row: StudentRow,
-  meta?: {
-    paymentStatus?: PaymentStatus;
-    registrationStatus?: RegistrationStatus;
-    trialScheduledAt?: string;
-    trialLessonId?: string;
-    trialDurationMinutes?: number;
-  }
-): Learner {
-  return {
-    id: row.id,
-    accountHolderId: row.account_holder_id,
-    fullName: row.full_name?.trim() || row.english_name,
-    englishName: row.english_name,
-    dateOfBirth: row.date_of_birth,
-    englishLevel: (row.english_level as CefrLevel | null) ?? undefined,
-    purposes: row.purposes?.length
-      ? (row.purposes as CoursePurpose[])
-      : undefined,
-    surveyNotes: row.onboarding_note ?? undefined,
-    trialUsed: row.trial_used,
-    trialScheduledAt: meta?.trialScheduledAt,
-    trialLessonId: meta?.trialLessonId,
-    trialDurationMinutes: meta?.trialDurationMinutes,
-    paymentStatus: meta?.paymentStatus ?? "pending",
-    registrationStatus: meta?.registrationStatus ?? "pending",
-    createdAt: row.created_at,
-  };
 }
 
 function rowToAccountHolder(
@@ -125,78 +76,30 @@ function rowToAccountHolder(
     email,
     phone: profile.phone?.trim() || "",
     country,
+    timezone: profile.timezone?.trim() || countryToTimezone(country),
     accountType: profile.account_type ?? "self",
     createdAt: profile.created_at,
   };
 }
 
-async function fetchEnrollmentMeta(studentIds: string[]) {
-  const meta = new Map<string, { paymentStatus: PaymentStatus }>();
-  if (studentIds.length === 0) return meta;
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("enrollments")
-    .select("student_id, payment_status, created_at")
-    .in("student_id", studentIds)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw new Error(`enrollments_meta_fetch_failed: ${error.message}`);
-  }
-
-  for (const row of (data ?? []) as EnrollmentMetaRow[]) {
-    if (!meta.has(row.student_id)) {
-      meta.set(row.student_id, { paymentStatus: row.payment_status });
-    }
-  }
-
-  return meta;
-}
-
-async function fetchTrialLessons(studentIds: string[]) {
-  const trials = new Map<string, TrialLessonRow>();
-  if (studentIds.length === 0) return trials;
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("lessons")
-    .select("id, student_id, scheduled_at, duration_minutes, status")
-    .in("student_id", studentIds)
-    .eq("is_trial", true)
-    .eq("status", "scheduled")
-    .gte("scheduled_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
-    .order("scheduled_at", { ascending: true });
-
-  if (error) {
-    throw new Error(`trial_lessons_fetch_failed: ${error.message}`);
-  }
-
-  for (const row of (data ?? []) as TrialLessonRow[]) {
-    if (!trials.has(row.student_id)) {
-      trials.set(row.student_id, row);
-    }
-  }
-
-  return trials;
-}
-
 async function buildAccountSession(
   profile: ProfileRow,
   email: string,
-  students: StudentRow[],
-  metadataCountry?: string
+  students: StudentDbRow[],
+  metadataCountry?: string,
+  metadataTimezone?: string
 ): Promise<AccountSession> {
   const studentIds = students.map((s) => s.id);
   const [enrollmentMeta, trialLessons] = await Promise.all([
-    fetchEnrollmentMeta(studentIds),
-    fetchTrialLessons(studentIds),
+    fetchLatestEnrollmentMetaByStudent(studentIds),
+    fetchUpcomingTrialLessonsByStudent(studentIds),
   ]);
 
   const learners = students.map((row) => {
     const trial = trialLessons.get(row.id);
-    return rowToLearner(row, {
+    return studentDbRowToLearner(row, {
       paymentStatus: enrollmentMeta.get(row.id)?.paymentStatus,
+      registrationStatus: "pending",
       trialScheduledAt: trial?.scheduled_at,
       trialLessonId: trial?.id,
       trialDurationMinutes: trial?.duration_minutes,
@@ -209,9 +112,9 @@ async function buildAccountSession(
       : learners[0]?.id ?? "";
 
   const account = rowToAccountHolder(
-    profile,
+    { ...profile, timezone: profile.timezone ?? metadataTimezone ?? null },
     email,
-    resolveAccountCountry(students, metadataCountry)
+    resolveAccountCountry(profile.country ?? null, students, metadataCountry)
   );
 
   return { account, learners, activeLearnerId };
@@ -252,11 +155,21 @@ export async function loadAccountSession(): Promise<AccountSession | null> {
   const { supabase, user } = await requireAuthUser();
   if (!user) return null;
 
-  const { data: profile, error: profileError } = await supabase
+  let { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id, role, full_name, phone, account_type, active_student_id, created_at")
+    .select("id, role, full_name, phone, country, timezone, account_type, active_student_id, created_at")
     .eq("id", user.id)
     .maybeSingle();
+
+  if (profileError && /country|timezone/i.test(profileError.message)) {
+    const fallback = await supabase
+      .from("profiles")
+      .select("id, role, full_name, phone, account_type, active_student_id, created_at")
+      .eq("id", user.id)
+      .maybeSingle();
+    profile = fallback.data as typeof profile;
+    profileError = fallback.error;
+  }
 
   if (profileError) {
     throw new Error(`profile_fetch_failed: ${profileError.message}`);
@@ -266,7 +179,7 @@ export async function loadAccountSession(): Promise<AccountSession | null> {
   const { data: students, error: studentsError } = await supabase
     .from("students")
     .select(
-      "id, account_holder_id, full_name, english_name, date_of_birth, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at"
+      "id, account_holder_id, full_name, english_name, date_of_birth, gender, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at, video_platforms"
     )
     .eq("account_holder_id", user.id)
     .eq("is_active", true)
@@ -277,11 +190,13 @@ export async function loadAccountSession(): Promise<AccountSession | null> {
   }
 
   const metadataCountry = user.user_metadata?.country as string | undefined;
+  const metadataTimezone = user.user_metadata?.timezone as string | undefined;
   const session = await buildAccountSession(
     profile as ProfileRow,
     user.email ?? "",
-    (students ?? []) as StudentRow[],
-    metadataCountry
+    (students ?? []) as StudentDbRow[],
+    metadataCountry,
+    metadataTimezone
   );
 
   setAccountSessionCache(session);
@@ -293,6 +208,73 @@ export async function ensureAccountSession(): Promise<AccountSession | null> {
 }
 
 export async function getAccountSessionFromDb(): Promise<AccountSession | null> {
+  return loadAccountSession();
+}
+
+export async function updateAccountProfileInDb(input: {
+  phone?: string;
+  country?: CountryCode;
+  learners?: Array<{ id: string; englishName?: string; videoPlatforms?: import("@/types").VideoPlatform[] }>;
+}): Promise<AccountSession | null> {
+  const { supabase, user } = await requireAuthUser();
+  if (!user) return null;
+
+  const profilePatch: Record<string, string> = {};
+  if (input.phone !== undefined) profilePatch.phone = input.phone.trim();
+  if (input.country !== undefined) {
+    profilePatch.country = input.country;
+    profilePatch.timezone = countryToTimezone(input.country);
+  }
+  if (Object.keys(profilePatch).length > 0) {
+    const { error } = await supabase.from("profiles").update(profilePatch).eq("id", user.id);
+    if (error && input.country !== undefined && /country|timezone/i.test(error.message)) {
+      if (input.phone !== undefined) {
+        const fallback = await supabase.from("profiles").update({ phone: input.phone.trim() }).eq("id", user.id);
+        if (fallback.error) throw new Error(`account_profile_update_failed: ${fallback.error.message}`);
+      }
+    } else if (error) {
+      throw new Error(`account_profile_update_failed: ${error.message}`);
+    }
+  }
+
+  if (input.country !== undefined && input.country !== "PH" && input.country !== "OTHER") {
+    const { error } = await supabase
+      .from("students")
+      .update({ country: mapDbCountry(input.country) })
+      .eq("account_holder_id", user.id);
+    if (error) throw new Error(`student_country_update_failed: ${error.message}`);
+    const { error: metadataError } = await supabase.auth.updateUser({
+      data: { country: input.country, timezone: countryToTimezone(input.country) },
+    });
+    if (metadataError) {
+      const admin = createPrivilegedClient();
+      const { error: adminMetadataError } = await admin.auth.admin.updateUserById(user.id, {
+        user_metadata: { country: input.country, timezone: countryToTimezone(input.country) },
+      });
+      if (adminMetadataError) {
+        throw new Error(`account_metadata_update_failed: ${adminMetadataError.message}`);
+      }
+    }
+  }
+
+  for (const learner of input.learners ?? []) {
+    const englishName = learner.englishName?.trim();
+    if (learner.englishName !== undefined && !englishName) throw new Error("missing_fields");
+    const patch = {
+      ...(englishName ? { english_name: englishName } : {}),
+      ...(learner.videoPlatforms ? { video_platforms: learner.videoPlatforms } : {}),
+    };
+    const { data, error } = await supabase
+      .from("students")
+      .update(patch)
+      .eq("id", learner.id)
+      .eq("account_holder_id", user.id)
+      .select("id")
+      .maybeSingle();
+    if (error) throw new Error(`student_english_name_update_failed: ${error.message}`);
+    if (!data) throw new Error("learner_not_found");
+  }
+
   return loadAccountSession();
 }
 
@@ -352,11 +334,13 @@ export async function registerAccountInDb(
       full_name: input.learnerFullName.trim(),
       english_name: input.learnerEnglishName.trim(),
       date_of_birth: input.learnerDateOfBirth,
+      gender: input.learnerGender,
       country: mapDbCountry(input.country),
       trial_used: false,
+      video_platforms: input.videoPlatforms,
     })
     .select(
-      "id, account_holder_id, full_name, english_name, date_of_birth, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at"
+      "id, account_holder_id, full_name, english_name, date_of_birth, gender, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at, video_platforms"
     )
     .single();
 
@@ -371,11 +355,13 @@ export async function registerAccountInDb(
           full_name: input.learnerFullName.trim(),
           english_name: input.learnerEnglishName.trim(),
           date_of_birth: input.learnerDateOfBirth,
+          gender: input.learnerGender,
           country: mapDbCountry(input.country),
           trial_used: false,
+          video_platforms: input.videoPlatforms,
         })
         .select(
-          "id, account_holder_id, full_name, english_name, date_of_birth, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at"
+          "id, account_holder_id, full_name, english_name, date_of_birth, gender, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at, video_platforms"
         )
         .single();
 
@@ -449,7 +435,7 @@ export async function addLearnerInDb(input: AddLearnerInput): Promise<Learner> {
       trial_used: false,
     })
     .select(
-      "id, account_holder_id, full_name, english_name, date_of_birth, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at"
+      "id, account_holder_id, full_name, english_name, date_of_birth, gender, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at, video_platforms"
     )
     .single();
 
@@ -481,7 +467,7 @@ export async function addLearnerInDb(input: AddLearnerInput): Promise<Learner> {
   }
 
   await loadAccountSession();
-  return rowToLearner(student as StudentRow);
+  return studentDbRowToLearner(student as StudentDbRow, { registrationStatus: "pending" });
 }
 
 export async function updateLearnerSurveyInDb(
@@ -501,7 +487,7 @@ export async function updateLearnerSurveyInDb(
     .eq("id", learnerId)
     .eq("account_holder_id", user.id)
     .select(
-      "id, account_holder_id, full_name, english_name, date_of_birth, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at"
+      "id, account_holder_id, full_name, english_name, date_of_birth, gender, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at, video_platforms"
     )
     .maybeSingle();
 
@@ -510,8 +496,13 @@ export async function updateLearnerSurveyInDb(
   }
   if (!data) return null;
 
+  await updateStudentRegistrationSurveyInDb(learnerId, {
+    englishLevel: input.englishLevel,
+    purposes: input.purposes,
+    surveyNotes: input.surveyNotes,
+  });
   await loadAccountSession();
-  return rowToLearner(data as StudentRow);
+  return studentDbRowToLearner(data as StudentDbRow, { registrationStatus: "pending" });
 }
 
 export async function bookTrialForLearnerInDb(
@@ -539,7 +530,7 @@ export async function bookTrialForLearnerInDb(
     .eq("id", learnerId)
     .eq("account_holder_id", user.id)
     .select(
-      "id, account_holder_id, full_name, english_name, date_of_birth, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at"
+      "id, account_holder_id, full_name, english_name, date_of_birth, gender, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at, video_platforms"
     )
     .maybeSingle();
 
@@ -548,7 +539,8 @@ export async function bookTrialForLearnerInDb(
   }
   if (!data) return null;
 
-  const learner = rowToLearner(data as StudentRow, {
+  const learner = studentDbRowToLearner(data as StudentDbRow, {
+    registrationStatus: "pending",
     trialScheduledAt: input.scheduledAt,
     trialLessonId: input.trialLessonId,
     trialDurationMinutes: input.durationMinutes,

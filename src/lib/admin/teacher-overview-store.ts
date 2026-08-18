@@ -2,15 +2,15 @@ import type { Teacher } from "@/types";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import { DOW_TO_DAY_LABEL } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
-import { getAllEnrollments } from "@/lib/enrollment-store";
+import { getAllEnrollments } from "@/lib/enrollment-store-sync";
 import { getPendingTeacherApplications } from "@/lib/admin/teacher-application-store";
 import { getTeacherWeeklyAvailability } from "@/lib/teacher-availability-store-sync";
-import { getAllTeachers } from "@/lib/teacher-profile-store";
+import { getAllTeachers } from "@/lib/teacher-profile-store-sync";
 import {
   getSalaryStatement,
   statementTotal,
-} from "@/lib/teacher-salary-store";
-import { getTeacherLessons, getTodayLessons } from "@/lib/teacher-lesson-store";
+} from "@/lib/teacher-salary-store-sync";
+import { getTeacherLessons, getTodayLessons } from "@/lib/teacher-lesson-store-sync";
 
 export interface AdminTeacherSummaryCounts {
   active: number;

@@ -1,27 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ChatThread } from "@/components/shared/ChatThread";
-import type { ChatRoom } from "@/types";
+import { useChatRoom } from "@/hooks/useChatRoom";
 
 export default function AdminChatRoomPage() {
   const params = useParams();
   const roomId = params.roomId as string;
-  const [room, setRoom] = useState<ChatRoom | null>(null);
-
-  useEffect(() => {
-    fetch("/api/chat/rooms?role=admin")
-      .then((r) => r.json())
-      .then((d) => {
-        const found = (d.rooms as ChatRoom[] | undefined)?.find((r) => r.id === roomId);
-        if (found) setRoom(found);
-      });
-  }, [roomId]);
-
-  useEffect(() => {
-    fetch(`/api/chat/rooms?role=admin&id=${roomId}&action=read`, { method: "PATCH" });
-  }, [roomId]);
+  const room = useChatRoom({ roomId, role: "admin" });
 
   return (
     <div className="space-y-4">

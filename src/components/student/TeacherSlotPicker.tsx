@@ -18,6 +18,7 @@ import {
 } from "@/lib/availability/timezone";
 import { formatUnifiedSlotTimeRange } from "@/lib/teacher-availability";
 import type { TeacherScheduleSlot } from "@/lib/teacher-availability";
+import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
 
 interface TeacherSlotPickerProps {
   sessionMinutes: number;
@@ -36,7 +37,8 @@ export function TeacherSlotPicker({
   gridTimes: gridTimesProp,
 }: TeacherSlotPickerProps) {
   const locale = useLocale() as Locale;
-  const tz = getStudentTimezone(locale);
+  const { account } = useActiveLearner();
+  const tz = getStudentTimezone(locale, account?.timezone);
   const blockCount = slotsForSessionMinutes(sessionMinutes);
 
   const gridTimes = gridTimesProp ?? generateGridStartTimes();

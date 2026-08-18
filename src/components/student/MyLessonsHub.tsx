@@ -21,9 +21,9 @@ import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
 import type { Lesson, StudentEnrollment } from "@/types";
 
 export function MyLessonsHub() {
-  const { activeLearnerId: learnerId, loading: accountLoading } = useActiveLearner();
+  const { activeLearnerId: learnerId, account, loading: accountLoading } = useActiveLearner();
   const locale = useLocale() as Locale;
-  const studentTz = getStudentTimezone(locale);
+  const studentTz = getStudentTimezone(locale, account?.timezone);
   const t = useTranslations("studentPortal.lessons");
   const tReschedule = useTranslations("studentPortal.reschedule");
   const tCommon = useTranslations("studentPortal.common");
@@ -115,7 +115,7 @@ export function MyLessonsHub() {
                 )}
               </p>
               <p className="mt-0.5 text-sm text-brand-100">
-                {formatDate(nextLesson.scheduledAt)} · {nextLesson.teacherName}
+                {formatDate(nextLesson.scheduledAt, locale, studentTz)} · {nextLesson.teacherName}
               </p>
             </>
           ) : (
@@ -208,6 +208,8 @@ export function MyLessonsHub() {
         onOpenChange={setDetailOpen}
         makeupRemaining={makeupRemaining}
         onRescheduleSubmitted={loadData}
+        locale={locale}
+        timeZone={studentTz}
       />
 
       <GlobalRescheduleDialog
@@ -216,6 +218,8 @@ export function MyLessonsHub() {
         lessons={studentLessons}
         makeupRemaining={makeupRemaining}
         onSelectLesson={openLesson}
+        locale={locale}
+        timeZone={studentTz}
       />
     </div>
   );

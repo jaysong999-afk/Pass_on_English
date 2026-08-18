@@ -1,19 +1,28 @@
 import type { SessionAdjustment, StudentEnrollment } from "@/types";
-/** Format: 12회/20회 (잔여/전체) */
-export function formatSessionBalance(remaining: number, total: number) {
-  return `${remaining}회/${total}회`;
+export interface SessionFormatLabels {
+  unit?: string;
+  remaining?: string;
+}
+
+/** Format a session balance with locale-specific labels when provided. */
+export function formatSessionBalance(remaining: number, total: number, labels: SessionFormatLabels = {}) {
+  const unit = labels.unit ?? "회";
+  return `${remaining}${unit}/${total}${unit}`;
 }
 
 /** Format: 8회/20회(잔여 12회) — 수업 진행도 */
-export function formatSessionProgress(used: number, total: number, remaining: number) {
-  return `${used}회/${total}회(잔여 ${remaining}회)`;
+export function formatSessionProgress(used: number, total: number, remaining: number, labels: SessionFormatLabels = {}) {
+  const unit = labels.unit ?? "회";
+  const remainingLabel = labels.remaining ?? "잔여";
+  return `${used}${unit}/${total}${unit}(${remainingLabel} ${remaining}${unit})`;
 }
 
 export function formatSessionProgressFromEnrollment(
-  enrollment: Pick<StudentEnrollment, "sessionsTotal" | "sessionsRemaining">
+  enrollment: Pick<StudentEnrollment, "sessionsTotal" | "sessionsRemaining">,
+  labels?: SessionFormatLabels
 ) {
   const used = getSessionsUsed(enrollment);
-  return formatSessionProgress(used, enrollment.sessionsTotal, enrollment.sessionsRemaining);
+  return formatSessionProgress(used, enrollment.sessionsTotal, enrollment.sessionsRemaining, labels);
 }
 
 export function getSessionsUsed(enrollment: Pick<StudentEnrollment, "sessionsTotal" | "sessionsRemaining">) {

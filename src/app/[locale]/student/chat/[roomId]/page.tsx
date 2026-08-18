@@ -1,35 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { ChatThread } from "@/components/shared/ChatThread";
 import { notifyChatInboxChanged } from "@/lib/chat-inbox-events";
 import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
-import type { ChatRoom } from "@/types";
+import { useChatRoom } from "@/hooks/useChatRoom";
 
 export default function StudentChatRoomPage() {
   const params = useParams();
   const t = useTranslations("studentPortal.chat");
   const roomId = params.roomId as string;
   const { account, activeLearnerId } = useActiveLearner();
-  const [room, setRoom] = useState<ChatRoom | null>(null);
-
-  useEffect(() => {
-    if (!activeLearnerId) return;
-    fetch(`/api/chat/rooms?role=student&studentId=${encodeURIComponent(activeLearnerId)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        const found = (d.rooms as ChatRoom[] | undefined)?.find((r) => r.id === roomId);
-        if (found) setRoom(found);
-      });
-  }, [roomId, activeLearnerId]);
-
-  useEffect(() => {
-    fetch(`/api/chat/rooms?role=student&id=${roomId}&action=read`, { method: "PATCH" }).then(
-      () => notifyChatInboxChanged()
-    );
-  }, [roomId]);
+  const onRead = useCallback(() => notifyChatInboxChanged(), []);
+  const room = useChatRoom({ roomId, role: "student", enabled: Boolean(activeLearnerId), readEnabled: true, studentId: activeLearnerId ?? undefined, onRead });
 
   return (
     <div className="space-y-4">

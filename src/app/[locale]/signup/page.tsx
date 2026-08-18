@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { AccountType, CountryCode } from "@/types";
+import type { AccountType, CountryCode, VideoPlatform, StudentGender } from "@/types";
+import { VideoPlatformSelector } from "@/components/shared/VideoPlatformSelector";
 import { studentPath } from "@/lib/student-paths";
 import { cn } from "@/lib/utils";
 
@@ -28,12 +29,14 @@ export default function SignupPage() {
   const [learnerFullName, setLearnerFullName] = useState("");
   const [learnerEnglishName, setLearnerEnglishName] = useState("");
   const [learnerDateOfBirth, setLearnerDateOfBirth] = useState("");
+  const [learnerGender, setLearnerGender] = useState<StudentGender | "">("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState<CountryCode>("KR");
+  const [videoPlatforms, setVideoPlatforms] = useState<VideoPlatform[]>(["ZOOM"]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,7 +57,7 @@ export default function SignupPage() {
     }
 
     const effectiveLearnerDob = isSelf ? dateOfBirth : learnerDateOfBirth;
-    if (!effectiveLearnerDob) {
+    if (!effectiveLearnerDob || !learnerGender) {
       setError(t("birthRequired"));
       return;
     }
@@ -63,6 +66,7 @@ export default function SignupPage() {
       setError(t("learnerFieldsRequired"));
       return;
     }
+    if (videoPlatforms.length === 0) { setError(t("signupFailed")); return; }
 
     setSubmitting(true);
     try {
@@ -79,6 +83,8 @@ export default function SignupPage() {
           learnerFullName: isSelf ? fullName : learnerFullName,
           learnerEnglishName: isSelf ? englishName : learnerEnglishName,
           learnerDateOfBirth: effectiveLearnerDob,
+          learnerGender,
+          videoPlatforms,
         }),
       });
 
@@ -86,6 +92,8 @@ export default function SignupPage() {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         if (data.error === "email_already_registered") {
           setError(t("emailAlreadyRegistered"));
+        } else if (data.error === "email_confirmation_required") {
+          setError(t("emailConfirmationRequired"));
         } else if (data.error === "signup_rate_limited") {
           setError(t("signupRateLimited"));
         } else {
@@ -205,6 +213,7 @@ export default function SignupPage() {
                       required
                     />
                   </div>
+                  <GenderField value={learnerGender} onChange={setLearnerGender} locale={locale} />
                 </>
               )}
 
@@ -259,6 +268,7 @@ export default function SignupPage() {
                   />
                 </div>
               )}
+              {isSelf && <GenderField value={learnerGender} onChange={setLearnerGender} locale={locale} />}
 
               <div className="space-y-2">
                 <Label htmlFor="phone">{t("phone")}</Label>
@@ -288,6 +298,12 @@ export default function SignupPage() {
                 </select>
               </div>
 
+              <VideoPlatformSelector
+                value={videoPlatforms}
+                onChange={setVideoPlatforms}
+                language={locale === "zh-CN" ? "zh-CN" : "ko"}
+              />
+
               {error && <p className="text-sm text-red-600">{error}</p>}
 
               <Button type="submit" className="w-full h-11" disabled={submitting}>
@@ -304,7 +320,14 @@ export default function SignupPage() {
           </CardContent>
         </Card>
       </main>
-      <LandingFooter />
+      <LandingFooter locale={locale} />
     </div>
   );
+}
+
+function GenderField({ value, onChange, locale }: { value: StudentGender | ""; onChange: (value: StudentGender) => void; locale: string }) {
+  const labels = locale === "zh-CN" ? { title: "学生性别", male: "男", female: "女" } : { title: "수강생 성별", male: "남성", female: "여성" };
+  return <fieldset className="space-y-2"><legend className="text-sm font-medium">{labels.title}</legend><div className="grid grid-cols-2 gap-2">
+    {(["male", "female"] as const).map((gender) => <button key={gender} type="button" aria-pressed={value === gender} onClick={() => onChange(gender)} className={cn("rounded-xl border px-4 py-3 text-sm font-medium transition-colors", value === gender ? "border-brand-600 bg-brand-50 text-brand-800 ring-2 ring-brand-600/20" : "border-gray-200 hover:border-brand-300")}>{labels[gender]}</button>)}
+  </div></fieldset>;
 }

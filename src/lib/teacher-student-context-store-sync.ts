@@ -16,6 +16,7 @@ function ensureContext(studentId: string, teacherId: string): TeacherStudentCont
     studentId,
     teacherId,
     textbook: "",
+    textbookHistory: [],
     videoPlatform: defaultPlatform(studentId),
   };
   setTeacherStudentContextCacheEntry(fallback);
@@ -32,7 +33,9 @@ export function getTeacherStudentContext(
 export function updateTeacherStudentContext(
   studentId: string,
   teacherId: string,
-  patch: Partial<Pick<TeacherStudentContext, "textbook" | "videoPlatform" | "specialNotes">>
+  patch: Partial<
+    Pick<TeacherStudentContext, "textbook" | "textbookHistory" | "videoPlatform" | "specialNotes">
+  >
 ): TeacherStudentContext {
   const current = ensureContext(studentId, teacherId);
   const updated: TeacherStudentContext = {

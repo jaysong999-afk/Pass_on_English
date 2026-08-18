@@ -28,12 +28,26 @@ const PURPOSE_LABEL_MAP = Object.fromEntries(
   COURSE_PURPOSES.map((p) => [p.value, p.label])
 ) as Record<CoursePurpose, string>;
 
+const PURPOSE_LABEL_MAP_EN: Record<CoursePurpose, string> = {
+  daily_conversation: "Daily conversation",
+  phonics: "Phonics",
+  graded_reading: "Graded reading",
+  debate: "Debate",
+  adult_conversation: "Adult conversation",
+  business_english: "Business English",
+  current_affairs: "Current affairs",
+};
+
 export function formatCefrLevel(level: CefrLevel): string {
   return CEFR_LABEL_MAP[level] ?? level;
 }
 
 export function formatCoursePurposes(purposes: CoursePurpose[]): string {
   return purposes.map((p) => PURPOSE_LABEL_MAP[p] ?? p).join(", ");
+}
+
+export function formatCoursePurposesEnglish(purposes: CoursePurpose[]): string {
+  return purposes.map((purpose) => PURPOSE_LABEL_MAP_EN[purpose] ?? purpose).join(", ");
 }
 
 export const VALID_CEFR_LEVELS = CEFR_LEVELS.map((l) => l.value);

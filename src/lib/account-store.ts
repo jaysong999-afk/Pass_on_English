@@ -19,6 +19,7 @@ export {
   ensureAccountSession,
   loadAccountSession,
   getAccountSessionFromDb,
+  updateAccountProfileInDb as updateAccountProfile,
   registerAccountInDb as registerAccount,
   addLearnerInDb as addLearner,
   setActiveLearnerInDb as setActiveLearner,

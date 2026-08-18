@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { Check } from "lucide-react";
+import { Check, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/landing/SectionHeading";
 import { usePricingPlans } from "@/hooks/usePricingPlans";
@@ -11,25 +11,27 @@ import { LESSON_MINUTES } from "@/lib/availability/constants";
 import { formatScheduleDays } from "@/lib/teacher-availability";
 import type { Locale } from "@/lib/i18n/config";
 
-export function PricingSection({ locale }: { locale: string }) {
+export function PricingSection({ locale, standalone = false }: { locale: string; standalone?: boolean }) {
   const t = useTranslations("pricing");
   const tp = useTranslations("studentPortal.pricing");
   const isZh = locale === "zh-CN";
   const planLocale = locale as Locale;
-  const { plans, loading, error } = usePricingPlans(true);
+  const { plans, loading, error, reload } = usePricingPlans(true);
 
   return (
     <section id="pricing" className="landing-section bg-white">
       <div className="landing-container">
-        <SectionHeading eyebrow={t("eyebrow")} title={t("title")} subtitle={t("subtitle")} />
+        <SectionHeading level={standalone ? "h1" : "h2"} eyebrow={t("eyebrow")} title={t("title")} subtitle={t("subtitle")} />
 
-        {loading && (
-          <p className="mt-14 text-center text-ink-muted">{tp("loading")}</p>
-        )}
+        {loading && <div className="mx-auto mt-14 grid max-w-5xl gap-6 sm:grid-cols-2 lg:grid-cols-3" aria-label={tp("loading")}>
+          {[1, 2, 3].map((item) => <div key={item} className="h-96 animate-pulse rounded-2xl border border-brand-100 bg-surface" />)}
+        </div>}
 
-        {error && (
-          <p className="mt-14 text-center text-red-600">{tp("loadError")}</p>
-        )}
+        {error && <div role="alert" className="mx-auto mt-14 max-w-xl rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
+          <p className="font-bold text-red-800">{t("loadErrorTitle")}</p>
+          <p className="mt-2 text-sm text-red-700">{t("loadErrorDesc")}</p>
+          <Button type="button" variant="secondary" className="mt-5 gap-2" onClick={reload}><RefreshCw className="h-4 w-4" />{t("retry")}</Button>
+        </div>}
 
         {!loading && !error && (
           <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">

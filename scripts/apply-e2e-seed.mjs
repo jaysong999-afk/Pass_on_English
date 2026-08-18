@@ -1,5 +1,5 @@
 /**
- * Apply supabase/migrations/024_e2e_rich_seed.sql to the connected Supabase project.
+ * Apply supabase/seeds/e2e_rich_seed.sql to the connected Supabase project.
  *
  *   npm run seed:e2e
  *
@@ -13,7 +13,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
-const MIGRATION = resolve(ROOT, "supabase/migrations/024_e2e_rich_seed.sql");
+const MIGRATION = resolve(ROOT, "supabase/seeds/e2e_rich_seed.sql");
 const MANIFEST = resolve(__dirname, "e2e-seed-manifest.json");
 const PASSWORD = "DemoPass123!";
 
@@ -340,6 +340,8 @@ async function applyWithServiceRole() {
     ]),
     "teachers"
   );
+  await db.from("teachers").update({ video_platforms: ["ZOOM", "VOOV"] }).eq("id", IDS.james);
+  await db.from("teachers").update({ video_platforms: ["VOOV"] }).eq("id", IDS.emily);
 
   await db.from("teacher_applications").update({ teacher_id: IDS.james }).eq("id", IDS.appJames);
   await db.from("teacher_applications").update({ teacher_id: IDS.emily }).eq("id", IDS.appEmily);
@@ -359,6 +361,9 @@ async function applyWithServiceRole() {
     ]),
     "students"
   );
+  await db.from("students").update({ video_platforms: ["VOOV"] }).eq("id", IDS.lCn);
+  await db.from("students").update({ gender: "female" }).in("id", [IDS.lFresh, IDS.lActive, IDS.lSib1, IDS.lPending]);
+  await db.from("students").update({ gender: "male" }).in("id", [IDS.lHold, IDS.lPay, IDS.lRenew, IDS.lCn, IDS.lSib2]);
 
   await db.from("profiles").update({ active_student_id: IDS.lFresh }).eq("id", IDS.fresh);
   await db.from("profiles").update({ active_student_id: IDS.lHold }).eq("id", IDS.hold);
@@ -409,13 +414,16 @@ async function applyWithServiceRole() {
   const holdDeadline = new Date(now.getTime() + 14 * 3600 * 1000);
   const payDeadline = new Date(now.getTime() + 12 * 3600 * 1000);
   const renewLastDate = lastPastWeekdayDateKey(now, "10:20", wd);
+  const pastWd5 = matchDates(renewLastDate, wd, 20, -1);
+  const renewFirstDate = pastWd5[0].dt;
+  const renewLastEndIso = kstIso(renewLastDate, "10:20");
 
   must(
     await db.from("enrollments").insert([
       { id: IDS.enHold, student_id: IDS.lHold, teacher_id: IDS.james, plan_id: byType.weekday5_20min.id, status: "pending_payment", payment_status: "pending", currency: "KRW", total_amount: byType.weekday5_20min.price_krw, sessions_total: 20, sessions_completed: 0, sessions_remaining: 20, curriculum: "Phonics starters", preferred_slot_time: "13:00", preferred_slot_day: "Mon", session_adjustments: [], confirmed_at: new Date(now.getTime() - 3600 * 1000).toISOString(), payment_deadline_at: holdDeadline.toISOString() },
       { id: IDS.enPay, student_id: IDS.lPay, teacher_id: IDS.james, plan_id: byType.tuth_20min.id, status: "pending_payment", payment_status: "reported", currency: "KRW", total_amount: byType.tuth_20min.price_krw, sessions_total: 8, sessions_completed: 0, sessions_remaining: 8, curriculum: "Exam prep Tue/Thu", preferred_slot_time: "15:00", preferred_slot_day: "Tue", session_adjustments: [], confirmed_at: new Date(now.getTime() - 3 * 3600 * 1000).toISOString(), payment_deadline_at: payDeadline.toISOString() },
-      { id: IDS.enActive, student_id: IDS.lActive, teacher_id: IDS.james, plan_id: byType.mwf_20min.id, status: "active", payment_status: "confirmed", currency: "KRW", total_amount: byType.mwf_20min.price_krw, sessions_total: 12, sessions_completed: 3, sessions_remaining: 9, curriculum: "Oxford Discover 2", preferred_slot_time: "14:00", preferred_slot_day: "Mon", session_adjustments: [{ delta: 1, reason: "teacher no-show makeup" }] },
-      { id: IDS.enRenew, student_id: IDS.lRenew, teacher_id: IDS.james, plan_id: byType.weekday5_20min.id, status: "completed", payment_status: "confirmed", currency: "KRW", total_amount: byType.weekday5_20min.price_krw, sessions_total: 20, sessions_completed: 20, sessions_remaining: 0, curriculum: "General English (completed)", preferred_slot_time: "10:00", preferred_slot_day: "Mon", session_adjustments: [] },
+      { id: IDS.enActive, student_id: IDS.lActive, teacher_id: IDS.james, plan_id: byType.mwf_20min.id, status: "active", payment_status: "confirmed", currency: "KRW", total_amount: byType.mwf_20min.price_krw, sessions_total: 12, sessions_completed: 3, sessions_remaining: 9, curriculum: "Oxford Discover 2", preferred_slot_time: "14:00", preferred_slot_day: "Mon", session_adjustments: [], started_at: kstIso(addDays(today, -21), "00:00"), ended_at: kstIso(addDays(today, 28), "23:40") },
+      { id: IDS.enRenew, student_id: IDS.lRenew, teacher_id: IDS.james, plan_id: byType.weekday5_20min.id, status: "completed", payment_status: "confirmed", currency: "KRW", total_amount: byType.weekday5_20min.price_krw, sessions_total: 20, sessions_completed: 20, sessions_remaining: 0, curriculum: "General English (completed)", preferred_slot_time: "10:00", preferred_slot_day: "Mon", session_adjustments: [], started_at: kstIso(renewFirstDate, "00:00"), ended_at: renewLastEndIso },
       { id: IDS.enCn, student_id: IDS.lCn, teacher_id: IDS.emily, plan_id: byType.weekend_20min.id, status: "active", payment_status: "confirmed", currency: "CNY", total_amount: byType.weekend_20min.price_cny, sessions_total: 8, sessions_completed: 3, sessions_remaining: 5, curriculum: "Phonics World", preferred_slot_time: "09:00", preferred_slot_day: "Sat", session_adjustments: [] },
       { id: IDS.enSib1, student_id: IDS.lSib1, teacher_id: IDS.emily, plan_id: byType.mwf_20min.id, status: "active", payment_status: "confirmed", currency: "KRW", total_amount: byType.mwf_20min.price_krw, sessions_total: 12, sessions_completed: 2, sessions_remaining: 10, curriculum: "Kids phonics", preferred_slot_time: "19:00", preferred_slot_day: "Mon", session_adjustments: [] },
     ]),
@@ -423,9 +431,10 @@ async function applyWithServiceRole() {
   );
 
   const pastMwf = matchDates(addDays(today, -1), ["Mon", "Wed", "Fri"], 4, -1);
-  const futureMwf = matchDates(today, ["Mon", "Wed", "Fri"], 8, 1);
+  // Start strictly after seed day so an afternoon seed remains valid when the
+  // E2E scenario is exercised later that day or the following morning.
+  const futureMwf = matchDates(addDays(today, 1), ["Mon", "Wed", "Fri"], 8, 1);
   const makeupDate = matchDates(addDays(today, 14), ["Mon", "Wed", "Fri"], 1, 1)[0];
-  const pastWd5 = matchDates(renewLastDate, wd, 20, -1);
   const pastWeekend = matchDates(addDays(today, -1), ["Sat", "Sun"], 3, -1);
   const futureWeekend = matchDates(today, ["Sat", "Sun"], 5, 1);
   const pastEve = matchDates(addDays(today, -1), ["Mon", "Wed", "Fri"], 2, -1);
@@ -661,6 +670,26 @@ async function verify(db) {
   });
   if (badLessons.length) throw new Error(`${badLessons.length} lessons off 20-min KST grid`);
 
+  const slotKeys = new Set(
+    (slots ?? []).map((slot) =>
+      `${slot.teacher_id}|${slot.day}|${String(slot.start_time).slice(0, 5)}`
+    )
+  );
+  const lessonsOutsideAvailability = (lessons ?? []).filter((lesson) => {
+    const instant = new Date(lesson.scheduled_at);
+    const dateKey = kstToday(instant);
+    const time = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Seoul",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(instant);
+    return !slotKeys.has(`${lesson.teacher_id}|${dayOf(dateKey)}|${time}`);
+  });
+  if (lessonsOutsideAvailability.length) {
+    throw new Error(`${lessonsOutsideAvailability.length} lessons outside teacher availability`);
+  }
+
   const { count: teacherCount } = await db.from("teachers").select("id", { count: "exact", head: true }).in("id", [IDS.james, IDS.emily, IDS.carlos]);
   const { count: enrollmentCount } = await db.from("enrollments").select("id", { count: "exact", head: true }).in("id", [IDS.enHold, IDS.enPay, IDS.enActive, IDS.enRenew, IDS.enCn, IDS.enSib1]);
   const { count: lessonCount } = await db.from("lessons").select("id", { count: "exact", head: true }).in("teacher_id", [IDS.james, IDS.emily]);
@@ -682,7 +711,7 @@ function writeManifest() {
       hold15h: { email: "e2e-student-hold@example.org", note: "15시간 홀드 (James 13:00 weekday5, 입금 전)" },
       paymentConfirm: { email: "e2e-student-pay@example.org", note: "입금 신고 완료 → 관리자 확인 시 스케줄 일괄 생성" },
       scheduleFeedbackMakeup: { email: "e2e-student-active@example.org", note: "정규 스케줄 + 보강 요청 + 피드백 미작성 1건" },
-      renewal: { email: "e2e-student-renew@example.org", note: "가장 최근 지난 평일 10:00–10:20 종료 후 12h/15h 재수강 창구 (James 10:00 홀드)" },
+      renewal: { email: "e2e-student-renew@example.org", note: "최근 완료 수업 직후 12h/15h 재수강 창구 (James 10:00 정규 슬롯 홀드)" },
       guardianSibling: { email: "e2e-student-guardian@example.org", note: "형제 1명 수강 중, 1명 미신청, 1명 가입 검토 대기" },
       teachers: [
         "e2e-teacher-james@example.org",
@@ -727,7 +756,7 @@ Could not apply seed automatically (${sr.reason}).
 
 Manual steps:
 1. Open Supabase Dashboard → SQL Editor
-2. Paste supabase/migrations/024_e2e_rich_seed.sql
+2. Paste supabase/seeds/e2e_rich_seed.sql
 3. Run, then: npm run seed:e2e
 `);
       process.exit(1);
@@ -749,7 +778,7 @@ Manual steps:
   console.log("  15h 홀드     e2e-student-hold@example.org");
   console.log("  입금확인     e2e-student-pay@example.org");
   console.log("  보강/피드백  e2e-student-active@example.org");
-  console.log("  재수강       e2e-student-renew@example.org  (한지호 · 최근 평일 10:00–10:20 기준 12h/15h)");
+  console.log("  재수강       e2e-student-renew@example.org  (한지호 · 최근 완료 수업 기준 12h/15h)");
   console.log("  선생님       e2e-teacher-james@example.org / e2e-teacher-emily@example.org");
   console.log("  관리자       demo-admin@example.org");
   console.log(`  Manifest     ${MANIFEST}`);

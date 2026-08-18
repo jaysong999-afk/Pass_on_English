@@ -3,7 +3,10 @@ import type { Locale } from "@/lib/i18n/config";
 import type { DayLabel, SlotStartTime } from "@/lib/availability/types";
 import { CANONICAL_TIMEZONE, LESSON_MINUTES } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
-import { computeContractEndDate } from "@/lib/contract-schedule";
+import {
+  computeContractEndDate,
+  nextScheduledDateOnOrAfter,
+} from "@/lib/contract-schedule";
 import {
   formatUnifiedSlotLabel,
   nextPlanSlotOccurrenceIso,
@@ -57,9 +60,12 @@ export function getEnrollmentDisplayPeriod(enrollment: StudentEnrollment): {
   let start = enrollment.startDate;
   const slot = enrollment.preferredSlotTime as SlotStartTime | undefined;
 
-  if (pending && days.length && slot) {
+  if (pending && !enrollment.renewedFromEnrollmentId && days.length && slot) {
     const firstIso = nextPlanSlotOccurrenceIso(days, slot);
     start = getDateKeyInTimezone(new Date(firstIso), CANONICAL_TIMEZONE);
+  } else if (days.length) {
+    // Stored contract dates from older data may point at a weekend/non-class day.
+    start = nextScheduledDateOnOrAfter(start, days);
   }
 
   let end = enrollment.endDate;

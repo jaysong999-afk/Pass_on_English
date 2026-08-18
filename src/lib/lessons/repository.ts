@@ -1,7 +1,7 @@
 import type { Lesson, LessonStatus } from "@/types";
 import { LESSON_MINUTES } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
-import { getFeedbackByLesson } from "@/lib/learning-store";
+import { getFeedbackByLesson } from "@/lib/learning-store-sync";
 import { createBootstrapDbClient } from "@/lib/supabase/db-client";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -11,6 +11,7 @@ import {
   setLessonCache,
 } from "@/lib/lessons/lesson-cache";
 import { isTrialRelevantForHold } from "@/lib/enrollments/trial-path";
+import { notifyTeacherOfLessonAssignmentInDb } from "@/lib/notifications/teacher-lesson-assignment";
 import {
   getAllLessons,
   getTeacherLessons,
@@ -34,6 +35,12 @@ import {
   lessonNeedsFeedback,
 } from "@/lib/teacher-lesson-store-sync";
 import type { CreateTrialLessonInput } from "@/lib/teacher-lesson-store-sync";
+import {
+  studentNameFromDb,
+  teacherNameFromDb,
+  type StudentNameDbJoin,
+  type TeacherNameDbJoin,
+} from "@/lib/db/join-types";
 
 interface LessonRow {
   id: string;
@@ -56,8 +63,8 @@ interface LessonRow {
 }
 
 interface LessonJoinRow extends LessonRow {
-  teacher?: { display_name: string | null } | null;
-  student?: { english_name: string | null; full_name: string | null } | null;
+  teacher?: TeacherNameDbJoin | null;
+  student?: StudentNameDbJoin | null;
 }
 
 const LESSON_SELECT = `
@@ -82,13 +89,9 @@ const LESSON_SELECT = `
   student:students!lessons_student_id_fkey(english_name, full_name)
 `;
 
-function studentDisplayName(student?: { english_name: string | null; full_name: string | null } | null) {
-  return student?.english_name?.trim() || student?.full_name?.trim() || undefined;
-}
-
 export function rowToLesson(row: LessonJoinRow, names?: { teacherName?: string; studentName?: string }): Lesson {
-  const teacherName = names?.teacherName ?? row.teacher?.display_name?.trim() ?? "Teacher";
-  const studentName = names?.studentName ?? studentDisplayName(row.student) ?? "Student";
+  const teacherName = names?.teacherName ?? teacherNameFromDb(row.teacher);
+  const studentName = names?.studentName ?? studentNameFromDb(row.student, "Student");
 
   return {
     id: row.id,
@@ -463,7 +466,7 @@ export async function removeFutureScheduledLessonsForEnrollmentInDb(
 }
 
 export async function createTrialLessonInDb(input: CreateTrialLessonInput): Promise<Lesson> {
-  return insertLessonInDb({
+  const lesson = await insertLessonInDb({
     teacherId: input.teacherId,
     teacherName: input.teacherName,
     studentId: input.studentId,
@@ -473,6 +476,11 @@ export async function createTrialLessonInDb(input: CreateTrialLessonInput): Prom
     status: "scheduled",
     isTrial: true,
   });
+  await notifyTeacherOfLessonAssignmentInDb({
+    assignmentKey: `trial:${lesson.id}`,
+    lesson,
+  });
+  return lesson;
 }
 
 function isRelevantScheduledTrial(

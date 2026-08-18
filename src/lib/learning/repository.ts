@@ -21,6 +21,13 @@ import {
   getReportsByTeacher,
   countUnreadForStudent,
 } from "@/lib/learning-store-sync";
+import {
+  studentNameFromDb,
+  teacherNameFromDb,
+  type StudentNameDbJoin,
+  type TeacherNameDbJoin,
+} from "@/lib/db/join-types";
+import { getTeacherStudentContext } from "@/lib/teacher-student-context-store-sync";
 
 interface FeedbackRow {
   id: string;
@@ -29,12 +36,13 @@ interface FeedbackRow {
   student_id: string | null;
   content: string;
   homework: string | null;
+  textbook: string | null;
   progress_pages: string | null;
   read_at: string | null;
   created_at: string;
   lesson?: { scheduled_at: string; operation_note: string | null } | null;
-  teacher?: { display_name: string | null } | null;
-  student?: { english_name: string | null; full_name: string | null } | null;
+  teacher?: TeacherNameDbJoin | null;
+  student?: StudentNameDbJoin | null;
 }
 
 interface ReportRow {
@@ -51,8 +59,8 @@ interface ReportRow {
   published_at: string | null;
   read_at: string | null;
   created_at: string;
-  teacher?: { display_name: string | null } | null;
-  student?: { english_name: string | null; full_name: string | null } | null;
+  teacher?: TeacherNameDbJoin | null;
+  student?: StudentNameDbJoin | null;
 }
 
 const FEEDBACK_SELECT = `
@@ -62,6 +70,7 @@ const FEEDBACK_SELECT = `
   student_id,
   content,
   homework,
+  textbook,
   progress_pages,
   read_at,
   created_at,
@@ -88,24 +97,19 @@ const REPORT_SELECT = `
   student:students!monthly_growth_reports_student_id_fkey(english_name, full_name)
 `;
 
-function studentName(row: {
-  student?: { english_name: string | null; full_name: string | null } | null;
-}) {
-  return row.student?.english_name?.trim() || row.student?.full_name?.trim() || "Student";
-}
-
 function rowToFeedback(row: FeedbackRow, names?: { teacherName?: string; studentName?: string }): LessonFeedback {
   return {
     id: row.id,
     lessonId: row.lesson_id,
     studentId: row.student_id ?? "",
-    studentName: names?.studentName ?? studentName(row),
+    studentName: names?.studentName ?? studentNameFromDb(row.student, "Student"),
     teacherId: row.teacher_id,
-    teacherName: names?.teacherName ?? row.teacher?.display_name?.trim() ?? "Teacher",
+    teacherName: names?.teacherName ?? teacherNameFromDb(row.teacher),
     lessonDate: row.lesson?.scheduled_at ?? row.created_at,
     topic: row.lesson?.operation_note?.trim() || undefined,
     feedback: row.content,
     homework: row.homework ?? undefined,
+    textbook: row.textbook ?? undefined,
     progressPages: row.progress_pages ?? undefined,
     createdAt: row.created_at,
     readAt: row.read_at ?? undefined,
@@ -116,9 +120,9 @@ function rowToReport(row: ReportRow, names?: { teacherName?: string; studentName
   return {
     id: row.id,
     studentId: row.student_id,
-    studentName: names?.studentName ?? studentName(row),
+    studentName: names?.studentName ?? studentNameFromDb(row.student, "Student"),
     teacherId: row.teacher_id,
-    teacherName: names?.teacherName ?? row.teacher?.display_name?.trim() ?? "Teacher",
+    teacherName: names?.teacherName ?? teacherNameFromDb(row.teacher),
     month: row.month,
     title: row.title,
     lessonsCovered: row.lessons_covered,
@@ -184,6 +188,9 @@ export async function addLessonFeedbackInDb(
 
   const supabase = await createClient();
   const existing = getFeedbackCache().find((f) => f.lessonId === input.lessonId);
+  const textbook = lesson.studentId
+    ? getTeacherStudentContext(lesson.studentId, lesson.teacherId).textbook
+    : "";
 
   const payload = {
     lesson_id: input.lessonId,
@@ -191,6 +198,7 @@ export async function addLessonFeedbackInDb(
     student_id: input.studentId,
     content: input.feedback.trim(),
     homework: input.homework?.trim() || null,
+    textbook: (existing?.textbook ?? textbook.trim()) || null,
     progress_pages: input.progressPages?.trim() || null,
   };
 

@@ -1,50 +1,57 @@
 import { NextResponse } from "next/server";
-import { getTeacherById } from "@/lib/teacher-profile-store";
+import { getTeacherById } from "@/lib/teacher-profile-store-sync";
 import { updateTeacherProfileInDb } from "@/lib/teachers/repository";
-import type { TeacherProfileInput } from "@/types";
-import { isTeacherSpecialty } from "@/lib/teacher-specialties";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
-
-function validateProfile(body: TeacherProfileInput) {
-  if (!body.displayName?.trim()) return "display_name_required";
-  if (!body.bio?.trim()) return "bio_required";
-  if (!Array.isArray(body.specialties) || body.specialties.length === 0) {
-    return "specialties_required";
-  }
-  if (!body.specialties.every(isTeacherSpecialty)) return "invalid_specialties";
-  if (body.experienceYears == null || body.experienceYears < 0) return "invalid_experience";
-  return null;
-}
+import { requireRole } from "@/lib/auth/session";
+import { isAuthError } from "@/lib/auth/errors";
+import { parseAdminTeacherProfileDto } from "@/lib/teachers/profile-dto";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await ensureSchedulesBootstrapped();
-  const { id } = await params;
-  const teacher = getTeacherById(id);
-  if (!teacher) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  try {
+    await requireRole("admin");
+    await ensureSchedulesBootstrapped();
+    const { id } = await params;
+    const teacher = getTeacherById(id);
+    if (!teacher) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    return NextResponse.json({ teacher });
+  } catch (err) {
+    if (isAuthError(err)) {
+      return NextResponse.json({ error: err.code }, { status: err.status });
+    }
+    console.error("[teachers/profile/:id GET]", err);
+    return NextResponse.json({ error: "profile_fetch_failed" }, { status: 500 });
   }
-  return NextResponse.json({ teacher });
 }
 
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await ensureSchedulesBootstrapped();
-  const { id } = await params;
-  const body = (await request.json()) as TeacherProfileInput;
-  const error = validateProfile(body);
-  if (error) {
-    return NextResponse.json({ error }, { status: 400 });
-  }
+  try {
+    await requireRole("admin");
+    const parsed = parseAdminTeacherProfileDto(await request.json());
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
 
-  const teacher = await updateTeacherProfileInDb(id, body);
-  if (!teacher) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
+    await ensureSchedulesBootstrapped();
+    const { id } = await params;
+    const teacher = await updateTeacherProfileInDb(id, parsed.data);
+    if (!teacher) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
 
-  return NextResponse.json({ teacher });
+    return NextResponse.json({ teacher });
+  } catch (err) {
+    if (isAuthError(err)) {
+      return NextResponse.json({ error: err.code }, { status: err.status });
+    }
+    console.error("[teachers/profile/:id PUT]", err);
+    return NextResponse.json({ error: "profile_save_failed" }, { status: 500 });
+  }
 }

@@ -18,7 +18,7 @@ import {
   getActiveEnrollmentsByTeacher,
   updateEnrollmentTeacher,
   getEnrollmentById,
-} from "@/lib/enrollment-store";
+} from "@/lib/enrollment-store-sync";
 import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
@@ -27,9 +27,9 @@ import {
   futureLessonsForEnrollment,
   isTeacherSlotFree,
 } from "@/lib/lesson-scheduler";
-import { getAllTeachers, getTeacherById } from "@/lib/teacher-profile-store";
+import { getAllTeachers, getTeacherById } from "@/lib/teacher-profile-store-sync";
 import { applyTeacherNoShowPenaltyInDb, revertTeacherNoShowPenaltyInDb } from "@/lib/teacher-payroll-penalty-repository";
-import { getAllLessons, getLessonById } from "@/lib/teacher-lesson-store";
+import { getAllLessons, getLessonById } from "@/lib/teacher-lesson-store-sync";
 import { restoreOccupiedWeeklyAvailabilityInDb } from "@/lib/teacher-availability/repository";
 
 export interface AvailableTeacherOption {
@@ -54,6 +54,8 @@ export interface BulkEnrollmentTransferPreview {
   contractEnd: string;
   status: string;
   upcomingLessonCount: number;
+  overdueOpenLessonCount: number;
+  unresolvedLessonCount: number;
   /** 잔여 회차와 예정 스케줄 수 일치 여부 */
   scheduleInSync: boolean;
   upcomingLessons: { id: string; scheduledAt: string }[];
@@ -91,6 +93,34 @@ export function getBulkEnrollmentTransferPreview(
       : enrollment.studentId;
     const plan = getCachedPricingPlanById(enrollment.planId);
     const upcoming = futureLessonsForEnrollment(enrollment.id, fromTeacherId);
+    const overdueOpenLessonCount = getAllLessons().filter((lesson) =>
+      lesson.enrollmentId === enrollment.id &&
+      lesson.teacherId === fromTeacherId &&
+      !lesson.isTrial &&
+      ["scheduled", "reschedule_pending"].includes(lesson.status) &&
+      new Date(lesson.scheduledAt).getTime() < Date.now()
+    ).length;
+    const unresolvedLessonCount = upcoming.length + overdueOpenLessonCount;
+    const enrollmentLessons = getAllLessons()
+      .filter((lesson) => lesson.enrollmentId === enrollment.id)
+      .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+    const lessonStart = enrollmentLessons[0]
+      ? getDateKeyInTimezone(new Date(enrollmentLessons[0].scheduledAt), CANONICAL_TIMEZONE)
+      : undefined;
+    const lessonEnd = enrollmentLessons.at(-1)
+      ? getDateKeyInTimezone(
+          new Date(enrollmentLessons.at(-1)!.scheduledAt),
+          CANONICAL_TIMEZONE
+        )
+      : undefined;
+    // Legacy/E2E rows created without started_at and ended_at were both mapped
+    // to today's date. A multi-day lesson schedule is a stronger source for
+    // the transfer preview until those rows are reseeded.
+    const missingContractRange =
+      enrollment.startDate === enrollment.endDate &&
+      lessonStart &&
+      lessonEnd &&
+      lessonStart !== lessonEnd;
 
     return {
       enrollmentId: enrollment.id,
@@ -103,11 +133,13 @@ export function getBulkEnrollmentTransferPreview(
       slotLabel: formatEnrollmentSlotLabel(enrollment),
       sessionsRemaining: enrollment.sessionsRemaining,
       sessionsTotal: enrollment.sessionsTotal,
-      contractStart: enrollment.startDate,
-      contractEnd: enrollment.endDate,
+      contractStart: missingContractRange ? lessonStart : enrollment.startDate,
+      contractEnd: missingContractRange ? lessonEnd : enrollment.endDate,
       status: enrollment.status,
       upcomingLessonCount: upcoming.length,
-      scheduleInSync: upcoming.length === enrollment.sessionsRemaining,
+      overdueOpenLessonCount,
+      unresolvedLessonCount,
+      scheduleInSync: unresolvedLessonCount === enrollment.sessionsRemaining,
       upcomingLessons: upcoming.map((l) => ({
         id: l.id,
         scheduledAt: l.scheduledAt,

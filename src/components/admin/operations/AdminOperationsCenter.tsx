@@ -48,6 +48,8 @@ interface BulkEnrollmentRow {
   contractEnd: string;
   status: string;
   upcomingLessonCount: number;
+  overdueOpenLessonCount: number;
+  unresolvedLessonCount: number;
   scheduleInSync: boolean;
   upcomingLessons: { id: string; scheduledAt: string }[];
 }
@@ -677,10 +679,15 @@ export function AdminOperationsCenter() {
                           >
                             {row.upcomingLessonCount}회
                           </strong>
+                          {row.overdueOpenLessonCount > 0 && (
+                            <span className="text-amber-700">
+                              {" "}· 처리 지연 {row.overdueOpenLessonCount}회
+                            </span>
+                          )}
                           {!row.scheduleInSync && (
                             <span className="text-amber-700">
                               {" "}
-                              (잔여 {row.sessionsRemaining}회와 불일치)
+                              (총 미처리 {row.unresolvedLessonCount}회, 잔여 {row.sessionsRemaining}회와 불일치)
                             </span>
                           )}
                         </p>

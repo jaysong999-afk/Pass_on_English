@@ -43,6 +43,3 @@ export const DOW_TO_DAY_LABEL: Record<number, DayLabel> = {
   5: "Fri",
   6: "Sat",
 };
-
-/** @deprecated Demo alias — prefer session teacher UUID from `/api/auth/session`. */
-export const CURRENT_TEACHER_ID = "teacher-1";

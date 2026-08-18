@@ -1,32 +1,49 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { PersonAvatar } from "@/components/shared/PersonAvatar";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Headphones,
+  MessageCircle,
+  Search,
+  Users,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useTeacherSession } from "@/contexts/TeacherSessionContext";
-import { formatTime } from "@/lib/utils";
 import type { DirectThreadPreview } from "@/lib/admin/messages/types";
 import type { ChatRoom } from "@/types";
 import { useChatInboxSync } from "@/hooks/useChatInboxSync";
+import {
+  AdminSupportChatCard,
+  ChatConversationCard,
+  ChatListError,
+  ChatListLoading,
+} from "@/components/shared/ChatListParts";
 
 export default function TeacherChatPage() {
   const { teacherId, loading: sessionLoading } = useTeacherSession();
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [adminThread, setAdminThread] = useState<DirectThreadPreview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     if (!teacherId) return;
+    setError(false);
     try {
-      const roomsData = await fetch(`/api/chat/rooms?role=teacher`).then((r) => r.json());
-
-      setRooms(roomsData.rooms ?? []);
-      setAdminThread(roomsData.adminSupport ?? null);
+      const res = await fetch("/api/chat/rooms?role=teacher");
+      if (!res.ok) throw new Error("chat_rooms_load_failed");
+      const data = await res.json();
+      setRooms(data.rooms ?? []);
+      setAdminThread(data.adminSupport ?? null);
     } catch {
       setRooms([]);
       setAdminThread(null);
+      setError(true);
+    } finally {
+      setLoading(false);
     }
   }, [teacherId]);
 
@@ -36,62 +53,97 @@ export default function TeacherChatPage() {
 
   useChatInboxSync(load);
 
+  const filteredRooms = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    if (!normalized) return rooms;
+    return rooms.filter((room) =>
+      (room.displayName || room.studentName || "").toLocaleLowerCase().includes(normalized)
+    );
+  }, [query, rooms]);
+
   if (sessionLoading || !teacherId) {
-    return <p className="py-12 text-center text-sm text-gray-500">Loading messages…</p>;
+    return (
+      <div className="py-6"><ChatListLoading /></div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold">Messages</h2>
-        <p className="text-sm text-gray-500">Chat with your students</p>
-      </div>
-      <div className="space-y-2">
-        {adminThread && (
-          <Link href="/teacher/chat/support">
-            <Card className="hover:shadow-md transition-shadow border-blue-100 bg-blue-50/40">
-              <CardContent className="flex items-center gap-4 p-4">
-                <Avatar>
-                  <AvatarFallback>POE</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold">Pass on English Support</p>
-                    <span className="text-xs text-gray-400">
-                      {formatTime(adminThread.lastMessageAt)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-500 truncate">{adminThread.lastMessage}</p>
-                </div>
-                {adminThread.unread > 0 && (
-                  <Badge className="bg-red-500 text-white hover:bg-red-500">
-                    {adminThread.unread}
-                  </Badge>
-                )}
-              </CardContent>
-            </Card>
-          </Link>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Messages</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Choose a student or contact the admin team.
+          </p>
+        </div>
+        {!loading && !error && (
+          <Badge variant="outline" className="w-fit gap-1.5 px-3 py-1.5">
+            <Users className="h-3.5 w-3.5" />
+            {rooms.length} active {rooms.length === 1 ? "student" : "students"}
+          </Badge>
         )}
-        {rooms.map((room) => (
-          <Link key={room.id} href={`/teacher/chat/${room.id}`}>
-            <Card className="hover:shadow-md transition-shadow">
-              <CardContent className="flex items-center gap-4 p-4">
-                <PersonAvatar
-                  name={room.displayName}
-                  avatarUrl={room.avatarUrl}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{room.displayName}</p>
-                  <p className="text-sm text-gray-500 truncate">{room.lastMessage}</p>
-                </div>
-                {room.unread > 0 && (
-                  <Badge className="bg-red-500 text-white hover:bg-red-500">{room.unread}</Badge>
-                )}
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
       </div>
+
+      {error ? (
+        <ChatListError message="We couldn't load your conversations." retryLabel="Try again" onRetry={() => void load()} />
+      ) : loading ? (
+        <ChatListLoading />
+      ) : (
+        <div className="space-y-7">
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-4 w-4 text-brand-600" />
+                <h3 className="text-sm font-semibold text-gray-700">My students</h3>
+              </div>
+            </div>
+
+            {rooms.length > 4 && (
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search students"
+                  aria-label="Search students"
+                  className="pl-9"
+                />
+              </div>
+            )}
+
+            {rooms.length === 0 ? (
+              <Card className="border-dashed bg-gray-50/60">
+                <CardContent className="p-7 text-center">
+                  <p className="text-sm font-medium text-gray-700">No active students yet</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Students will appear here when their enrollment becomes active.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : filteredRooms.length === 0 ? (
+              <Card className="border-dashed bg-gray-50/60">
+                <CardContent className="p-6 text-center text-sm text-gray-500">
+                  No students match “{query}”.
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {filteredRooms.map((room) => (
+                  <ChatConversationCard key={room.id} room={room} href={`/teacher/chat/${room.id}`} emptyMessage="Send the first message" />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Headphones className="h-4 w-4 text-brand-600" />
+              <h3 className="text-sm font-semibold text-gray-700">Admin support</h3>
+            </div>
+            {adminThread && <AdminSupportChatCard thread={adminThread} href="/teacher/chat/support" title="Pass on English Support" emptyMessage="Ask about schedules, students, or payments" />}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

@@ -21,6 +21,7 @@ function parseSignupInput(body: unknown): TeacherSignupInput | null {
   const address = String(raw.address ?? "").trim();
   const email = String(raw.email ?? "").trim();
   const password = String(raw.password ?? "");
+  const videoPlatforms = Array.isArray(raw.videoPlatforms) ? raw.videoPlatforms : [];
 
   if (
     !fullName ||
@@ -34,6 +35,7 @@ function parseSignupInput(body: unknown): TeacherSignupInput | null {
   ) {
     return null;
   }
+  if (videoPlatforms.length === 0 || !videoPlatforms.every((item) => item === "ZOOM" || item === "VOOV")) return null;
 
   return {
     fullName,
@@ -44,6 +46,7 @@ function parseSignupInput(body: unknown): TeacherSignupInput | null {
     address,
     email,
     password,
+    videoPlatforms: videoPlatforms as TeacherSignupInput["videoPlatforms"],
   };
 }
 

@@ -106,7 +106,3 @@ export function resetEnrollments() {
   setEnrollmentCache([]);
   setPaymentCache([]);
 }
-
-export function getEnrollmentSeed(): StudentEnrollment[] {
-  return [];
-}

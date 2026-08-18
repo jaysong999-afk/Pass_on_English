@@ -21,6 +21,8 @@ interface LessonDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   makeupRemaining: number;
   onRescheduleSubmitted?: () => void;
+  locale: string;
+  timeZone: string;
 }
 
 export function LessonDetailDialog({
@@ -29,6 +31,8 @@ export function LessonDetailDialog({
   onOpenChange,
   makeupRemaining,
   onRescheduleSubmitted,
+  locale,
+  timeZone,
 }: LessonDetailDialogProps) {
   const t = useTranslations("studentPortal.lessonDialog");
   const tCommon = useTranslations("studentPortal.common");
@@ -53,7 +57,7 @@ export function LessonDetailDialog({
             <LessonStatusBadge status={lesson.status} />
           </DialogTitle>
           <DialogDescription>
-            {formatDate(lesson.scheduledAt)} {formatTime(lesson.scheduledAt)}
+            {formatDate(lesson.scheduledAt, locale, timeZone)} {formatTime(lesson.scheduledAt, locale, timeZone)}
           </DialogDescription>
         </DialogHeader>
 
@@ -77,6 +81,8 @@ export function LessonDetailDialog({
               lesson={lesson}
               initiator="student"
               makeupRemaining={makeupRemaining}
+              inputTimeZone={timeZone}
+              inputLocale={locale}
               onCancel={() => setShowReschedule(false)}
               onSubmitted={() => {
                 setShowReschedule(false);
@@ -96,6 +102,10 @@ export function LessonDetailDialog({
                 limitReached: t("makeupLimitReached"),
                 pendingExists: t("pendingRequestExists"),
                 slotUnavailable: t("slotUnavailable"),
+                date: t("date"),
+                time: t("timeOptions"),
+                loadingSlots: t("loadingSlots"),
+                noAvailableSlots: t("noAvailableSlots"),
               }}
             />
           ) : (
@@ -130,6 +140,8 @@ interface GlobalRescheduleDialogProps {
   lessons: Lesson[];
   makeupRemaining: number;
   onSelectLesson: (lesson: Lesson) => void;
+  locale: string;
+  timeZone: string;
 }
 
 export function GlobalRescheduleDialog({
@@ -138,6 +150,8 @@ export function GlobalRescheduleDialog({
   lessons,
   makeupRemaining,
   onSelectLesson,
+  locale,
+  timeZone,
 }: GlobalRescheduleDialogProps) {
   const t = useTranslations("studentPortal.lessonDialog");
 
@@ -171,7 +185,7 @@ export function GlobalRescheduleDialog({
               >
                 <div>
                   <p className="font-semibold text-ink">
-                    {formatDate(lesson.scheduledAt)} {formatTime(lesson.scheduledAt)}
+                    {formatDate(lesson.scheduledAt, locale, timeZone)} {formatTime(lesson.scheduledAt, locale, timeZone)}
                   </p>
                   <p className="text-sm text-ink-muted">{lesson.teacherName}</p>
                 </div>

@@ -1,17 +1,24 @@
 import { NextResponse } from "next/server";
 import type { VideoPlatform } from "@/types";
 import { fetchStudentCountryInDb } from "@/lib/accounts/repository";
-import { updateTeacherStudentContext } from "@/lib/teacher-student-context-store";
+import { updateTeacherStudentContext } from "@/lib/teacher-student-context-store-sync";
 import {
   defaultVideoPlatformForCountry,
   getTeacherStudentContextInDb,
   updateTeacherStudentContextInDb,
 } from "@/lib/teacher-student-context-repository";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
+import { getTeacherById } from "@/lib/teacher-profile-store-sync";
+import { resolveLessonVideoPlatform } from "@/lib/video-platforms";
 
-async function resolveVideoPlatformDefaults(studentId: string) {
+async function resolveVideoPlatformOptions(studentId: string, teacherId: string) {
   const country = await fetchStudentCountryInDb(studentId);
-  return { videoPlatform: defaultVideoPlatformForCountry(country) };
+  return {
+    studentPlatforms: getStudentDirectoryEntry(studentId)?.learner.videoPlatforms ?? [],
+    teacherPlatforms: getTeacherById(teacherId)?.videoPlatforms ?? [],
+    fallback: defaultVideoPlatformForCountry(country),
+  };
 }
 
 export async function GET(request: Request) {
@@ -25,9 +32,21 @@ export async function GET(request: Request) {
   }
 
   try {
-    const defaults = await resolveVideoPlatformDefaults(studentId);
-    const context = await getTeacherStudentContextInDb(studentId, teacherId, defaults);
-    return NextResponse.json({ context });
+    const options = await resolveVideoPlatformOptions(studentId, teacherId);
+    const context = await getTeacherStudentContextInDb(studentId, teacherId, {
+      videoPlatform: options.fallback,
+    });
+    return NextResponse.json({
+      context: {
+        ...context,
+        videoPlatform: resolveLessonVideoPlatform(
+          options.studentPlatforms,
+          options.teacherPlatforms,
+          context.videoPlatform,
+          options.fallback
+        ),
+      },
+    });
   } catch (error) {
     console.error("[teacher/student-context GET]", error);
     return NextResponse.json({ error: "fetch_failed" }, { status: 500 });
@@ -56,16 +75,26 @@ async function handleUpdate(request: Request) {
   }
 
   try {
-    const defaults = await resolveVideoPlatformDefaults(studentId);
+    const options = await resolveVideoPlatformOptions(studentId, teacherId);
+    const current = await getTeacherStudentContextInDb(studentId, teacherId, {
+      videoPlatform: options.fallback,
+    });
+    const resolvedVideoPlatform = resolveLessonVideoPlatform(
+      options.studentPlatforms,
+      options.teacherPlatforms,
+      videoPlatform ?? current.videoPlatform,
+      options.fallback
+    );
     const context = await updateTeacherStudentContextInDb(
       studentId,
       teacherId,
-      { textbook, videoPlatform, specialNotes },
-      defaults
+      { textbook, videoPlatform: resolvedVideoPlatform, specialNotes },
+      { videoPlatform: options.fallback }
     );
 
     updateTeacherStudentContext(studentId, teacherId, {
       textbook: context.textbook,
+      textbookHistory: context.textbookHistory,
       videoPlatform: context.videoPlatform,
       specialNotes: context.specialNotes,
     });

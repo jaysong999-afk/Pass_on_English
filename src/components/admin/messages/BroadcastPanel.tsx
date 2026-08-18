@@ -13,7 +13,7 @@ import {
   BROADCAST_FILTER_LABELS,
   type BroadcastAudience,
   type BroadcastEnrollmentFilter,
-} from "@/lib/admin/messages-mock-data";
+} from "@/lib/admin/messages/types";
 import { cn } from "@/lib/utils";
 
 type SendChannel = "push_chat" | "push_only" | "chat_only";

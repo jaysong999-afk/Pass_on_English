@@ -39,14 +39,10 @@ export function computeStudentDeadlineFrom(start: Date): Date {
   return addHours(start, PAYMENT_DISPLAY_HOURS);
 }
 
-/** Student-facing 12h deadline for renewals; 15h hold deadline for new enrollments. */
+/** Student-facing deadline is always 12h; the server keeps the slot for 15h. */
 export function studentFacingPaymentDeadlineAt(enrollment: {
   paymentDeadlineAt?: string;
-  renewedFromEnrollmentId?: string;
 }): string | undefined {
   if (!enrollment.paymentDeadlineAt) return undefined;
-  if (enrollment.renewedFromEnrollmentId) {
-    return studentPaymentDeadlineAt(enrollment.paymentDeadlineAt).toISOString();
-  }
-  return enrollment.paymentDeadlineAt;
+  return studentPaymentDeadlineAt(enrollment.paymentDeadlineAt).toISOString();
 }

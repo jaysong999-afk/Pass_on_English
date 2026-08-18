@@ -5,7 +5,7 @@ export const SALARY_SETTINGS_ROW_ID = "00000000-0000-0000-0000-000000000001";
 const DEFAULT_POLICY: SalaryBonusPolicyConfig = {
   perfectAttendancePerHourPhp: 25,
   perfectAttendanceDescription:
-    "Perfect attendance bonus: ₱25/hr (no unapproved absences or schedule changes)",
+    "Perfect attendance bonus: ₱25/hr from the month after completing one full month with no unapproved absences or schedule changes",
   quarterlyPeriodMonths: 3,
   quarterlyTiers: [
     { minHours: 300, maxHours: null, amountPhp: 2000 },

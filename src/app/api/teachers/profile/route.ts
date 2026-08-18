@@ -1,47 +1,39 @@
 import { NextResponse } from "next/server";
-import { getAllTeachers } from "@/lib/teacher-profile-store";
+import { getAllTeachers } from "@/lib/teacher-profile-store-sync";
 import { createTeacherProfileFromApplicationInDb } from "@/lib/teachers/repository";
 import { getTeacherApplicationForApplicantInDb } from "@/lib/teacher-applications/repository";
-import type { TeacherProfileInput } from "@/types";
-import { isTeacherSpecialty } from "@/lib/teacher-specialties";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { requireRole } from "@/lib/auth/session";
 import { isAuthError } from "@/lib/auth/errors";
-
-function validateProfile(body: TeacherProfileInput & { applicationId?: string }) {
-  if (!body.displayName?.trim()) return "display_name_required";
-  if (!body.bio?.trim()) return "bio_required";
-  if (!Array.isArray(body.specialties) || body.specialties.length === 0) {
-    return "specialties_required";
-  }
-  if (!body.specialties.every(isTeacherSpecialty)) return "invalid_specialties";
-  if (body.experienceYears == null || body.experienceYears < 0) return "invalid_experience";
-  return null;
-}
+import { parseTeacherSignupProfileDto } from "@/lib/teachers/profile-dto";
 
 export async function GET() {
-  await ensureSchedulesBootstrapped();
-  return NextResponse.json({ teachers: getAllTeachers() });
+  try {
+    await requireRole("admin");
+    await ensureSchedulesBootstrapped();
+    return NextResponse.json({ teachers: getAllTeachers() });
+  } catch (err) {
+    if (isAuthError(err)) {
+      return NextResponse.json({ error: err.code }, { status: err.status });
+    }
+    console.error("[teachers/profile GET]", err);
+    return NextResponse.json({ error: "profile_fetch_failed" }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
-  await ensureSchedulesBootstrapped();
-
   try {
     const context = await requireRole("teacher");
-    const body = await request.json();
-    const error = validateProfile(body);
-    if (error) {
-      return NextResponse.json({ error }, { status: 400 });
+    const parsed = parseTeacherSignupProfileDto(await request.json());
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
+    const body = parsed.data;
 
-    const applicationId = String(body.applicationId ?? "").trim();
-    if (!applicationId) {
-      return NextResponse.json({ error: "application_id_required" }, { status: 400 });
-    }
+    await ensureSchedulesBootstrapped();
 
     const application = await getTeacherApplicationForApplicantInDb(
-      applicationId,
+      body.applicationId,
       context.userId,
       context.email
     );
@@ -52,13 +44,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "application_not_pending" }, { status: 409 });
     }
 
-    const teacher = await createTeacherProfileFromApplicationInDb(applicationId, context.userId, {
+    const teacher = await createTeacherProfileFromApplicationInDb(body.applicationId, context.userId, {
       displayName: body.displayName,
       bio: body.bio,
       specialties: body.specialties,
       experienceYears: body.experienceYears,
       avatarUrl: body.avatarUrl,
-      hourlyRatePhp: body.hourlyRatePhp,
+      videoPlatforms: application.videoPlatforms,
     });
 
     return NextResponse.json({ teacher }, { status: 201 });

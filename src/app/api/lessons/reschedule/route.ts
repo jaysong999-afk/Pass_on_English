@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthContext, requireTeacherAuth } from "@/lib/auth/session";
+import { assertLearnerAccess, getAuthContext, requireTeacherAuth } from "@/lib/auth/session";
 import { authErrorResponse } from "@/lib/auth/api-guard";
 import { resolveTeacherId } from "@/lib/teachers/resolve-teacher-id";
 import {
@@ -14,9 +14,11 @@ import {
   getRescheduleRequestsForStudent,
   getRescheduleRequestsForTeacher,
   getStudentRescheduleRemaining,
+  getRescheduleRequestById,
   STUDENT_RESCHEDULE_MONTHLY_LIMIT,
-} from "@/lib/reschedule-store";
+} from "@/lib/reschedule-store-sync";
 import { warmLessonCache } from "@/lib/lessons/repository";
+import { getLessonById } from "@/lib/teacher-lesson-store-sync";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
@@ -31,11 +33,17 @@ export async function GET(request: Request) {
   const studentId = searchParams.get("studentId");
   const scope = searchParams.get("scope");
 
-  if (scope === "all") {
+  const context = await getAuthContext();
+  if (!context) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  if (scope === "all" && context.profile.role === "admin") {
     return NextResponse.json({ requests: getAllRescheduleRequests() });
   }
 
   if (teacherId) {
+    if (context.profile.role !== "admin" && (context.profile.role !== "teacher" || context.userId !== teacherId)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
     const resolved = resolveTeacherId(teacherId) ?? teacherId;
     return NextResponse.json({
       requests: getRescheduleRequestsForTeacher(resolved),
@@ -43,6 +51,9 @@ export async function GET(request: Request) {
   }
 
   if (studentId) {
+    if (context.profile.role !== "admin") {
+      try { await assertLearnerAccess(studentId); } catch (error) { return authErrorResponse(error); }
+    }
     return NextResponse.json({
       requests: getRescheduleRequestsForStudent(studentId),
       makeupRemaining: getStudentRescheduleRemaining(studentId),
@@ -73,11 +84,23 @@ export async function POST(request: Request) {
     const body = await request.json();
     const lessonId = body.lessonId as string;
     const proposedScheduledAt = body.proposedScheduledAt as string;
-    const initiator = body.initiator as "teacher" | "student";
     const reason = body.reason as string | undefined;
 
-    if (!lessonId || !proposedScheduledAt || !initiator) {
+    if (!lessonId || !proposedScheduledAt) {
       return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+    }
+
+    const context = await getAuthContext();
+    if (!context) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (context.profile.role === "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const lesson = getLessonById(lessonId);
+    if (!lesson?.studentId) return NextResponse.json({ error: "lesson_not_found" }, { status: 404 });
+    const initiator = context.profile.role;
+    if (initiator === "teacher") {
+      const teacher = await requireTeacherAuth();
+      if (lesson.teacherId !== teacher.teacherId) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    } else {
+      try { await assertLearnerAccess(lesson.studentId); } catch (error) { return authErrorResponse(error); }
     }
 
     const result = await createRescheduleRequestInDb({
@@ -100,6 +123,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ request: result.request }, { status: 201 });
   } catch (error) {
     console.error("[lessons/reschedule POST]", error);
+    if (error instanceof Error && /lesson_reschedule_requests|create_lesson_reschedule_request/.test(error.message)) {
+      return NextResponse.json({ error: "reschedule_storage_unavailable" }, { status: 503 });
+    }
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 }
@@ -110,10 +136,23 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const id = body.id as string;
     const action = body.action as "approve" | "reject" | "cancel";
-    const role = body.role as "teacher" | "student";
 
-    if (!id || !action || !role) {
+    if (!id || !action) {
       return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+    }
+
+    await warmRescheduleCache();
+    const current = getRescheduleRequestById(id);
+    if (!current) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    const context = await getAuthContext();
+    if (!context) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (context.profile.role === "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const role = context.profile.role;
+    if (role === "teacher") {
+      const teacher = await requireTeacherAuth();
+      if (current.teacherId !== teacher.teacherId) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    } else {
+      try { await assertLearnerAccess(current.studentId); } catch (error) { return authErrorResponse(error); }
     }
 
     const result =

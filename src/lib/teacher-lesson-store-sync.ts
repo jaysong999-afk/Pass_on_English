@@ -1,7 +1,7 @@
 import type { Lesson } from "@/types";
 import { LESSON_MINUTES } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
-import { getFeedbackByLesson } from "@/lib/learning-store";
+import { getFeedbackByLesson } from "@/lib/learning-store-sync";
 import {
   getLessonCache,
   patchLessonInCache,

@@ -11,19 +11,25 @@ import type { Teacher } from "@/types";
 export function TeachersSection({
   teachers,
   locale,
+  standalone = false,
 }: {
   teachers: Teacher[];
   locale: string;
+  standalone?: boolean;
 }) {
   const t = useTranslations("teachers");
+  const verifiedTeachers = teachers.filter((teacher) => {
+    const internalCopy = `${teacher.displayName} ${teacher.bio}`.toLowerCase();
+    return Boolean(teacher.avatarUrl) && !internalCopy.includes("demo") && !internalCopy.includes("e2e");
+  });
 
   return (
     <section id="teachers" className="landing-section bg-surface">
       <div className="landing-container">
-        <SectionHeading eyebrow={t("eyebrow")} title={t("title")} subtitle={t("subtitle")} />
+        <SectionHeading level={standalone ? "h1" : "h2"} eyebrow={t("eyebrow")} title={t("title")} subtitle={t("subtitle")} />
 
         <div className="mt-14 grid gap-6 md:grid-cols-3">
-          {teachers.map((teacher) => {
+          {verifiedTeachers.map((teacher) => {
             const initials = teacher.displayName
               .split(" ")
               .map((n) => n[0])
@@ -61,7 +67,7 @@ export function TeachersSection({
                 <p className="landing-prose-narrow mt-4 flex-1 line-clamp-3">{teacher.bio}</p>
 
                 <div className="mt-4 flex flex-wrap gap-1.5">
-                  {teacher.specialties.map((s) => (
+                  {teacher.specialties.slice(0, 3).map((s) => (
                     <Badge key={s} variant="secondary" className="font-medium">
                       {s}
                     </Badge>
@@ -71,6 +77,8 @@ export function TeachersSection({
             );
           })}
         </div>
+
+        {verifiedTeachers.length === 0 && <p className="mx-auto mt-12 max-w-xl rounded-2xl border border-brand-100 bg-white p-6 text-center leading-7 text-ink-muted">{t("verifiedSoon")}</p>}
 
         <div className="mt-10 text-center">
           <Button asChild variant="secondary" size="lg" className="rounded-2xl gap-2">

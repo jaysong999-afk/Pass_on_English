@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyCronSecret } from "@/lib/cron/auth";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
-import { ensureRenewalOffersInDb, expireEnrollmentHoldsInDb } from "@/lib/enrollments/repository";
+import { runScheduleMaintenanceInDb } from "@/lib/lesson-scheduler-bootstrap";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,9 +10,7 @@ export async function GET(request: Request) {
   if (authError) return authError;
 
   try {
-    await ensureSchedulesBootstrapped();
-    const opened = await ensureRenewalOffersInDb();
-    const expired = await expireEnrollmentHoldsInDb();
+    const { opened, expired } = await runScheduleMaintenanceInDb();
     return NextResponse.json({ success: true, opened, expired });
   } catch (error) {
     console.error("[GET /api/cron/expire-enrollment-holds]", error);

@@ -4,7 +4,7 @@ import { requireTeacherAuth } from "@/lib/auth/session";
 import {
   getFeedbacksByTeacher,
   getFeedbacksByTeacherMonth,
-} from "@/lib/learning-store";
+} from "@/lib/learning-store-sync";
 import { warmLearningCache } from "@/lib/learning/repository";
 import { buildFeedbackCsvRows, feedbackCsvFilename } from "@/lib/feedback-csv";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";

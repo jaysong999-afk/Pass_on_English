@@ -3,6 +3,7 @@ import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureAccountSession } from "@/lib/account-store";
 import { requireTeacherAuth } from "@/lib/auth/session";
 import {
+  ensureAdminDirectThreadInDb,
   getAdminDirectInboxForProfileInDb,
   markAdminDirectThreadReadForRecipientInDb,
   sendAdminDirectReplyFromRecipientInDb,
@@ -40,6 +41,24 @@ export async function GET(request: Request) {
   }
 
   const inbox = await getAdminDirectInboxForProfileInDb(profileId);
+  if (!inbox.thread && role === "student") {
+    const session = await ensureAccountSession();
+    if (session?.activeLearnerId) {
+      await ensureAdminDirectThreadInDb({
+        targetType: "student",
+        targetId: session.activeLearnerId,
+      });
+      return NextResponse.json(await getAdminDirectInboxForProfileInDb(profileId));
+    }
+  }
+  if (!inbox.thread && role === "teacher") {
+    const { teacherId } = await requireTeacherAuth();
+    await ensureAdminDirectThreadInDb({
+      targetType: "teacher",
+      targetId: teacherId,
+    });
+    return NextResponse.json(await getAdminDirectInboxForProfileInDb(profileId));
+  }
   return NextResponse.json(inbox);
 }
 

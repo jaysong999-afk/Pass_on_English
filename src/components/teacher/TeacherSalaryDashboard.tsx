@@ -8,13 +8,20 @@ import {
   SalaryStatusBadge,
   formatSalaryMonth,
 } from "@/components/shared/SalaryStatusBadge";
-import { statementTotal } from "@/lib/teacher-salary-store";
+import { statementTotal } from "@/lib/teacher-salary-store-sync";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { TeacherSalaryStatement } from "@/types";
+import { apiRequest } from "@/lib/api/client";
 
 interface BonusPolicy {
   perfectAttendance: string;
   quarterly: string;
+}
+
+interface SalaryResponse {
+  statement?: TeacherSalaryStatement;
+  availableMonths?: string[];
+  bonusPolicy?: BonusPolicy;
 }
 
 export function TeacherSalaryDashboard() {
@@ -23,31 +30,45 @@ export function TeacherSalaryDashboard() {
   const [statement, setStatement] = useState<TeacherSalaryStatement | null>(null);
   const [bonusPolicy, setBonusPolicy] = useState<BonusPolicy | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async (month: string) => {
     setLoading(true);
+    setLoadError(false);
     try {
-      const res = await fetch(`/api/teacher/salary?month=${month}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setStatement(data.statement);
-      setBonusPolicy(data.bonusPolicy);
+      const data = await apiRequest<SalaryResponse>(
+        `/api/teacher/salary?month=${encodeURIComponent(month)}`
+      );
+      setStatement(data.statement ?? null);
+      setBonusPolicy(data.bonusPolicy ?? null);
       setAvailableMonths(data.availableMonths ?? []);
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetch(`/api/teacher/salary`)
-      .then((r) => r.json())
+    let cancelled = false;
+    setLoadError(false);
+    apiRequest<SalaryResponse>("/api/teacher/salary")
       .then((data) => {
+        if (cancelled) return;
         const months: string[] = data.availableMonths ?? [];
         setAvailableMonths(months);
         const initial = months[0] ?? "";
         setSelectedMonth(initial);
-        if (initial) load(initial);
+        if (!initial) setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoadError(true);
+        setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   useEffect(() => {
@@ -61,6 +82,14 @@ export function TeacherSalaryDashboard() {
 
   if (loading && !statement) {
     return <p className="py-12 text-center text-sm text-gray-500">Loading salary…</p>;
+  }
+
+  if (loadError && !statement) {
+    return (
+      <p className="py-12 text-center text-sm text-red-600">
+        Unable to load salary data. Please try again.
+      </p>
+    );
   }
 
   if (!statement) {

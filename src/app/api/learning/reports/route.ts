@@ -6,7 +6,7 @@ import {
   markReportReadInDb,
   warmLearningCache,
 } from "@/lib/learning/repository";
-import { getReportsByStudent, getReportsByTeacher } from "@/lib/learning-store";
+import { getReportsByStudent, getReportsByTeacher } from "@/lib/learning-store-sync";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {

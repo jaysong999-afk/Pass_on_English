@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPublicTeachers } from "@/lib/teacher-profile-store";
+import { getPublicTeachers } from "@/lib/teacher-profile-store-sync";
 import { ensurePublicContentBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET() {

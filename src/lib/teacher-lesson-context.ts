@@ -1,16 +1,20 @@
 import type { Lesson, TeacherStudentContext } from "@/types";
 import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
-import { getFeedbacksByStudent } from "@/lib/learning-store";
+import { getFeedbacksByStudent } from "@/lib/learning-store-sync";
 import { getStudentDisplayName } from "@/lib/student-display-name";
-import { getTeacherStudentContext } from "@/lib/teacher-student-context-store";
+import { getTeacherStudentContext } from "@/lib/teacher-student-context-store-sync";
+import { getTeacherById } from "@/lib/teacher-profile-store-sync";
+import { resolveLessonVideoPlatform } from "@/lib/video-platforms";
 
 export interface LessonDisplayContext {
   lesson: Lesson;
   englishName: string;
   age: number | null;
+  gender: import("@/types").StudentGender | null;
   englishLevel: string;
   videoPlatform: TeacherStudentContext["videoPlatform"];
   textbook: string;
+  textbookHistory: TeacherStudentContext["textbookHistory"];
   lastProgressPages: string | null;
   lastHomework: string | null;
   specialNotes: string | null;
@@ -34,6 +38,16 @@ export function buildLessonDisplayContext(lesson: Lesson): LessonDisplayContext 
   const directoryEntry = getStudentDirectoryEntry(lesson.studentId);
   const student = directoryEntry?.student;
   const studentContext = getTeacherStudentContext(lesson.studentId, lesson.teacherId);
+  const teacher = getTeacherById(lesson.teacherId);
+  const videoPlatform = resolveLessonVideoPlatform(
+    directoryEntry?.learner.videoPlatforms ?? [],
+    teacher?.videoPlatforms ?? [],
+    studentContext.videoPlatform
+  );
+  const resolvedStudentContext =
+    videoPlatform === studentContext.videoPlatform
+      ? studentContext
+      : { ...studentContext, videoPlatform };
 
   const priorFeedback = getFeedbacksByStudent(lesson.studentId).find(
     (f) => new Date(f.lessonDate).getTime() < new Date(lesson.scheduledAt).getTime()
@@ -45,12 +59,14 @@ export function buildLessonDisplayContext(lesson: Lesson): LessonDisplayContext 
       ? getStudentDisplayName(student)
       : lesson.studentName ?? "Student",
     age: calcAge(student?.dateOfBirth),
+    gender: student?.gender ?? null,
     englishLevel: student?.englishLevel ?? "—",
-    videoPlatform: studentContext.videoPlatform,
-    textbook: studentContext.textbook,
+    videoPlatform,
+    textbook: resolvedStudentContext.textbook,
+    textbookHistory: resolvedStudentContext.textbookHistory,
     lastProgressPages: priorFeedback?.progressPages ?? priorFeedback?.topic ?? null,
     lastHomework: priorFeedback?.homework ?? null,
-    specialNotes: studentContext.specialNotes ?? null,
-    studentContext,
+    specialNotes: resolvedStudentContext.specialNotes ?? null,
+    studentContext: resolvedStudentContext,
   };
 }
