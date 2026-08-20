@@ -13,6 +13,7 @@ import { resolveTeacherId } from "@/lib/teachers/resolve-teacher-id";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureStudentEnrollmentLessonsInDb } from "@/lib/lessons/schedule-service";
 import { listStudentLessonsInDb } from "@/lib/lessons/repository";
+import { getEnrollmentById } from "@/lib/enrollments/repository";
 import { listNotificationsForUserInDb } from "@/lib/notifications/repository";
 import { TEACHER_LESSON_ASSIGNMENT_KIND } from "@/lib/notifications/teacher-lesson-assignment";
 import type { CoursePurpose, Lesson } from "@/types";
@@ -37,6 +38,12 @@ async function hubPayload(teacherId: string, userId: string, timeZone: string) {
       : "";
     const lesson = lessonsById.get(lessonId);
     if (!lesson || lesson.status === "cancelled") return [];
+    // Older deployments may already contain an assignment notification for a
+    // renewal created before renewal notifications were disabled. Hide those
+    // stale notices as well; renewals are not new teacher assignments.
+    if (lesson.enrollmentId && getEnrollmentById(lesson.enrollmentId)?.renewedFromEnrollmentId) {
+      return [];
+    }
     const display = buildLessonDisplayContext(lesson);
     if (!display) return [];
     const purposes = Array.isArray(notification.payload.purposes)

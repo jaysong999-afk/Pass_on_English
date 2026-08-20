@@ -1,6 +1,8 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Lesson } from "@/types";
 import { CANONICAL_TIMEZONE, LESSON_MINUTES } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
+import { addDaysToDateKey, nextScheduledDateOnOrAfter } from "@/lib/contract-schedule";
 import {
   appendAdminLessonOperationLogInDb,
   getAdminLessonOperationLogByIdInDb,
@@ -10,7 +12,10 @@ import { weekStartKeyFromScheduledAt } from "@/lib/admin/admin-lesson-operation-
 import { adjustEnrollmentSessionsWithScheduleBatchInDb } from "@/lib/lessons/schedule-service";
 import {
   deleteLessonByIdInDb,
+  getLessonByIdInDb,
+  getPersistedLessonByIdInDb,
   insertLessonInDb,
+  listStudentLessonsInDb,
   replaceLessonInDb,
 } from "@/lib/lessons/repository";
 import {
@@ -19,18 +24,21 @@ import {
   updateEnrollmentTeacher,
   getEnrollmentById,
 } from "@/lib/enrollment-store-sync";
+import { updateEnrollmentEndDateInDb } from "@/lib/enrollments/repository";
 import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
 import { getStudentDisplayName } from "@/lib/student-display-name";
 import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
 import {
   formatEnrollmentSlotLabel,
   futureLessonsForEnrollment,
+  getEnrollmentScheduleDays,
   isTeacherSlotFree,
 } from "@/lib/lesson-scheduler";
 import { getAllTeachers, getTeacherById } from "@/lib/teacher-profile-store-sync";
 import { applyTeacherNoShowPenaltyInDb, revertTeacherNoShowPenaltyInDb } from "@/lib/teacher-payroll-penalty-repository";
 import { getAllLessons, getLessonById } from "@/lib/teacher-lesson-store-sync";
 import { restoreOccupiedWeeklyAvailabilityInDb } from "@/lib/teacher-availability/repository";
+import { isUuid } from "@/lib/teachers/resolve-teacher-id";
 
 export interface AvailableTeacherOption {
   teacherId: string;
@@ -224,6 +232,7 @@ function logLessonOperation(input: {
   lesson: Lesson;
   action: import("@/types").AdminLessonOperationType;
   summary: string;
+  lessonId?: string | null;
   note?: string;
   undoable?: boolean;
   undoPayload?: import("@/types").AdminLessonOperationUndoPayload;
@@ -231,7 +240,7 @@ function logLessonOperation(input: {
   return appendAdminLessonOperationLogInDb({
     teacherId: input.teacherId,
     teacherName: input.teacherName,
-    lessonId: input.lesson.id,
+    lessonId: input.lessonId === undefined ? input.lesson.id : input.lessonId ?? "",
     studentName: input.lesson.studentName,
     scheduledAt: input.lesson.scheduledAt,
     weekStartKey: weekStartKeyFromScheduledAt(input.lesson.scheduledAt),
@@ -318,15 +327,42 @@ export async function markTeacherNoShow(
     await adjustEnrollmentSessionsWithScheduleBatchInDb(enrollment.id, 1, {
       reason: "선생님 노쇼 — 수업 1회 보상",
       adminName: "관리자",
+      // The missed lesson is already in the past. Add one future makeup slot
+      // and one to the contract total, but do not restore today's balance.
+      deltaRemaining: 0,
+      // The makeup date is selected below, so avoid generating a second slot
+      // here. This keeps the no-show action to exactly one added lesson.
+      schedule: false,
     });
   }
 
+  const futureForEnrollment = enrollment
+    ? futureLessonsForEnrollment(enrollment.id, lesson.teacherId)
+        .filter((candidate) => candidate.status === "scheduled" || candidate.status === "reschedule_pending")
+        .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
+    : [];
+  const lastScheduledAt = futureForEnrollment.at(-1)?.scheduledAt ?? lesson.scheduledAt;
+  const lastDateKey = getDateKeyInTimezone(new Date(lastScheduledAt), CANONICAL_TIMEZONE);
+  const scheduleDays = enrollment ? getEnrollmentScheduleDays(enrollment) : [];
+  const nextDateKey = nextScheduledDateOnOrAfter(addDaysToDateKey(lastDateKey, 1), scheduleDays);
+  const lastTime = new Intl.DateTimeFormat("en-GB", {
+    timeZone: CANONICAL_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(lastScheduledAt));
+  const defaultMakeupAt = `${nextDateKey}T${lastTime}:00+09:00`;
+  const requestedMakeupAt = options?.makeupScheduledAt;
+  // The compensation lesson must be appended after the existing schedule.
+  // The modal initially sends the missed lesson's timestamp, so reject any
+  // value that would place the makeup in the past or in the middle of the
+  // contract and use the next final slot instead.
   const makeupAt =
-    options?.makeupScheduledAt ??
-    new Date(new Date(lesson.scheduledAt).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    requestedMakeupAt && new Date(requestedMakeupAt).getTime() > new Date(lastScheduledAt).getTime()
+      ? requestedMakeupAt
+      : defaultMakeupAt;
 
   const makeup = await insertLessonInDb({
-    id: `lesson-${Date.now()}-mk`,
     teacherId: lesson.teacherId,
     teacherName: lesson.teacherName,
     originalTeacherId: noShowTeacherId,
@@ -340,9 +376,16 @@ export async function markTeacherNoShow(
     unpaidForTeacher: true,
     payrollTeacherId: noShowTeacherId,
     payrollTeacherName: noShowTeacherName,
-    relatedLessonId: lesson.id,
+    relatedLessonId: isUuid(lesson.id) ? lesson.id : undefined,
     operationNote: "노쇼 보강 수업 (노쇼 선생님 무급)",
   });
+
+  if (enrollment) {
+    const makeupDate = getDateKeyInTimezone(new Date(makeupAt), CANONICAL_TIMEZONE);
+    if (makeupDate > enrollment.endDate) {
+      await updateEnrollmentEndDateInDb(enrollment.id, makeupDate);
+    }
+  }
 
   await replaceLessonInDb({ ...cancelled, relatedLessonId: makeup.id });
   await applyTeacherNoShowPenaltyInDb(noShowTeacherId, month, "선생님 노쇼");
@@ -360,7 +403,8 @@ export async function markTeacherNoShow(
       originalLesson: originalSnapshot,
       makeupLessonId: makeup.id,
       enrollmentId: enrollment?.id,
-      enrollmentDeltaRemaining: enrollment ? 1 : 0,
+      enrollmentDeltaRemaining: 0,
+      enrollmentDeltaTotal: enrollment ? 1 : 0,
       penaltyTeacherId: noShowTeacherId,
       penaltyMonth: month,
     },
@@ -369,8 +413,26 @@ export async function markTeacherNoShow(
   return { original: cancelled, makeup };
 }
 
-export async function cancelLessonUnpaid(lessonId: string, note?: string): Promise<{ deletedLessonId: string }> {
-  const lesson = getLessonById(lessonId);
+export async function cancelLessonUnpaid(
+  lessonId: string,
+  note?: string,
+  context?: { teacherId?: string; studentId?: string; scheduledAt?: string },
+  requestDb?: SupabaseClient
+): Promise<{ deletedLessonId: string }> {
+  let lesson = isUuid(lessonId)
+    ? await getPersistedLessonByIdInDb(lessonId)
+    : undefined;
+  // Some legacy/read-model lessons use a synthetic id. If the action reaches
+  // another server instance, resolve that id using the stable lesson fields
+  // sent by the modal instead of failing with lesson_not_found.
+  if (!lesson && !isUuid(lessonId) && context?.studentId) {
+    const candidates = await listStudentLessonsInDb(context.studentId);
+    lesson = candidates.find((candidate) => {
+      if (context.teacherId && candidate.teacherId !== context.teacherId) return false;
+      if (!context.scheduledAt) return true;
+      return new Date(candidate.scheduledAt).getTime() === new Date(context.scheduledAt).getTime();
+    });
+  }
   if (!lesson) throw new Error("lesson_not_found");
   if (!["scheduled", "reschedule_pending", "pending_payment"].includes(lesson.status)) {
     throw new Error("lesson_not_active");
@@ -382,21 +444,32 @@ export async function cancelLessonUnpaid(lessonId: string, note?: string): Promi
     (lesson.enrollmentId ? getEnrollmentById(lesson.enrollmentId) : undefined) ??
     activeEnrollmentForStudent(lesson.studentId);
 
-  if (enrollment) {
-    await adjustEnrollmentSessionsWithScheduleBatchInDb(enrollment.id, -1, {
-      reason,
-      adminName: "관리자",
-    });
+  if (!(await deleteLessonByIdInDb(lesson.id, requestDb))) {
+    throw new Error("lesson_not_found");
   }
 
-  if (!(await deleteLessonByIdInDb(lessonId))) {
-    throw new Error("lesson_not_found");
+  // Only decrement the contract after the persisted lesson was actually
+  // removed. This prevents a stale cache card from changing 12/12 to 11/11
+  // while the delete itself fails with lesson_not_found.
+  if (enrollment) {
+    const adjustment = await adjustEnrollmentSessionsWithScheduleBatchInDb(enrollment.id, -1, {
+      reason,
+      adminName: "관리자",
+      // The selected lesson has already been deleted above. Do not let the
+      // scheduler remove a second future lesson for the same adjustment.
+      schedule: false,
+      deltaRemaining: -1,
+    });
+    if (adjustment?.error) throw new Error(adjustment.error);
   }
 
   await logLessonOperation({
     teacherId: lesson.teacherId,
     teacherName: lesson.teacherName ?? lesson.teacherId,
     lesson,
+    // The lesson has already been deleted. Keep the immutable snapshot in
+    // undoPayload, but do not insert a dangling FK into the audit table.
+    lessonId: null,
     action: "cancel_unpaid",
     summary: "무급 취소 · 수업 삭제",
     note: reason,
@@ -409,7 +482,7 @@ export async function cancelLessonUnpaid(lessonId: string, note?: string): Promi
     },
   });
 
-  return { deletedLessonId: lessonId };
+  return { deletedLessonId: lesson.id };
 }
 
 export async function adminRescheduleLesson(
@@ -473,26 +546,67 @@ export async function undoAdminLessonOperation(logId: string): Promise<void> {
     if (!payload.originalLesson || !payload.makeupLessonId) {
       throw new Error("invalid_undo_payload");
     }
+    const originalLesson = payload.originalLesson;
 
-    const current = getLessonById(payload.originalLesson.id);
+    const current = isUuid(originalLesson.id)
+      ? await getLessonByIdInDb(originalLesson.id)
+      : getLessonById(originalLesson.id);
     if (!current || current.status !== "cancelled" || !current.teacherNoShow) {
       throw new Error("lesson_state_changed");
     }
 
-    const makeup = getLessonById(payload.makeupLessonId);
-    if (makeup && makeup.status === "completed") {
-      throw new Error("makeup_already_completed");
+    // Older no-show logs stored a synthetic makeup id in the undo payload,
+    // while the database generated a UUID on insert. Resolve that legacy
+    // payload through the persisted related_lesson_id/operation note as a
+    // fallback so undo removes the actual compensation lesson as well.
+    const studentLessons = originalLesson.studentId
+      ? await listStudentLessonsInDb(originalLesson.studentId)
+      : [];
+    let makeup = isUuid(payload.makeupLessonId)
+      ? await getLessonByIdInDb(payload.makeupLessonId)
+      : undefined;
+    if (!makeup) {
+      makeup = studentLessons
+        .filter((candidate) => {
+          if (candidate.id === originalLesson.id) return false;
+          if (candidate.teacherId !== originalLesson.teacherId) return false;
+          if (candidate.status !== "scheduled" && candidate.status !== "reschedule_pending" && candidate.status !== "cancelled") {
+            return false;
+          }
+          if (candidate.relatedLessonId === originalLesson.id) return true;
+          return candidate.operationNote?.includes("노쇼 보강") ?? false;
+        })
+        .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))[0];
     }
-    if (makeup && !["scheduled", "reschedule_pending", "cancelled"].includes(makeup.status)) {
-      throw new Error("makeup_not_reversible");
+    const makeupIds = new Set<string>();
+    if (makeup) makeupIds.add(makeup.id);
+
+    // Very old no-show actions scheduled one compensation lesson through the
+    // enrollment scheduler and then inserted another explicit makeup lesson.
+    // Remove both legacy compensation rows when they are still reversible.
+    for (const candidate of studentLessons) {
+      if (candidate.id === originalLesson.id) continue;
+      if (candidate.teacherId !== originalLesson.teacherId) continue;
+      if (payload.enrollmentId && candidate.enrollmentId !== payload.enrollmentId) continue;
+      if (new Date(candidate.scheduledAt).getTime() <= new Date(originalLesson.scheduledAt).getTime()) continue;
+      const isLegacyCompensation =
+        candidate.relatedLessonId === originalLesson.id ||
+        candidate.operationNote?.includes("노쇼 보강") ||
+        candidate.operationNote?.includes("노쇼 — 수업 1회 보상");
+      if (!isLegacyCompensation) continue;
+      makeupIds.add(candidate.id);
     }
 
-    if (makeup) {
-      await deleteLessonByIdInDb(payload.makeupLessonId);
+    for (const id of makeupIds) {
+      const candidate = studentLessons.find((lesson) => lesson.id === id) ?? (makeup?.id === id ? makeup : undefined);
+      if (candidate?.status === "completed") throw new Error("makeup_already_completed");
+      if (candidate && !["scheduled", "reschedule_pending", "cancelled"].includes(candidate.status)) {
+        throw new Error("makeup_not_reversible");
+      }
     }
 
     const restored: Lesson = {
-      ...payload.originalLesson,
+      ...originalLesson,
       status: "scheduled",
       teacherNoShow: undefined,
       unpaidForTeacher: undefined,
@@ -501,19 +615,43 @@ export async function undoAdminLessonOperation(logId: string): Promise<void> {
       operationNote: undefined,
     };
 
-    if (!isTeacherSlotFree(restored.teacherId, restored.scheduledAt, restored.id, restored.durationMinutes)) {
+    // This is a restoration of the original lesson, not a new booking.  The
+    // student's recurring enrollment/hold may still occupy this weekly slot,
+    // and the teacher's availability may have changed since the no-show was
+    // recorded.  Ignore the restored student's own hold while continuing to
+    // reject a real conflict with another student's lesson.
+    if (
+      !isTeacherSlotFree(
+        restored.teacherId,
+        restored.scheduledAt,
+        restored.id,
+        restored.durationMinutes,
+        { studentId: restored.studentId, studentName: restored.studentName }
+      )
+    ) {
       throw new Error("slot_unavailable");
+    }
+
+    // Only mutate related records after all validation has succeeded.  This
+    // keeps an undo retryable when a genuine conflict is found.
+    for (const id of makeupIds) {
+      await deleteLessonByIdInDb(id);
     }
 
     await replaceLessonInDb(restored);
 
-    if (payload.enrollmentId && payload.enrollmentDeltaRemaining) {
+    if (
+      payload.enrollmentId &&
+      ((payload.enrollmentDeltaTotal ?? 0) !== 0 || (payload.enrollmentDeltaRemaining ?? 0) !== 0)
+    ) {
       await adjustEnrollmentSessionsWithScheduleBatchInDb(
         payload.enrollmentId,
-        -payload.enrollmentDeltaRemaining,
+        -(payload.enrollmentDeltaTotal ?? payload.enrollmentDeltaRemaining),
         {
           reason: "선생님 노쇼 조치 취소",
           adminName: "관리자",
+          deltaRemaining: -payload.enrollmentDeltaRemaining,
+          schedule: false,
         }
       );
     }
@@ -533,7 +671,15 @@ export async function undoAdminLessonOperation(logId: string): Promise<void> {
     }
 
     const lesson = payload.deletedLesson;
-    if (!isTeacherSlotFree(lesson.teacherId, lesson.scheduledAt, undefined, lesson.durationMinutes)) {
+    if (
+      !isTeacherSlotFree(
+        lesson.teacherId,
+        lesson.scheduledAt,
+        undefined,
+        lesson.durationMinutes,
+        { studentId: lesson.studentId, studentName: lesson.studentName }
+      )
+    ) {
       throw new Error("slot_unavailable");
     }
 
@@ -546,6 +692,7 @@ export async function undoAdminLessonOperation(logId: string): Promise<void> {
         {
           reason: "무급 취소 조치 취소",
           adminName: "관리자",
+          schedule: false,
         }
       );
     }

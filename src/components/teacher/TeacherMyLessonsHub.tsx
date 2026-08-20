@@ -196,12 +196,12 @@ export function TeacherMyLessonsHub() {
                   className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-sm transition-colors hover:border-emerald-200 hover:bg-emerald-50/50"
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-ink">
+                    <div className="truncate font-medium text-ink">
                       {display?.englishName ?? lesson.studentName ?? "Student"}
                       {lesson.isTrial && (
                         <Badge className="ml-2 bg-rose-500 align-middle text-[10px] text-white hover:bg-rose-500">NEW</Badge>
                       )}
-                    </p>
+                    </div>
                     <p className="text-xs text-gray-500">
                       {formatLessonTimeRange(
                         lesson.scheduledAt,

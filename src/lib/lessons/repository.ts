@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Lesson, LessonStatus } from "@/types";
 import { LESSON_MINUTES } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
@@ -11,6 +12,7 @@ import {
   setLessonCache,
 } from "@/lib/lessons/lesson-cache";
 import { isTrialRelevantForHold } from "@/lib/enrollments/trial-path";
+import { isUuid } from "@/lib/teachers/resolve-teacher-id";
 import { notifyTeacherOfLessonAssignmentInDb } from "@/lib/notifications/teacher-lesson-assignment";
 import {
   getAllLessons,
@@ -234,6 +236,21 @@ export async function getLessonByIdInDb(id: string): Promise<Lesson | null> {
   return lesson;
 }
 
+/** Read the persisted row without allowing an in-memory read model to win. */
+export async function getPersistedLessonByIdInDb(id: string): Promise<Lesson | null> {
+  const supabase = createBootstrapDbClient();
+  const { data, error } = await supabase
+    .from("lessons")
+    .select(LESSON_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`lesson_fetch_failed: ${error.message}`);
+  if (!data) return null;
+  const lesson = rowToLesson(data as unknown as LessonJoinRow);
+  patchLessonInCache(lesson);
+  return lesson;
+}
+
 export {
   getAllLessons,
   getTeacherLessons,
@@ -264,7 +281,7 @@ export async function insertLessonInDb(
 ): Promise<Lesson> {
   const supabase = await createClient();
   const payload = {
-    id: input.id,
+    ...(input.id && isUuid(input.id) ? { id: input.id } : {}),
     enrollment_id: input.enrollmentId ?? null,
     teacher_id: input.teacherId,
     student_id: input.studentId,
@@ -387,6 +404,11 @@ export async function updateLessonScheduleInDb(
 }
 
 export async function replaceLessonInDb(lesson: Lesson): Promise<Lesson> {
+  if (!isUuid(lesson.id)) {
+    patchLessonInCache(lesson);
+    return cloneLesson(lesson);
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("lessons")
@@ -422,8 +444,15 @@ export async function replaceLessonInDb(lesson: Lesson): Promise<Lesson> {
   return saved;
 }
 
-export async function deleteLessonByIdInDb(id: string): Promise<boolean> {
-  const supabase = await createClient();
+export async function deleteLessonByIdInDb(
+  id: string,
+  client?: SupabaseClient
+): Promise<boolean> {
+  // Lesson deletion is currently exposed only through guarded admin
+  // operations. Use the bootstrap/service client so RLS policies for regular
+  // authenticated users cannot turn a successful admin action into a
+  // misleading zero-row `lesson_not_found` response.
+  const supabase = client ?? createBootstrapDbClient();
   const { error, count } = await supabase.from("lessons").delete({ count: "exact" }).eq("id", id);
   if (error) {
     throw new Error(`lesson_delete_failed: ${error.message}`);
@@ -435,7 +464,7 @@ export async function deleteLessonByIdInDb(id: string): Promise<boolean> {
 
 export async function deleteLessonsByIdsInDb(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  const supabase = await createClient();
+  const supabase = createBootstrapDbClient();
   const { error } = await supabase.from("lessons").delete().in("id", ids);
   if (error) {
     throw new Error(`lessons_delete_failed: ${error.message}`);

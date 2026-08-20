@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, ChevronDown, UserCog, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,12 +57,43 @@ export function AdminLessonActionsPanel({
   message,
   onAction,
 }: AdminLessonActionsPanelProps) {
-  const [noShowConfirmOpen, setNoShowConfirmOpen] = useState(false);
-  const [unpaidCancelConfirmOpen, setUnpaidCancelConfirmOpen] = useState(false);
-
   const isActiveLesson =
     lesson.status === "scheduled" || lesson.status === "reschedule_pending";
   const alreadyNoShow = Boolean(lesson.teacherNoShow);
+  const [noShowConfirmOpen, setNoShowConfirmOpen] = useState(false);
+  const [unpaidCancelConfirmOpen, setUnpaidCancelConfirmOpen] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState(newTime.split("T")[0] ?? "");
+  const [rescheduleSlots, setRescheduleSlots] = useState<Array<{ startTime: string; endTime: string }>>([]);
+  const [rescheduleSlotsLoading, setRescheduleSlotsLoading] = useState(false);
+
+  useEffect(() => {
+    setRescheduleDate(newTime.split("T")[0] ?? "");
+  }, [newTime]);
+
+  useEffect(() => {
+    if (!rescheduleDate || !isActiveLesson || alreadyNoShow) {
+      setRescheduleSlots([]);
+      return;
+    }
+    let cancelled = false;
+    setRescheduleSlotsLoading(true);
+    void fetch(
+      `/api/enrollment/teacher-slots?teacherId=${encodeURIComponent(lesson.teacherId)}&lessonId=${encodeURIComponent(lesson.id)}&date=${encodeURIComponent(rescheduleDate)}&timeZone=Asia%2FSeoul&sessionMinutes=${lesson.durationMinutes}`
+    )
+      .then(async (response) => (response.ok ? response.json() : { openSlots: [] }))
+      .then((data: { openSlots?: Array<{ startTime: string; endTime: string }> }) => {
+        if (!cancelled) setRescheduleSlots(data.openSlots ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setRescheduleSlots([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRescheduleSlotsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [alreadyNoShow, isActiveLesson, lesson.durationMinutes, lesson.id, lesson.teacherId, rescheduleDate]);
 
   function confirmNoShow() {
     setNoShowConfirmOpen(false);
@@ -159,18 +190,48 @@ export function AdminLessonActionsPanel({
           <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/50 p-3">
             <Label className="text-sm font-semibold text-ink">일정 변경 (Availability 내)</Label>
             <Input
-              type="datetime-local"
-              step={1200}
+              type="date"
               className="h-11 rounded-xl border-2"
-              value={newTime}
-              onChange={(e) => onNewTimeChange(e.target.value)}
+              value={rescheduleDate}
+              onChange={(e) => {
+                setRescheduleDate(e.target.value);
+                onNewTimeChange("");
+              }}
               disabled={!isActiveLesson || alreadyNoShow}
             />
+            {rescheduleSlotsLoading && (
+              <p className="py-2 text-center text-xs text-gray-500">가능한 시간을 불러오는 중…</p>
+            )}
+            {!rescheduleSlotsLoading && rescheduleDate && rescheduleSlots.length > 0 && (
+              <div className="grid grid-cols-2 gap-2" aria-label="가능한 수업 시간">
+                {rescheduleSlots.map((slot) => {
+                  const selected = newTime === `${rescheduleDate}T${slot.startTime}`;
+                  return (
+                    <button
+                      key={slot.startTime}
+                      type="button"
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-sm font-semibold transition-colors",
+                        selected
+                          ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                          : "border-gray-200 bg-white text-gray-700 hover:border-emerald-300"
+                      )}
+                      onClick={() => onNewTimeChange(`${rescheduleDate}T${slot.startTime}`)}
+                    >
+                      {slot.startTime}–{slot.endTime}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {!rescheduleSlotsLoading && rescheduleDate && rescheduleSlots.length === 0 && (
+              <p className="py-2 text-center text-xs text-gray-500">선택한 날짜에는 가능한 시간이 없습니다.</p>
+            )}
             <Button
               size="sm"
               variant="secondary"
               className="h-10 w-full"
-              disabled={busy || !isActiveLesson || alreadyNoShow}
+              disabled={busy || !isActiveLesson || alreadyNoShow || !newTime}
               onClick={() => onAction("reschedule", {})}
             >
               시간 변경

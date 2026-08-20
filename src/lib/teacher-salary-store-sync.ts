@@ -1,5 +1,6 @@
 import type { TeacherSalaryStatement } from "@/types";
 import { findSalaryInCache, getSalaryCache } from "@/lib/teacher-salary/salary-cache";
+import { getTeacherLessons } from "@/lib/teacher-lesson-store-sync";
 import {
   buildLiveEstimate,
   cloneStatement,
@@ -22,8 +23,14 @@ export function getSalaryMonthsForTeacher(teacherId: string): string[] {
   const stored = getSalaryCache()
     .filter((s) => s.teacherId === teacherId)
     .map((s) => s.month);
+  // A completed month can legitimately have no persisted statement yet
+  // (for example, before the administrator closes payroll). Keep that month
+  // selectable so the API can build its read-only live estimate from lessons.
+  const completedLessonMonths = getTeacherLessons(teacherId)
+    .filter((lesson) => lesson.status === "completed")
+    .map((lesson) => monthKeyFromDate(new Date(lesson.scheduledAt)));
   const current = monthKeyFromDate(new Date());
-  const months = new Set([current, ...stored]);
+  const months = new Set([current, ...stored, ...completedLessonMonths]);
   return Array.from(months).sort((a, b) => b.localeCompare(a));
 }
 

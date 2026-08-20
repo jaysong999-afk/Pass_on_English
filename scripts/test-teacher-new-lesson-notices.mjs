@@ -18,6 +18,9 @@ console.log("PASS assignment notifications are deduplicated and retain learning 
 
 assert.match(lessonRepo, /assignmentKey: `trial:\$\{lesson\.id\}`/);
 assert.match(scheduleService, /assignmentKey: `enrollment:\$\{enrollmentId\}`/);
+assert.match(scheduleService, /if \(!enrollment\.renewedFromEnrollmentId\)/);
+assert.match(lessonRoute, /getEnrollmentById\(lesson\.enrollmentId\)/);
+assert.match(lessonRoute, /renewedFromEnrollmentId/);
 console.log("PASS trial and paid enrollment scheduling create assignment notices");
 
 assert.match(lessonRoute, /notification\.readAt/);

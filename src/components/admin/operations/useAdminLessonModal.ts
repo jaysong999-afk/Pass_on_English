@@ -53,6 +53,13 @@ export function useAdminLessonModal(onComplete?: () => void) {
       setMessage("");
       try {
         const body: Record<string, unknown> = { action, ...payload };
+        // Preserve a stable lookup key for legacy synthetic lesson ids when a
+        // PATCH request is handled by a different server instance.
+        body.lessonContext = {
+          teacherId: selected.teacherId,
+          studentId: selected.studentId,
+          scheduledAt: selected.scheduledAt,
+        };
         if (action === "teacher_no_show" && typeof payload.makeupScheduledAt === "undefined") {
           body.makeupScheduledAt = fromDatetimeLocalValue(makeupTime);
         }

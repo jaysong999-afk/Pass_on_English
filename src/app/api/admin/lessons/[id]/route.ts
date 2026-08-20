@@ -10,11 +10,16 @@ import {
 } from "@/lib/admin/lesson-operations-store";
 import { getLessonById } from "@/lib/teacher-lesson-store-sync";
 import { buildLessonDisplayContext } from "@/lib/teacher-lesson-context";
+import { createRequestDbClient } from "@/lib/supabase/db-client";
 
 type OperationBody =
   | { action: "assign_substitute"; substituteTeacherId: string; note?: string }
   | { action: "teacher_no_show"; makeupScheduledAt?: string; note?: string }
-  | { action: "cancel_unpaid"; note?: string }
+  | {
+      action: "cancel_unpaid";
+      note?: string;
+      lessonContext?: { teacherId?: string; studentId?: string; scheduledAt?: string };
+    }
   | { action: "reschedule"; scheduledAt: string; teacherId?: string }
   | { action: "available_teachers" };
 
@@ -73,7 +78,13 @@ export async function PATCH(
         return NextResponse.json(result);
       }
       case "cancel_unpaid": {
-        const result = await cancelLessonUnpaid(id, body.note);
+        const requestDb = await createRequestDbClient();
+        const result = await cancelLessonUnpaid(
+          id,
+          body.note,
+          body.lessonContext,
+          requestDb
+        );
         return NextResponse.json(result);
       }
       case "reschedule": {

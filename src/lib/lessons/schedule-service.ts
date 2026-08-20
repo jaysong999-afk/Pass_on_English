@@ -324,10 +324,15 @@ async function scheduleLessonsForConfirmedEnrollmentInDbUnlocked(
     const firstCreatedLesson = [...result.created].sort((a, b) =>
       a.scheduledAt.localeCompare(b.scheduledAt)
     )[0];
-    await notifyTeacherOfLessonAssignmentInDb({
-      assignmentKey: `enrollment:${enrollmentId}`,
-      lesson: firstCreatedLesson,
-    });
+    // A renewal continues an existing student/teacher relationship. It is
+    // not a first assignment, so do not create the "New lesson assignment"
+    // notice that is reserved for new enrollments and trial lessons.
+    if (!enrollment.renewedFromEnrollmentId) {
+      await notifyTeacherOfLessonAssignmentInDb({
+        assignmentKey: `enrollment:${enrollmentId}`,
+        lesson: firstCreatedLesson,
+      });
+    }
   }
 
   return result;
@@ -374,7 +379,7 @@ export interface AdjustEnrollmentSessionsWithScheduleResult {
 export async function adjustEnrollmentSessionsWithScheduleBatchInDb(
   enrollmentId: string,
   delta: number,
-  input?: { reason?: string; adminName?: string }
+  input?: { reason?: string; adminName?: string; deltaRemaining?: number; schedule?: boolean }
 ): Promise<AdjustEnrollmentSessionsWithScheduleResult | null> {
   if (delta === 0) {
     const enrollment = getEnrollmentById(enrollmentId);
@@ -383,6 +388,18 @@ export async function adjustEnrollmentSessionsWithScheduleBatchInDb(
 
   const enrollment = getEnrollmentById(enrollmentId);
   if (!enrollment) return null;
+
+  if (input?.schedule === false) {
+    const updated = await adjustEnrollmentSessionsInDb(enrollmentId, {
+      deltaRemaining: input.deltaRemaining ?? delta,
+      deltaTotal: delta,
+      reason: input.reason,
+      adminName: input.adminName,
+    });
+    return updated
+      ? { enrollment: updated, lessons: [], action: delta > 0 ? "added" : "removed", appliedDelta: delta }
+      : null;
+  }
 
   if (delta > 0) {
     const studentName = await fetchStudentDisplayNameInDb(
@@ -432,7 +449,10 @@ export async function adjustEnrollmentSessionsWithScheduleBatchInDb(
     );
 
     const updated = await adjustEnrollmentSessionsInDb(enrollmentId, {
-      deltaRemaining: delta,
+      // Some compensatory lessons are added after the original lesson has
+      // already elapsed. In that case only the contract total grows; the
+      // current remaining balance must not be increased as well.
+      deltaRemaining: input?.deltaRemaining ?? delta,
       deltaTotal: delta,
       reason: input?.reason,
       adminName: input?.adminName,

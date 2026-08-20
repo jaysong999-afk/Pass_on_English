@@ -326,6 +326,8 @@ export interface AdminLessonOperationUndoPayload {
   makeupLessonId?: string;
   enrollmentId?: string;
   enrollmentDeltaRemaining: number;
+  /** Total-contract delta, kept separate when a no-show adds a future makeup without restoring balance. */
+  enrollmentDeltaTotal?: number;
   penaltyTeacherId?: string;
   penaltyMonth?: string;
 }
@@ -608,6 +610,10 @@ export interface FinanceTransaction {
   amount: number;
   /** KRW equivalent for reporting */
   amountKrw: number;
+  /** Exchange rate captured when a non-KRW transaction was recorded. */
+  exchangeRate?: number;
+  exchangeRateSource?: string;
+  exchangeRateAt?: string;
   supplyAmount: number;
   vatAmount: number;
   taxTreatment: TaxTreatment;
@@ -636,6 +642,7 @@ export interface ExchangeRates {
   cnyToKrw: number;
   phpToKrw: number;
   updatedAt: string;
+  source?: string;
 }
 
 export interface TimeSlot {

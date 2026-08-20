@@ -1,6 +1,7 @@
 import type { AdminLessonOperationLogEntry, AdminLessonOperationType } from "@/types";
 import { createClient } from "@/lib/supabase/server";
 import { getTeacherById } from "@/lib/teacher-profile-store-sync";
+import { isUuid } from "@/lib/teachers/resolve-teacher-id";
 import {
   getAdminLessonOperationLogCache,
   patchAdminLessonOperationLogCache,
@@ -89,7 +90,7 @@ export async function appendAdminLessonOperationLogInDb(
     .insert({
       ...(input.at ? { at: input.at } : {}),
       teacher_id: input.teacherId || null,
-      lesson_id: input.lessonId || null,
+      lesson_id: input.lessonId && isUuid(input.lessonId) ? input.lessonId : null,
       student_name: input.studentName ?? null,
       scheduled_at: input.scheduledAt || null,
       week_start_key: input.weekStartKey || null,

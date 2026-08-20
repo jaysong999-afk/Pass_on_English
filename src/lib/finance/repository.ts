@@ -6,7 +6,7 @@ import type {
   TeacherSalaryStatement,
   TransactionCategory,
 } from "@/types";
-import { splitTaxInclusive, convertToKrw, FALLBACK_RATES } from "@/lib/finance/accounting";
+import { splitTaxInclusive, convertToKrw, FALLBACK_RATES, fetchExchangeRates } from "@/lib/finance/accounting";
 import { createBootstrapDbClient } from "@/lib/supabase/db-client";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -24,6 +24,9 @@ interface FinanceTransactionRow {
   currency: "KRW" | "CNY" | "PHP";
   amount: number;
   amount_krw: number;
+  exchange_rate?: number | null;
+  exchange_rate_source?: string | null;
+  exchange_rate_at?: string | null;
   supply_amount: number;
   vat_amount: number;
   tax_treatment: string;
@@ -37,7 +40,7 @@ interface FinanceTransactionRow {
 }
 
 const SELECT_COLUMNS =
-  "id, transaction_date, type, category, description, currency, amount, amount_krw, supply_amount, vat_amount, tax_treatment, source, teacher_id, teacher_name, student_name, enrollment_id, salary_statement_id, created_at";
+  "id, transaction_date, type, category, description, currency, amount, amount_krw, exchange_rate, exchange_rate_source, exchange_rate_at, supply_amount, vat_amount, tax_treatment, source, teacher_id, teacher_name, student_name, enrollment_id, salary_statement_id, created_at";
 
 function rowToTransaction(row: FinanceTransactionRow): FinanceTransaction {
   return {
@@ -49,6 +52,9 @@ function rowToTransaction(row: FinanceTransactionRow): FinanceTransaction {
     currency: row.currency,
     amount: Number(row.amount),
     amountKrw: Number(row.amount_krw),
+    exchangeRate: row.exchange_rate == null ? undefined : Number(row.exchange_rate),
+    exchangeRateSource: row.exchange_rate_source ?? undefined,
+    exchangeRateAt: row.exchange_rate_at ?? undefined,
     supplyAmount: Number(row.supply_amount),
     vatAmount: Number(row.vat_amount),
     taxTreatment: row.tax_treatment as FinanceTransaction["taxTreatment"],
@@ -71,6 +77,9 @@ function transactionToRow(
     currency: tx.currency,
     amount: tx.amount,
     amount_krw: tx.amountKrw,
+    exchange_rate: tx.exchangeRate ?? null,
+    exchange_rate_source: tx.exchangeRateSource ?? null,
+    exchange_rate_at: tx.exchangeRateAt ?? null,
     supply_amount: tx.supplyAmount,
     vat_amount: tx.vatAmount,
     tax_treatment: tx.taxTreatment,
@@ -221,8 +230,12 @@ export async function recordEnrollmentPaymentFinanceTransactionInDb(
 ): Promise<FinanceTransaction | null> {
   const isKr = country !== "CN";
   const currency = isKr ? "KRW" : "CNY";
-  const amount = isKr ? enrollment.amountKrw : enrollment.amountKrw;
-  const amountKrw = enrollment.amountKrw;
+  // enrollments.total_amount is stored in the enrollment currency.  The
+  // legacy field is named amountKrw, but for CN enrollments it contains the
+  // original CNY amount; convert only when the payment is confirmed.
+  const amount = enrollment.amountKrw;
+  const rates = isKr ? FALLBACK_RATES : await fetchExchangeRates();
+  const amountKrw = convertToKrw(amount, currency, rates);
   const taxTreatment: TaxTreatment = isKr ? "taxable" : "non_taxable";
   const { supply, vat } = isKr
     ? splitTaxInclusive(amountKrw)
@@ -245,6 +258,9 @@ export async function recordEnrollmentPaymentFinanceTransactionInDb(
     taxTreatment,
     source: "auto",
     studentName: studentDisplayName,
+    exchangeRate: isKr ? undefined : rates.cnyToKrw,
+    exchangeRateSource: isKr ? undefined : rates.source,
+    exchangeRateAt: isKr ? undefined : rates.updatedAt,
   };
 
   const supabase = await createClient();

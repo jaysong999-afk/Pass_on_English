@@ -15,6 +15,7 @@ export const FALLBACK_RATES: ExchangeRates = {
   cnyToKrw: 190.2,
   phpToKrw: 23.8,
   updatedAt: new Date().toISOString(),
+  source: "fallback",
 };
 
 export const CATEGORY_LABELS: Record<TransactionCategory, string> = {
@@ -214,14 +215,19 @@ export async function fetchExchangeRates(): Promise<ExchangeRates> {
     });
     if (!res.ok) throw new Error("rate fetch failed");
     const data = await res.json();
-    const cnyToKrw = data.rates?.KRW ?? FALLBACK_RATES.cnyToKrw;
+    const fetchedRate = Number(data.rates?.KRW);
+    const cnyToKrw = Number.isFinite(fetchedRate) && fetchedRate > 0
+      ? fetchedRate
+      : FALLBACK_RATES.cnyToKrw;
+    const source = cnyToKrw === FALLBACK_RATES.cnyToKrw ? "fallback" : "frankfurter";
     return {
       cnyToKrw,
       phpToKrw: FALLBACK_RATES.phpToKrw,
       updatedAt: new Date().toISOString(),
+      source,
     };
   } catch {
-    return { ...FALLBACK_RATES, updatedAt: new Date().toISOString() };
+    return { ...FALLBACK_RATES, updatedAt: new Date().toISOString(), source: "fallback" };
   }
 }
 

@@ -400,7 +400,11 @@ function SalaryDetailPanel({
   }, [row, loadDetail]);
 
   const payrollLessons = lessons.filter((l) => l.countsForPayroll && l.status === "completed");
-  const verifiedHours = payrollLessons.reduce((s, l) => s + l.durationHours, 0);
+  // Sum exact minutes first, then round once. Summing the display values
+  // (0.3h per 20-minute lesson) produces 2.999999… for ten lessons and can
+  // disagree with the payroll statement's aggregate 3.3h calculation.
+  const verifiedMinutes = payrollLessons.reduce((s, l) => s + l.durationMinutes, 0);
+  const verifiedHours = Math.round((verifiedMinutes / 60) * 10) / 10;
   const hoursMatch = Math.abs(verifiedHours - row.totalHours) < 0.05;
 
   async function addAdjustment() {

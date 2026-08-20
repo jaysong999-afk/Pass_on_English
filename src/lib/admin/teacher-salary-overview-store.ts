@@ -3,6 +3,7 @@ import { getPenaltyForMonth } from "@/lib/teacher-payroll-penalty-store-sync";
 import { getAllTeachers, getTeacherById } from "@/lib/teacher-profile-store-sync";
 import {
   getSalaryStatement,
+  getSalaryMonthsForTeacher,
   statementTotal,
   getAllSalaryStatements,
   isSalaryMonthEnded,
@@ -38,6 +39,14 @@ export function getAvailableSalaryMonths(): string[] {
   const months = new Set<string>([currentSalaryMonth()]);
   for (const s of getAllSalaryStatements()) {
     months.add(s.month);
+  }
+  // A completed month may not have been finalized into a persisted salary
+  // statement yet. Include months represented by teachers' completed lessons
+  // so administrators can review the live estimate for that month.
+  for (const teacher of getAllTeachers()) {
+    for (const month of getSalaryMonthsForTeacher(teacher.id)) {
+      months.add(month);
+    }
   }
   return Array.from(months).sort((a, b) => b.localeCompare(a));
 }

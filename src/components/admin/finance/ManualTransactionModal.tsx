@@ -31,18 +31,33 @@ export function ManualTransactionModal({
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [currency, setCurrency] = useState<"KRW" | "CNY" | "PHP">("KRW");
-  const [supplyAmount, setSupplyAmount] = useState("");
+  const [amountInput, setAmountInput] = useState("");
   const [autoVat, setAutoVat] = useState(true);
   const [taxTreatment, setTaxTreatment] = useState<TaxTreatment>("taxable");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const supply = Number(supplyAmount);
-    if (!supply || !description) return;
+    const enteredAmount = Number(amountInput);
+    if (!enteredAmount || !description) return;
 
-    const vat = autoVat && taxTreatment === "taxable" ? calcVatFromSupply(supply) : 0;
-    const total = supply + vat;
-    const amountKrw = convertToKrw(total, currency, rates);
+    // Expenses are entered as the actual paid total. For taxable expenses,
+    // reverse-calculate the supply amount and VAT so the ledger still stores
+    // the tax components separately. Income keeps the existing supply-input
+    // behavior for backwards compatibility.
+    const isExpense = type === "expense";
+    const total = enteredAmount;
+    const supply = isExpense && taxTreatment === "taxable"
+      ? Math.round(total / 1.1)
+      : isExpense
+        ? total
+        : enteredAmount;
+    const vat = isExpense
+      ? total - supply
+      : autoVat && taxTreatment === "taxable"
+        ? calcVatFromSupply(supply)
+        : 0;
+    const recordedTotal = isExpense ? total : supply + vat;
+    const amountKrw = convertToKrw(recordedTotal, currency, rates);
 
     onSubmit({
       id: `manual-${Date.now()}`,
@@ -51,7 +66,7 @@ export function ManualTransactionModal({
       category: type === "income" ? "manual_income" : "manual_expense",
       description,
       currency,
-      amount: total,
+      amount: recordedTotal,
       amountKrw,
       supplyAmount: supply,
       vatAmount: vat,
@@ -60,14 +75,21 @@ export function ManualTransactionModal({
     });
 
     setDescription("");
-    setSupplyAmount("");
+    setAmountInput("");
     onOpenChange(false);
   }
 
   const previewVat =
-    autoVat && taxTreatment === "taxable" && supplyAmount
-      ? calcVatFromSupply(Number(supplyAmount))
-      : 0;
+    type === "expense" && taxTreatment === "taxable" && amountInput
+      ? Number(amountInput) - Math.round(Number(amountInput) / 1.1)
+      : type === "income" && autoVat && taxTreatment === "taxable" && amountInput
+        ? calcVatFromSupply(Number(amountInput))
+        : 0;
+  const previewSupply = amountInput
+    ? type === "expense" && taxTreatment === "taxable"
+      ? Math.round(Number(amountInput) / 1.1)
+      : Number(amountInput)
+    : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,7 +97,7 @@ export function ManualTransactionModal({
         <DialogHeader>
           <DialogTitle>수기 거래 등록</DialogTitle>
           <DialogDescription>
-            추가 수익 또는 기타 비용을 입력합니다. 공급가액 기준 부가세 10% 자동 계산을 선택할 수 있습니다.
+            추가 수익 또는 기타 비용을 입력합니다. 비용은 실제 결제한 총액을 입력하면 공급가액과 부가세를 자동으로 분리합니다.
           </DialogDescription>
         </DialogHeader>
 
@@ -122,12 +144,12 @@ export function ManualTransactionModal({
           </div>
 
           <div className="space-y-2">
-            <Label>공급가액</Label>
+            <Label>{type === "expense" ? "결제금액(총액)" : "공급가액"}</Label>
             <Input
               type="number"
               min={0}
-              value={supplyAmount}
-              onChange={(e) => setSupplyAmount(e.target.value)}
+              value={amountInput}
+              onChange={(e) => setAmountInput(e.target.value)}
               placeholder="0"
               required
             />
@@ -147,7 +169,7 @@ export function ManualTransactionModal({
             </select>
           </div>
 
-          {taxTreatment === "taxable" && (
+          {taxTreatment === "taxable" && type === "income" && (
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -159,14 +181,20 @@ export function ManualTransactionModal({
             </label>
           )}
 
-          {previewVat > 0 && (
+          {amountInput && (previewVat > 0 || type === "expense") && (
             <div className="rounded-xl bg-violet-50 px-4 py-3 text-sm">
+              {type === "expense" && (
+                <p className="text-violet-800">
+                  공급가액: <strong>{previewSupply.toLocaleString()}</strong>
+                  {currency === "KRW" ? "원" : currency === "CNY" ? "元" : " PHP"}
+                </p>
+              )}
               <p className="text-violet-800">
                 부가세: <strong>{previewVat.toLocaleString()}</strong>
                 {currency === "KRW" ? "원" : currency === "CNY" ? "元" : " PHP"}
               </p>
               <p className="text-violet-600 mt-1">
-                합계: {(Number(supplyAmount) + previewVat).toLocaleString()}
+                합계: {(type === "expense" ? Number(amountInput) : Number(amountInput) + previewVat).toLocaleString()}
               </p>
             </div>
           )}
