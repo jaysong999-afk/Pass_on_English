@@ -189,14 +189,29 @@ async function main() {
     return;
   }
 
-  await test("GET /api/admin/reviews shows 한지호 auto renewal as 입금 대기 while student window open", async () => {
-    const complete = await api(`/api/teacher/lessons/${e2eId(1120)}`, {
-      method: "PATCH",
-      token: teacherToken,
-      body: { action: "mark_student_absent" },
+  await test("renewal cron opens 한지호 hold before admin review", async () => {
+    const lessonPath = `/api/teacher/lessons/${e2eId(1120)}`;
+    const current = await api(lessonPath, { token: teacherToken });
+    if (current.status !== 200) {
+      throw new Error(`lesson ${current.status}: ${JSON.stringify(current.json)}`);
+    }
+    if (current.json?.lesson?.status !== "completed") {
+      const complete = await api(lessonPath, {
+        method: "PATCH",
+        token: teacherToken,
+        body: { action: "mark_student_absent" },
+      });
+      if (complete.status !== 200) {
+        throw new Error(`complete ${complete.status}: ${JSON.stringify(complete.json)}`);
+      }
+    }
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    if (!cronSecret) throw new Error("CRON_SECRET is required for renewal maintenance test");
+    const maintenance = await api("/api/cron/expire-enrollment-holds", {
+      token: cronSecret,
     });
-    if (complete.status !== 200) {
-      throw new Error(`complete ${complete.status}: ${JSON.stringify(complete.json)}`);
+    if (maintenance.status !== 200) {
+      throw new Error(`maintenance ${maintenance.status}: ${JSON.stringify(maintenance.json)}`);
     }
     const { status, json } = await api("/api/admin/reviews", { token: adminToken });
     if (status !== 200) throw new Error(`status ${status}: ${JSON.stringify(json)}`);

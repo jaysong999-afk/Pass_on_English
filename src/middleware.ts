@@ -123,11 +123,11 @@ export async function middleware(request: NextRequest) {
     ? intlMiddleware(request)
     : NextResponse.next({ request });
 
-  await getMiddlewareAuthUser(request, response);
-
   if (pathname.startsWith("/api/") && isPublicApiPath(pathname, request.method)) {
     return response;
   }
+
+  await getMiddlewareAuthUser(request, response);
 
   const pageRole = requiredRoleForPage(pathname);
   if (pageRole && !isPublicPagePath(pathname)) {

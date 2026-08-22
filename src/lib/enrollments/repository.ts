@@ -54,7 +54,6 @@ import {
 } from "@/lib/enrollment-hold/constants";
 import { getAllLessons } from "@/lib/teacher-lesson-store-sync";
 import {
-  findRenewalHoldFor,
   getEnrollmentLastLessonEnd,
   getRenewalWindowState,
   hasUpcomingPaidLesson,
@@ -549,6 +548,7 @@ export async function createEnrollmentInDb(input: CreateEnrollmentInput & { depo
 }
 
 export function createEnrollment(input: CreateEnrollmentInput): StudentEnrollment {
+  void input;
   throw new Error("deprecated: use createEnrollmentInDb");
 }
 
@@ -697,7 +697,8 @@ export async function createRenewalEnrollmentInDb(
   throw new Error("deprecated: use confirmRenewalEnrollmentInDb and reportEnrollmentPaymentInDb");
 }
 
-export function createRenewalEnrollment(_input: CreateRenewalEnrollmentInput & { depositorName: string }): StudentEnrollment {
+export function createRenewalEnrollment(input: CreateRenewalEnrollmentInput & { depositorName: string }): StudentEnrollment {
+  void input;
   throw new Error("deprecated: use confirmRenewalEnrollmentInDb");
 }
 
@@ -1020,6 +1021,7 @@ export async function confirmEnrollmentPaymentInDb(
   enrollmentId: string,
   adminName = "관리자"
 ): Promise<StudentEnrollment | null> {
+  void adminName;
   const current = getEnrollmentById(enrollmentId);
   if (!current) return null;
   if (current.cancelReason === "merged_into_original") {

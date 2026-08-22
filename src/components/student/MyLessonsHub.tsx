@@ -25,6 +25,7 @@ export function MyLessonsHub() {
   const locale = useLocale() as Locale;
   const studentTz = getStudentTimezone(locale, account?.timezone);
   const t = useTranslations("studentPortal.lessons");
+  const tEnrollment = useTranslations("studentPortal.enrollment");
   const tReschedule = useTranslations("studentPortal.reschedule");
   const tCommon = useTranslations("studentPortal.common");
   const base = useStudentBasePath();
@@ -127,7 +128,9 @@ export function MyLessonsHub() {
           <p className="text-xs font-medium text-ink-muted">{t("remainingThisMonth")}</p>
           <p className="mt-1 text-xl font-bold tabular-nums text-brand-700">
             {activeEnrollments.length > 0
-              ? formatSessionBalance(sessionBalance.remaining, sessionBalance.total)
+              ? formatSessionBalance(sessionBalance.remaining, sessionBalance.total, {
+                  unit: tEnrollment("sessionUnit"),
+                })
               : "—"}
           </p>
           <Link

@@ -142,8 +142,47 @@ async function createTeacherApplicantForE2e(email, password, fields) {
   return { applicationId: application.id, userId, via: "service_role" };
 }
 
+async function cleanupTeacherSignupFixtures() {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  if (!serviceKey || !url) return;
+
+  const admin = createClient(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: applications, error: applicationError } = await admin
+    .from("teacher_applications")
+    .select("id, teacher_id, email")
+    .eq("full_name", "E2E Signup Teacher");
+  if (applicationError) throw new Error(`fixture applications: ${applicationError.message}`);
+
+  const applicationIds = (applications ?? []).map((row) => row.id);
+  const teacherIds = (applications ?? []).map((row) => row.teacher_id).filter(Boolean);
+  const emails = new Set((applications ?? []).map((row) => row.email?.toLowerCase()).filter(Boolean));
+
+  if (teacherIds.length) {
+    const { error } = await admin.from("teachers").delete().in("id", teacherIds);
+    if (error) throw new Error(`fixture teachers: ${error.message}`);
+  }
+  if (applicationIds.length) {
+    const { error } = await admin.from("admin_review_logs").delete().in("target_id", applicationIds);
+    if (error) throw new Error(`fixture review logs: ${error.message}`);
+    const { error: deleteError } = await admin.from("teacher_applications").delete().in("id", applicationIds);
+    if (deleteError) throw new Error(`fixture applications delete: ${deleteError.message}`);
+  }
+
+  const { data: listed, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (listError) throw new Error(`fixture auth list: ${listError.message}`);
+  for (const user of listed.users) {
+    if (!user.email || !emails.has(user.email.toLowerCase())) continue;
+    const { error } = await admin.auth.admin.deleteUser(user.id);
+    if (error) throw new Error(`fixture auth delete ${user.email}: ${error.message}`);
+  }
+}
+
 async function main() {
   loadEnvLocal();
+  await cleanupTeacherSignupFixtures();
 
   let manifest;
   try {
@@ -805,6 +844,8 @@ async function main() {
     }
     return { status, note: `user=${json.user.id}` };
   });
+
+  await cleanupTeacherSignupFixtures();
 
   const passed = results.filter((r) => r.ok).length;
   const failed = results.filter((r) => !r.ok).length;

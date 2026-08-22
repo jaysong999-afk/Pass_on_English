@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,14 +27,14 @@ export default function TeacherLessonDetailPage({
   const [loading, setLoading] = useState(true);
   const [showRescheduleForm, setShowRescheduleForm] = useState(false);
 
-  const load = () => {
+  const load = useCallback(() => {
     if (!lessonId) return;
     setLoading(true);
     fetch(`/api/teacher/lessons/${lessonId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => setData(json))
       .finally(() => setLoading(false));
-  };
+  }, [lessonId]);
 
   useEffect(() => {
     params.then((p) => setLessonId(p.id));
@@ -42,7 +42,7 @@ export default function TeacherLessonDetailPage({
 
   useEffect(() => {
     load();
-  }, [lessonId]);
+  }, [load]);
 
   if (loading) {
     return <p className="text-sm text-gray-500">Loading lesson…</p>;

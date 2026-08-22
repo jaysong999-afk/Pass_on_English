@@ -86,14 +86,17 @@ export function registerStudentProfile(
     | "accountHolderName"
   > & { id?: string; accountType?: "self" | "guardian" }
 ): StudentProfile {
+  void _input;
   throw new Error("deprecated: use POST /api/student/account");
 }
 
 export function updateStudentSurvey(_input: StudentSurveyInput): StudentProfile {
+  void _input;
   throw new Error("deprecated: use PATCH /api/student/account");
 }
 
 export function bookTrialLesson(_input: BookTrialInput): StudentProfile {
+  void _input;
   throw new Error("deprecated: use PATCH /api/student/account book_trial");
 }
 

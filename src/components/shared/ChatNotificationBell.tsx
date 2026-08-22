@@ -182,7 +182,7 @@ export function ChatNotificationBell({
       setAdminSupport(null);
       setTotalUnread(0);
     }
-  }, [canFetch, role, studentId, teacherId]);
+  }, [canFetch, role, studentId]);
 
   useEffect(() => {
     void load();

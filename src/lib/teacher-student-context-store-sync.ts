@@ -5,6 +5,7 @@ import {
 } from "@/lib/teacher-student-context-cache";
 
 function defaultPlatform(_studentId: string): VideoPlatform {
+  void _studentId;
   return "ZOOM";
 }
 

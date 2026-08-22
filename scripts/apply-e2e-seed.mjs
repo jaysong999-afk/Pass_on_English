@@ -208,46 +208,61 @@ const AUTH_USERS = [
   { id: IDS.guardian, email: "e2e-student-guardian@example.org", role: "student", fullName: "김수진", country: "KR", accountType: "guardian" },
 ];
 
-async function wipeE2e(db, admin) {
+async function wipeE2e(db) {
   const teacherIds = [IDS.james, IDS.emily, IDS.carlos];
   const studentIds = [IDS.lFresh, IDS.lHold, IDS.lPay, IDS.lActive, IDS.lRenew, IDS.lCn, IDS.lSib1, IDS.lSib2, IDS.lPending];
   const enrollmentIds = [IDS.enHold, IDS.enPay, IDS.enActive, IDS.enRenew, IDS.enCn, IDS.enSib1];
   const roomIds = [e2eId(401), e2eId(402), e2eId(403), e2eId(404)];
   const authIds = AUTH_USERS.map((u) => u.id);
 
-  const { data: extraEns } = await db.from("enrollments").select("id").in("student_id", studentIds);
+  const studentEnrollments = must(
+    await db.from("enrollments").select("id").in("student_id", studentIds),
+    "find E2E student enrollments"
+  );
+  const teacherEnrollments = must(
+    await db.from("enrollments").select("id").in("teacher_id", teacherIds),
+    "find E2E teacher enrollments"
+  );
   const extraEnrollmentIds = [...new Set([
     ...enrollmentIds,
-    ...(extraEns ?? []).map((row) => row.id),
+    ...studentEnrollments.map((row) => row.id),
+    ...teacherEnrollments.map((row) => row.id),
   ])];
+  const existingRooms = must(
+    await db.from("chat_rooms").select("id").in("enrollment_id", extraEnrollmentIds),
+    "find E2E chat rooms"
+  );
+  const allRoomIds = [...new Set([...roomIds, ...existingRooms.map((row) => row.id)])];
 
-  await db.from("chat_messages").delete().in("room_id", roomIds);
-  await db.from("lesson_feedbacks").delete().in("teacher_id", teacherIds);
-  await db.from("lesson_reschedule_requests").delete().in("teacher_id", teacherIds);
-  await db.from("lessons").delete().in("teacher_id", teacherIds);
-  await db.from("lessons").delete().in("student_id", studentIds);
-  await db.from("payments").delete().in("enrollment_id", extraEnrollmentIds);
-  await db.from("payments").delete().in("student_id", studentIds);
-  await db.from("chat_rooms").delete().in("id", roomIds);
-  await db.from("finance_transactions").delete().in("enrollment_id", extraEnrollmentIds);
-  await db.from("enrollments").delete().in("id", extraEnrollmentIds);
-  await db.from("enrollments").delete().in("student_id", studentIds);
-  await db.from("teacher_student_context").delete().in("teacher_id", teacherIds);
-  await db.from("monthly_growth_reports").delete().in("teacher_id", teacherIds);
-  await db.from("student_registration_reviews").delete().in("id", studentIds);
-  await db.from("teachers_weekly_availability").delete().in("teacher_id", teacherIds);
-  await db.from("notifications").delete().in("user_id", authIds);
-  await db.from("admin_review_logs").delete().like("target_id", "b0000001-%");
-  await db.from("students").delete().in("id", studentIds);
-  await db.from("teachers").delete().in("id", teacherIds);
-  await db.from("teacher_applications").delete().in("id", [IDS.appJames, IDS.appEmily, IDS.appCarlos]);
+  must(await db.from("chat_messages").delete().in("room_id", allRoomIds), "delete E2E chat messages");
+  must(await db.from("lesson_feedbacks").delete().in("teacher_id", teacherIds), "delete E2E feedbacks");
+  must(await db.from("lesson_reschedule_requests").delete().in("teacher_id", teacherIds), "delete E2E reschedule requests");
+  must(await db.from("lessons").delete().in("teacher_id", teacherIds), "delete E2E teacher lessons");
+  must(await db.from("lessons").delete().in("student_id", studentIds), "delete E2E student lessons");
+  must(await db.from("payments").delete().in("enrollment_id", extraEnrollmentIds), "delete E2E enrollment payments");
+  must(await db.from("payments").delete().in("student_id", studentIds), "delete E2E student payments");
+  must(await db.from("chat_rooms").delete().in("id", allRoomIds), "delete E2E chat rooms");
+  must(await db.from("finance_transactions").delete().in("enrollment_id", extraEnrollmentIds), "delete E2E finance transactions");
+  must(await db.from("enrollments").delete().in("id", extraEnrollmentIds), "delete E2E enrollments");
+  must(await db.from("teacher_student_context").delete().in("teacher_id", teacherIds), "delete E2E teacher contexts");
+  must(await db.from("monthly_growth_reports").delete().in("teacher_id", teacherIds), "delete E2E growth reports");
+  must(await db.from("student_registration_reviews").delete().in("id", studentIds), "delete E2E registration reviews");
+  must(await db.from("teachers_weekly_availability").delete().in("teacher_id", teacherIds), "delete E2E availability");
+  must(await db.from("teacher_availability_exceptions").delete().in("teacher_id", teacherIds), "delete E2E availability exceptions");
+  must(await db.from("teacher_bonuses").delete().in("teacher_id", teacherIds), "delete E2E teacher bonuses");
+  must(await db.from("teacher_monthly_attendance").delete().in("teacher_id", teacherIds), "delete E2E monthly attendance");
+  must(await db.from("quarterly_bonus_records").delete().in("teacher_id", teacherIds), "delete E2E quarterly bonuses");
+  must(await db.from("teacher_salary_statements").delete().in("teacher_id", teacherIds), "delete E2E salary statements");
+  must(await db.from("teacher_payroll_penalties").delete().in("teacher_id", teacherIds), "delete E2E payroll penalties");
+  must(await db.from("notifications").delete().in("user_id", authIds), "delete E2E notifications");
+  must(await db.from("admin_review_logs").delete().like("target_id", "b0000001-%"), "delete E2E review logs");
+  must(await db.from("students").delete().in("id", studentIds), "delete E2E students");
+  must(await db.from("teacher_applications").delete().in("id", [IDS.appJames, IDS.appEmily, IDS.appCarlos]), "delete E2E teacher applications");
+  must(await db.from("teachers").delete().in("id", teacherIds), "delete E2E teachers");
 
-  for (const user of AUTH_USERS) {
-    const { error } = await admin.auth.admin.deleteUser(user.id);
-    if (error && !/not found|does not exist/i.test(error.message)) {
-      throw new Error(`deleteUser ${user.email}: ${error.message}`);
-    }
-  }
+  // Keep the fixed Auth identities and refresh them in upsertAuth(). Deleting
+  // them is unnecessary and can fail when a test-only public row still holds
+  // a foreign key to profiles/auth.users during an interrupted seed run.
 }
 
 async function upsertAuth(admin, user) {
@@ -289,7 +304,7 @@ async function applyWithServiceRole() {
   });
 
   console.log("Applying E2E seed via service role…");
-  await wipeE2e(db, db);
+  await wipeE2e(db);
 
   for (const user of AUTH_USERS) {
     await upsertAuth(db, user);
@@ -622,7 +637,7 @@ async function applyWithServiceRole() {
     await db.from("finance_transactions").insert([
       { transaction_date: addDays(today, -21), type: "income", category: "student_payment_kr", description: "정예린 — 월·수·금 20분", currency: "KRW", amount: byType.mwf_20min.price_krw, amount_krw: byType.mwf_20min.price_krw, supply_amount: mwfTax.supply, vat_amount: mwfTax.vat, tax_treatment: "taxable", source: "auto", student_name: "정예린", enrollment_id: IDS.enActive },
       { transaction_date: addDays(today, -56), type: "income", category: "student_payment_kr", description: "한지호 — 주5회(월~금) 20분", currency: "KRW", amount: byType.weekday5_20min.price_krw, amount_krw: byType.weekday5_20min.price_krw, supply_amount: wd5Tax.supply, vat_amount: wd5Tax.vat, tax_treatment: "taxable", source: "auto", student_name: "한지호", enrollment_id: IDS.enRenew },
-      { transaction_date: addDays(today, -21), type: "income", category: "student_payment_cn", description: "王小明 — 주말(토·일) 20분", currency: "CNY", amount: byType.weekend_20min.price_cny, amount_krw: byType.weekend_20min.price_cny * 190, supply_amount: byType.weekend_20min.price_cny * 190, vat_amount: 0, tax_treatment: "non_taxable", source: "auto", student_name: "王小明", enrollment_id: IDS.enCn },
+      { transaction_date: addDays(today, -21), type: "income", category: "student_payment_cn", description: "王小明 — 주말(토·일) 20분", currency: "CNY", amount: byType.weekend_20min.price_cny, amount_krw: byType.weekend_20min.price_cny * 190, supply_amount: byType.weekend_20min.price_cny * 190, vat_amount: 0, tax_treatment: "non_taxable", source: "auto", student_name: "王小明", enrollment_id: IDS.enCn, exchange_rate: 190, exchange_rate_source: "e2e-seed-fixed", exchange_rate_at: now.toISOString() },
     ]),
     "finance"
   );
@@ -655,7 +670,7 @@ async function verify(db) {
 
   const { data: lessons, error: lessonError } = await db
     .from("lessons")
-    .select("id, scheduled_at, duration_minutes, preferred_slot_time:scheduled_at")
+    .select("id, teacher_id, scheduled_at, duration_minutes, preferred_slot_time:scheduled_at")
     .in("teacher_id", [IDS.james, IDS.emily]);
   if (lessonError) throw new Error(lessonError.message);
   const badLessons = (lessons ?? []).filter((l) => {

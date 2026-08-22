@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies, headers } from "next/headers";
+import { createPrivilegedClient } from "@/lib/supabase/admin";
 
 function supabaseUrl() {
   return process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co";
@@ -25,6 +26,11 @@ export async function createClient() {
   const headerStore = await headers();
   const authHeader = headerStore.get("authorization");
   if (authHeader?.startsWith("Bearer ")) {
+    const bearer = authHeader.slice(7).trim();
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    if (cronSecret && bearer === cronSecret) {
+      return createPrivilegedClient();
+    }
     return createSupabaseClient(supabaseUrl(), supabaseAnonKey(), {
       global: { headers: { Authorization: authHeader } },
     });

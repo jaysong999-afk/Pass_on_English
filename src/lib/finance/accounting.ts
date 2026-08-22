@@ -116,6 +116,7 @@ export function computeMonthlySummary(
   monthKey: string,
   _rates: ExchangeRates
 ): MonthlyPlSummary {
+  void _rates;
   const inMonth = transactions.filter((t) => t.date.startsWith(monthKey));
 
   const income = inMonth.filter((t) => t.type === "income");

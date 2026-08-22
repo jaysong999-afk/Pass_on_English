@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     let rawTeacherId: string;
     try {
       rawTeacherId = explicitTeacherId ?? (await resolveRawTeacherId(null));
-    } catch (error) {
+    } catch {
       if (!explicitTeacherId) {
         return NextResponse.json({ error: "teacherId required" }, { status: 400 });
       }

@@ -1,8 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Lesson, LessonStatus } from "@/types";
 import { LESSON_MINUTES } from "@/lib/availability/constants";
-import { getDateKeyInTimezone } from "@/lib/availability/timezone";
-import { getFeedbackByLesson } from "@/lib/learning-store-sync";
 import { createBootstrapDbClient } from "@/lib/supabase/db-client";
 import { createClient } from "@/lib/supabase/server";
 import {

@@ -2,7 +2,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient, getBearerAccessToken } from "@/lib/supabase/server";
 import { createPrivilegedClient } from "@/lib/supabase/admin";
 import type { AuthContext, AuthProfile, UserRole } from "@/lib/auth/types";
-import { AuthError, forbidden, unauthorized, wrongRole } from "@/lib/auth/errors";
+import { forbidden, unauthorized, wrongRole } from "@/lib/auth/errors";
 
 interface ProfileRow {
   id: string;

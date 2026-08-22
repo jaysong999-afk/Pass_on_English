@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { AuthContext, UserRole } from "@/lib/auth/types";
-import { AuthError, isAuthError } from "@/lib/auth/errors";
+import { isAuthError } from "@/lib/auth/errors";
 import { requireRole } from "@/lib/auth/session";
 
 export async function guardApiRole(role: UserRole): Promise<AuthContext | NextResponse> {

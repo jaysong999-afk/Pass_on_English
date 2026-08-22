@@ -25,7 +25,6 @@ import type {
   AddLearnerInput,
   BookTrialInput,
   LearnerSurveyInput,
-  RegisterAccountInput,
 } from "@/lib/account-store.types";
 import { countryToTimezone } from "@/lib/account-location";
 import { studentDbRowToLearner, type StudentDbRow } from "@/lib/students/db-types";

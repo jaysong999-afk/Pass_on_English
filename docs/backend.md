@@ -291,7 +291,7 @@
 | GET | `/api/admin/messages/campaigns` | Push tab history | 🗄️ `admin_broadcasts` | `{ campaigns, totals }` |
 | GET/PATCH | `/api/admin/messages/notification-rules` | Push tab rules | 🗄️ `system_notification_rules` | PATCH: `{ rules: [{ id, enabled }] }` |
 | GET | `/api/admin/messages/quick-replies` | Quick reply templates | constants | — |
-| GET/POST | `/api/cron/process-scheduled-broadcasts` | Vercel Cron | 🗄️ `admin_broadcasts` | CRON_SECRET · 예약 발송 처리 |
+| GET/POST | `/api/cron/process-scheduled-broadcasts` | Lighthouse 내부 scheduler | 🗄️ `admin_broadcasts` | CRON_SECRET · 예약 발송 처리 |
 | GET/POST/PUT | `/api/teachers/profile`, `[id]` | teacher-profiles | 🗄️ `teachers` | GET public list; **POST signup step2 (teacher auth)**; `[id]` PUT |
 
 **PATCH `/api/admin/reviews`**

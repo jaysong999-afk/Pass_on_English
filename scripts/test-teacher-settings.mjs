@@ -54,6 +54,7 @@ const editable = (settings, temporary = false) => ({
   phone: temporary ? "+63-917-999-0001" : settings.phone,
   address: temporary ? `${settings.address} Test` : settings.address,
   messengerId: temporary ? `${settings.messengerId}-test` : settings.messengerId,
+  videoPlatforms: settings.teacher.videoPlatforms,
 });
 
 try {

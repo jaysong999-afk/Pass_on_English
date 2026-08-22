@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse } from "@/lib/auth/api-guard";
 import { requireTeacherAuth } from "@/lib/auth/session";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureAccountSession } from "@/lib/account-store";

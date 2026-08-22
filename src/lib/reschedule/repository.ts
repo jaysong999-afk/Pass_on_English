@@ -388,26 +388,35 @@ export async function cancelRescheduleRequestInDb(
 }
 
 export function createRescheduleRequest(_input: CreateRescheduleInput) {
+  void _input;
   throw new Error("deprecated: use createRescheduleRequestInDb");
 }
 
 export function approveRescheduleRequest(_id: string, _role: "teacher" | "student") {
+  void _id;
+  void _role;
   throw new Error("deprecated: use approveRescheduleRequestInDb");
 }
 
 export function rejectRescheduleRequest(_id: string, _role: "teacher" | "student") {
+  void _id;
+  void _role;
   throw new Error("deprecated: use rejectRescheduleRequestInDb");
 }
 
 export function adminApproveRescheduleRequest(_id: string) {
+  void _id;
   throw new Error("deprecated: use adminApproveRescheduleRequestInDb");
 }
 
 export function adminRejectRescheduleRequest(_id: string) {
+  void _id;
   throw new Error("deprecated: use adminRejectRescheduleRequestInDb");
 }
 
 export function cancelRescheduleRequest(_id: string, _role: "teacher" | "student") {
+  void _id;
+  void _role;
   throw new Error("deprecated: use cancelRescheduleRequestInDb");
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PAYMENT_DISPLAY_HOURS } from "@/lib/enrollment-hold/constants";
 
 function formatRemaining(deadlineIso: string): string {
@@ -25,14 +25,14 @@ export function PaymentDeadlineCountdown({
   holdStartsAt?: string;
   waitingLabel?: string;
 }) {
-  const computeLabel = () => {
+  const computeLabel = useCallback(() => {
     if (new Date(deadlineAt).getTime() <= Date.now()) return expiredLabel;
     if (holdStartsAt && new Date(holdStartsAt).getTime() > Date.now()) {
       const untilStart = formatRemaining(holdStartsAt);
       return waitingLabel ? `${waitingLabel} ${untilStart}` : untilStart;
     }
     return formatRemaining(deadlineAt);
-  };
+  }, [deadlineAt, expiredLabel, holdStartsAt, waitingLabel]);
 
   const [label, setLabel] = useState(computeLabel);
 
@@ -41,7 +41,7 @@ export function PaymentDeadlineCountdown({
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [deadlineAt, expiredLabel, holdStartsAt, waitingLabel]);
+  }, [computeLabel]);
 
   const expired = new Date(deadlineAt).getTime() <= Date.now();
 

@@ -43,7 +43,7 @@ import { PAYMENT_DISPLAY_HOURS, paymentHoldStartsAt, studentFacingPaymentDeadlin
 import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
 import { formatPlanLabel } from "@/lib/pricing-plan-display";
 
-import { useActiveLearner, useActiveLearnerId } from "@/contexts/ActiveLearnerContext";
+import { useActiveLearnerId } from "@/contexts/ActiveLearnerContext";
 
 function enrollmentStatusBadge(
   status: EnrollmentStatus,
@@ -240,7 +240,6 @@ export function EnrollmentDashboard({
   const learnerId = useActiveLearnerId();
   const studentId = studentIdProp ?? learnerId;
   const locale = useLocale() as Locale;
-  const { account: _account } = useActiveLearner();
   const t = useTranslations("studentPortal.enrollment");
   const tCommon = useTranslations("studentPortal.common");
   const base = useStudentBasePath();

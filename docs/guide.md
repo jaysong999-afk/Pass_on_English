@@ -399,7 +399,7 @@ Pass_on_English/
 
 ### Phase 4 — 배포·QA
 
-- [ ] Tencent Cloud HK 배포
+- [ ] Tencent Cloud HK Lighthouse 배포 (Docker 구성 완료, 도메인·HTTPS 대기)
 - [ ] 한·중 접속 테스트
 - [ ] PWA iOS/Android 검증 (실제 install prompt)
 - [x] Auth·RLS 1·2차 (세션 UUID, 학생 API, pricing mutation 보호)
@@ -415,11 +415,13 @@ Pass_on_English/
 
 | 구성요소 | 옵션 |
 |----------|------|
-| Next.js | Docker on CVM 또는 TKE |
+| Next.js | Docker Compose on Tencent Cloud Lighthouse (Hong Kong) |
 | CDN | Tencent Cloud CDN (정적 자산) |
 | SSL | Tencent SSL / Let's Encrypt |
 | DNS | DNSPod — dual region resolve |
-| DB | Supabase Cloud (가까운 리전) 또는 self-host PostgreSQL on HK CVM |
+| DB | Supabase Cloud (현재 구성 유지) |
+
+배포 파일과 서버 체크리스트는 [`deploy/tencent-lighthouse/README.md`](../deploy/tencent-lighthouse/README.md)를 따른다.
 
 ### 9.2 체크리스트
 

@@ -35,6 +35,7 @@
     "apply:rls": "node scripts/apply-rls.mjs",
     "test:rls": "node scripts/test-rls.mjs",
     "test:transactions": "node scripts/test-transaction-boundaries.mjs",
+    "test:release-reconciliation": "node scripts/test-release-reconciliation.mjs",
     "test:admin-page-auth": "node scripts/test-admin-page-auth.mjs"
   },
   "dependencies": {

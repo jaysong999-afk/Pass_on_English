@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createPrivilegedClient } from "@/lib/supabase/admin";
 import type { UserRole } from "@/lib/auth/types";
 import { fetchAuthProfile } from "@/lib/auth/session";
-import { AuthError, forbidden, unauthorized, wrongRole } from "@/lib/auth/errors";
+import { AuthError, forbidden, wrongRole } from "@/lib/auth/errors";
 
 function parseRole(value: unknown): UserRole | null {
   if (value === "student" || value === "teacher" || value === "admin") {

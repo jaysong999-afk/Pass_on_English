@@ -61,7 +61,7 @@ export function WeeklyAvailabilityGrid({
         [day]: [...set].sort((a, b) => a.localeCompare(b)),
       });
     },
-    [onChange, slots]
+    [onChange, readOnly, slots]
   );
 
   return (

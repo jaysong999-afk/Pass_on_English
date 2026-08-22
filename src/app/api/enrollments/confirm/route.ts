@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import type { Locale } from "@/lib/i18n/config";
-import type { DayLabel } from "@/lib/availability/types";
 import { ensureAccountSession, getAccountHolder, getActiveLearner, getLearnerById } from "@/lib/account-store";
 import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { getPricingPlanById, warmPricingPlanCache } from "@/lib/pricing-plans/repository";
