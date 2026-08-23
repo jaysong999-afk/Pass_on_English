@@ -65,13 +65,25 @@ Before production traffic:
 
 1. Point the service domain A record to the Lighthouse public IPv4 address.
 2. Confirm the record from Korea and mainland China.
-3. Install the selected TLS certificate and change Nginx to publish 443.
-4. Set `NEXT_PUBLIC_APP_URL=https://<production-domain>` and rebuild.
-5. Confirm HTTP redirects to HTTPS and `/api/health` returns HTTP 200.
-6. Confirm PWA installation and Web Push on the final HTTPS origin.
+3. Create `certbot/www` and start the temporary HTTP configuration with
+   `docker compose -f docker-compose.yml -f docker-compose.http.yml up -d nginx`.
+   Issue the certificate with Certbot's webroot method for both the apex and
+   `www` names.
+4. Run the normal `docker compose up -d nginx` command to switch to
+   `nginx-https.conf`. The final Compose file publishes 443 and mounts
+   `/etc/letsencrypt` read-only.
+5. Set `NEXT_PUBLIC_APP_URL=https://<production-domain>` and rebuild.
+6. Confirm HTTP redirects to HTTPS and `/api/health` returns HTTP 200.
+7. Confirm PWA installation and Web Push on the final HTTPS origin.
 
-The repository deliberately starts with HTTP-only Nginx until the real domain and
-certificate method are confirmed; it must not be treated as production-ready HTTPS.
+Certbot's systemd timer renews certificates automatically. Add a deploy hook in
+`/etc/letsencrypt/renewal-hooks/deploy/` that runs `nginx -s reload` inside the
+Compose Nginx service so a renewed certificate is picked up without downtime.
+The included `reload-nginx-after-renewal.sh` script is ready to symlink into that
+directory on the server; make it executable with `chmod 755` first.
+
+The normal Compose configuration is the production HTTPS configuration. Use the
+HTTP override only for initial certificate bootstrapping or recovery.
 
 ## Upgrade and rollback
 
