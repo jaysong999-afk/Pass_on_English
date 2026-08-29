@@ -10,11 +10,13 @@ import {
   getPaymentRecordsByStudent,
 } from "@/lib/enrollment-store-sync";
 import { decorateEnrollmentRenewal } from "@/lib/enrollments/renewal-window";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureAccountSession, getActiveLearner, getLearnerById } from "@/lib/account-store";
+import {
+  ensureEnrollmentsBootstrapped,
+  ensureSchedulesBootstrapped,
+} from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
-  await ensureSchedulesBootstrapped();
   const { searchParams } = new URL(request.url);
   const studentId = searchParams.get("studentId");
 
@@ -36,6 +38,7 @@ export async function GET(request: Request) {
     return authErrorResponse(error);
   }
 
+  await ensureEnrollmentsBootstrapped();
   const data = studentId ? getEnrollmentsByStudent(studentId) : getAllEnrollments();
   const enrollments = data.map((enrollment) => decorateEnrollmentRenewal(enrollment));
   const payments = studentId ? getPaymentRecordsByStudent(studentId) : undefined;

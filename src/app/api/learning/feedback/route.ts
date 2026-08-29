@@ -4,16 +4,18 @@ import { assertLearnerAccess, requireTeacherAuth } from "@/lib/auth/session";
 import {
   addLessonFeedbackInDb,
   markFeedbackReadInDb,
-  warmLearningCache,
 } from "@/lib/learning/repository";
 import { getFeedbacksByStudent } from "@/lib/learning-store-sync";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import {
+  ensureLearningBootstrapped,
+  ensureSchedulesBootstrapped,
+} from "@/lib/lesson-scheduler-bootstrap";
 import { getLessonById } from "@/lib/teacher-lesson-store-sync";
 
 export async function GET(request: Request) {
   await ensureSchedulesBootstrapped();
   try {
-    await warmLearningCache();
+    await ensureLearningBootstrapped();
   } catch (error) {
     console.error("[learning/feedback GET] warm cache", error);
   }

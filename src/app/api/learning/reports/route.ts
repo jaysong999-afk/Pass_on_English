@@ -4,15 +4,17 @@ import { assertLearnerAccess, requireTeacherAuth } from "@/lib/auth/session";
 import {
   addMonthlyReportInDb,
   markReportReadInDb,
-  warmLearningCache,
 } from "@/lib/learning/repository";
 import { getReportsByStudent, getReportsByTeacher } from "@/lib/learning-store-sync";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import {
+  ensureLearningBootstrapped,
+  ensureSchedulesBootstrapped,
+} from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
   await ensureSchedulesBootstrapped();
   try {
-    await warmLearningCache();
+    await ensureLearningBootstrapped();
   } catch (error) {
     console.error("[learning/reports GET] warm cache", error);
   }

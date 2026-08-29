@@ -10,7 +10,10 @@ import {
   getTodayLessons,
 } from "@/lib/teacher-lesson-store-sync";
 import { resolveTeacherId } from "@/lib/teachers/resolve-teacher-id";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import {
+  ensureEnrollmentsBootstrapped,
+  ensureLessonsBootstrapped,
+} from "@/lib/lesson-scheduler-bootstrap";
 import { ensureStudentEnrollmentLessonsInDb } from "@/lib/lessons/schedule-service";
 import { listStudentLessonsInDb } from "@/lib/lessons/repository";
 import { getEnrollmentById } from "@/lib/enrollments/repository";
@@ -67,7 +70,6 @@ async function hubPayload(teacherId: string, userId: string, timeZone: string) {
 }
 
 export async function GET(request: Request) {
-  await ensureSchedulesBootstrapped();
   const { searchParams } = new URL(request.url);
   const timeZone = searchParams.get("timeZone") ?? TEACHER_TIMEZONE;
   const scope = searchParams.get("scope");
@@ -102,6 +104,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    await Promise.all([ensureLessonsBootstrapped(), ensureEnrollmentsBootstrapped()]);
     const { teacherId: sessionTeacherId, userId } = await requireTeacherAuth();
     const rawTeacherId = searchParams.get("teacherId");
     const resolvedId = rawTeacherId ? resolveTeacherId(rawTeacherId) : sessionTeacherId;

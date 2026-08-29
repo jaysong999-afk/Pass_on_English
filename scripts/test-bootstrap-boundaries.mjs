@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readdirSync, readFileSync, statSync } from "fs";
 import { resolve } from "path";
 
 const root = process.cwd();
@@ -12,6 +12,10 @@ const availabilityRouteSource = readFileSync(
 );
 const cronRouteSource = readFileSync(
   resolve(root, "src/app/api/cron/expire-enrollment-holds/route.ts"),
+  "utf8"
+);
+const teacherSlotsRouteSource = readFileSync(
+  resolve(root, "src/app/api/enrollment/teacher-slots/route.ts"),
   "utf8"
 );
 const serverSupabaseSource = readFileSync(
@@ -28,6 +32,17 @@ function section(source, startMarker, endMarker) {
   return source.slice(start, end);
 }
 
+function sourceFilesUnder(directory) {
+  return readdirSync(directory).flatMap((name) => {
+    const path = resolve(directory, name);
+    return statSync(path).isDirectory()
+      ? sourceFilesUnder(path)
+      : path.endsWith(".ts") || path.endsWith(".tsx")
+        ? [path]
+        : [];
+  });
+}
+
 const readBootstrap = section(
   bootstrapSource,
   "export async function ensureReadModelsBootstrapped",
@@ -37,6 +52,11 @@ const availabilityGet = section(
   availabilityRouteSource,
   "export async function GET",
   "export async function PUT"
+);
+const publicBootstrap = section(
+  bootstrapSource,
+  "export async function ensurePublicContentBootstrapped",
+  "export async function ensureEnrollmentAvailabilityBootstrapped"
 );
 
 for (const mutation of [
@@ -57,6 +77,21 @@ if (availabilityGet.includes("restoreOccupiedWeeklyAvailabilityInDb")) {
 if (!bootstrapSource.includes("export async function runScheduleMaintenanceInDb")) {
   throw new Error("explicit schedule maintenance entry point is missing");
 }
+if (!readBootstrap.includes("ensureReadModel")) {
+  throw new Error("read models must use shared one-time initialization");
+}
+if (publicBootstrap.includes("warmAllTeacherAvailabilityCache")) {
+  throw new Error("public marketing bootstrap must not download teacher availability");
+}
+if (!teacherSlotsRouteSource.includes("ensureEnrollmentAvailabilityBootstrapped")) {
+  throw new Error("enrollment teacher comparison must retain availability loading");
+}
+for (const apiFile of sourceFilesUnder(resolve(root, "src/app/api"))) {
+  const source = readFileSync(apiFile, "utf8");
+  if (/\bwarm[A-Z][A-Za-z]+Cache\(\)/.test(source)) {
+    throw new Error(`API route bypasses shared read-model initialization: ${apiFile}`);
+  }
+}
 if (!cronRouteSource.includes("runScheduleMaintenanceInDb")) {
   throw new Error("enrollment maintenance cron is not connected to the maintenance entry point");
 }
@@ -71,3 +106,6 @@ console.log("PASS read bootstrap contains no persisted-state maintenance calls")
 console.log("PASS teacher availability GET contains no availability upsert");
 console.log("PASS scheduled maintenance is explicit and cron-connected");
 console.log("PASS cron bearer authentication is isolated from Supabase user JWT handling");
+console.log("PASS read models share initialization instead of reloading on every API request");
+console.log("PASS public pages do not download weekly teacher availability");
+console.log("PASS API routes do not directly reload full caches per request");

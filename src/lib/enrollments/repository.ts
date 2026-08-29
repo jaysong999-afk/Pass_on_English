@@ -277,10 +277,28 @@ export async function warmEnrollmentCache(): Promise<StudentEnrollment[]> {
   });
   setPaymentCache(paymentRecords);
 
-  await dedupeAllRenewalHoldsInDb();
-  await syncEnrollmentCompletionStatusInDb();
-
   return getEnrollmentCache();
+}
+
+export async function listStudentEnrollmentsInDb(
+  studentId: string
+): Promise<StudentEnrollment[]> {
+  const supabase = createBootstrapDbClient();
+  const enrollmentResult = await supabase
+    .from("enrollments")
+    .select(ENROLLMENT_SELECT)
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+
+  if (enrollmentResult.error) {
+    throw new Error(`student_enrollments_fetch_failed: ${enrollmentResult.error.message}`);
+  }
+  const enrollments = ((enrollmentResult.data ?? []) as EnrollmentRow[]).map((row) =>
+    rowToEnrollment(row)
+  );
+
+  for (const enrollment of enrollments) patchEnrollmentInCache(enrollment);
+  return enrollments;
 }
 
 export interface CreateEnrollmentInput {
@@ -836,13 +854,20 @@ export async function cancelEnrollmentHoldInDb(
 }
 
 export async function expireEnrollmentHoldsInDb(now = new Date()): Promise<number> {
-  const due = getEnrollmentCache().filter(
-    (e) =>
-      e.status === "pending_payment" &&
-      (e.paymentStatus === "pending" || e.paymentStatus === "reported") &&
-      e.paymentDeadlineAt &&
-      new Date(e.paymentDeadlineAt) <= now
-  );
+  const lookup = createBootstrapDbClient();
+  const { data, error: lookupError } = await lookup
+    .from("enrollments")
+    .select(ENROLLMENT_SELECT)
+    .eq("status", "pending_payment")
+    .in("payment_status", ["pending", "reported"])
+    .not("payment_deadline_at", "is", null)
+    .lte("payment_deadline_at", now.toISOString());
+
+  if (lookupError) {
+    throw new Error(`expired_enrollment_holds_fetch_failed: ${lookupError.message}`);
+  }
+
+  const due = ((data ?? []) as EnrollmentRow[]).map((row) => rowToEnrollment(row));
 
   let count = 0;
   for (const enrollment of due) {

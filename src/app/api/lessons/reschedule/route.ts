@@ -7,7 +7,6 @@ import {
   approveRescheduleRequestInDb,
   cancelRescheduleRequestInDb,
   rejectRescheduleRequestInDb,
-  warmRescheduleCache,
 } from "@/lib/reschedule/repository";
 import {
   getAllRescheduleRequests,
@@ -17,17 +16,14 @@ import {
   getRescheduleRequestById,
   STUDENT_RESCHEDULE_MONTHLY_LIMIT,
 } from "@/lib/reschedule-store-sync";
-import { warmLessonCache } from "@/lib/lessons/repository";
 import { getLessonById } from "@/lib/teacher-lesson-store-sync";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import {
+  ensureLessonsBootstrapped,
+  ensureReschedulesBootstrapped,
+  ensureSchedulesBootstrapped,
+} from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
-  try {
-    await ensureSchedulesBootstrapped();
-  } catch (error) {
-    console.error("[lessons/reschedule GET] bootstrap", error);
-  }
-
   const { searchParams } = new URL(request.url);
   const teacherId = searchParams.get("teacherId");
   const studentId = searchParams.get("studentId");
@@ -35,6 +31,12 @@ export async function GET(request: Request) {
 
   const context = await getAuthContext();
   if (!context) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  try {
+    await ensureReschedulesBootstrapped();
+  } catch (error) {
+    console.error("[lessons/reschedule GET] cache warm", error);
+  }
 
   if (scope === "all" && context.profile.role === "admin") {
     return NextResponse.json({ requests: getAllRescheduleRequests() });
@@ -78,8 +80,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     await ensureSchedulesBootstrapped();
-    await warmLessonCache();
-    await warmRescheduleCache();
+    await Promise.all([ensureLessonsBootstrapped(), ensureReschedulesBootstrapped()]);
 
     const body = await request.json();
     const lessonId = body.lessonId as string;
@@ -141,7 +142,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "invalid_body" }, { status: 400 });
     }
 
-    await warmRescheduleCache();
+    await ensureReschedulesBootstrapped();
     const current = getRescheduleRequestById(id);
     if (!current) return NextResponse.json({ error: "not_found" }, { status: 404 });
     const context = await getAuthContext();

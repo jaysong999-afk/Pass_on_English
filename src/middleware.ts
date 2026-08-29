@@ -45,9 +45,10 @@ function isIntlRoute(pathname: string): boolean {
 async function enforceRoles(
   request: NextRequest,
   response: NextResponse,
-  requiredRoles: UserRole[]
+  requiredRoles: UserRole[],
+  auth: Awaited<ReturnType<typeof getMiddlewareAuthUser>>
 ): Promise<NextResponse | null> {
-  const { supabase, user } = await getMiddlewareAuthUser(request, response);
+  const { supabase, user } = auth;
 
   if (!user) {
     if (request.nextUrl.pathname.startsWith("/api/")) {
@@ -99,9 +100,10 @@ async function enforceRoles(
 async function enforceRole(
   request: NextRequest,
   response: NextResponse,
-  requiredRole: UserRole
+  requiredRole: UserRole,
+  auth: Awaited<ReturnType<typeof getMiddlewareAuthUser>>
 ): Promise<NextResponse | null> {
-  return enforceRoles(request, response, [requiredRole]);
+  return enforceRoles(request, response, [requiredRole], auth);
 }
 
 export async function middleware(request: NextRequest) {
@@ -127,18 +129,18 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  await getMiddlewareAuthUser(request, response);
+  const auth = await getMiddlewareAuthUser(request, response);
 
   const pageRole = requiredRoleForPage(pathname);
   if (pageRole && !isPublicPagePath(pathname)) {
-    const denied = await enforceRole(request, response, pageRole);
+    const denied = await enforceRole(request, response, pageRole, auth);
     if (denied) return denied;
   }
 
   if (pathname.startsWith("/api/")) {
     const apiRoles = requiredRolesForApi(pathname, request.method);
     if (apiRoles) {
-      const denied = await enforceRoles(request, response, apiRoles);
+      const denied = await enforceRoles(request, response, apiRoles, auth);
       if (denied) return denied;
     }
   }

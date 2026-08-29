@@ -21,6 +21,7 @@ import type { LessonRescheduleRequest } from "@/types";
 interface RescheduleProgressPanelProps {
   role: "teacher" | "student" | "admin";
   fetchUrl: string;
+  initialRequests?: LessonRescheduleRequest[];
   timeZone?: string;
   locale?: "en" | "ko" | "zh";
   title: string;
@@ -41,6 +42,7 @@ interface RescheduleProgressPanelProps {
 export function RescheduleProgressPanel({
   role,
   fetchUrl,
+  initialRequests,
   timeZone,
   locale = "en",
   title,
@@ -82,8 +84,13 @@ export function RescheduleProgressPanel({
   }, [fetchUrl]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (initialRequests !== undefined) {
+      setRequests(initialRequests);
+      setLoading(false);
+      return;
+    }
+    void load();
+  }, [initialRequests, load]);
 
   const handleAction = async (id: string, action: "approve" | "reject" | "cancel") => {
     if (role === "admin") return;

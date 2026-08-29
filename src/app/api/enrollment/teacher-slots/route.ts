@@ -4,8 +4,8 @@ import {
   sortTeachersByPlanAvailability,
 } from "@/lib/teacher-availability";
 import {
-  ensurePublicContentBootstrapped,
-  ensureSchedulesBootstrapped,
+  ensureEnrollmentAvailabilityBootstrapped,
+  ensureLessonsBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
 import { getPublicTeachers } from "@/lib/teacher-profile-store-sync";
 import { ensureTeacherAvailabilityLoaded } from "@/lib/teacher-availability/repository";
@@ -26,8 +26,6 @@ function parseScheduleDays(raw: string | null): string[] {
 
 export async function GET(request: Request) {
   try {
-    await ensurePublicContentBootstrapped();
-
     const { searchParams } = new URL(request.url);
     const scheduleDays = parseScheduleDays(searchParams.get("scheduleDays"));
     const sessionMinutes = Number(searchParams.get("sessionMinutes") ?? 20);
@@ -50,7 +48,7 @@ export async function GET(request: Request) {
           return NextResponse.json({ error: "invalid_date" }, { status: 400 });
         }
 
-        await ensureSchedulesBootstrapped();
+        await ensureLessonsBootstrapped();
         const lesson = lessonId ? getLessonById(lessonId) : undefined;
         const day = getDayLabelInTimezone(new Date(`${date}T12:00:00Z`), CANONICAL_TIMEZONE);
         const openSlots = generateGridStartTimes()
@@ -82,6 +80,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ openSlots });
     }
 
+    await ensureEnrollmentAvailabilityBootstrapped();
     const teachers = getPublicTeachers();
     const sorted = sortTeachersByPlanAvailability(teachers, scheduleDays, minutes);
 

@@ -3,6 +3,7 @@ import { CANONICAL_TIMEZONE, LESSON_MINUTES } from "@/lib/availability/constants
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
 import { snapIsoToSlotGrid } from "@/lib/availability/time-utils";
 import { createClient } from "@/lib/supabase/server";
+import { createBootstrapDbClient } from "@/lib/supabase/db-client";
 import { warmEnrollmentCache } from "@/lib/enrollments/repository";
 import { isTeacherSlotFree } from "@/lib/lessons/schedule-service";
 import { restoreOccupiedWeeklyAvailabilityInDb } from "@/lib/teacher-availability/repository";
@@ -121,6 +122,43 @@ export async function warmRescheduleCache(): Promise<LessonRescheduleRequest[]> 
   const requests = rows.map((row) => rowToRequest(row));
   setRescheduleCache(requests);
   return requests;
+}
+
+export async function listStudentRescheduleRequestsInDb(
+  studentId: string,
+  month = monthKey()
+): Promise<{
+  requests: LessonRescheduleRequest[];
+  makeupRemaining: number;
+  makeupLimit: number;
+}> {
+  const supabase = createBootstrapDbClient();
+  const { data, error } = await supabase
+    .from("lesson_reschedule_requests")
+    .select(RESCHEDULE_SELECT)
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`student_reschedule_fetch_failed: ${error.message}`);
+  }
+
+  const requests = ((data ?? []) as unknown as RescheduleRow[]).map((row) =>
+    rowToRequest(row)
+  );
+  const used = requests.filter(
+    (request) =>
+      request.initiator === "student" &&
+      request.requestMonth === month &&
+      request.status !== "cancelled"
+  ).length;
+
+  for (const request of requests) patchRescheduleInCache(request);
+  return {
+    requests,
+    makeupRemaining: Math.max(0, STUDENT_RESCHEDULE_MONTHLY_LIMIT - used),
+    makeupLimit: STUDENT_RESCHEDULE_MONTHLY_LIMIT,
+  };
 }
 
 export {

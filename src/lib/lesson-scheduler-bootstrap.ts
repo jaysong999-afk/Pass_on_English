@@ -1,5 +1,11 @@
 import { warmPricingPlanCache } from "@/lib/pricing-plans/repository";
-import { expireEnrollmentHoldsInDb, ensureRenewalOffersInDb, warmEnrollmentCache } from "@/lib/enrollments/repository";
+import {
+  dedupeAllRenewalHoldsInDb,
+  expireEnrollmentHoldsInDb,
+  ensureRenewalOffersInDb,
+  syncEnrollmentCompletionStatusInDb,
+  warmEnrollmentCache,
+} from "@/lib/enrollments/repository";
 import { warmLessonCache } from "@/lib/lessons/repository";
 import { warmRescheduleCache } from "@/lib/reschedule/repository";
 import { restoreOccupiedWeeklyAvailabilityInDb, warmAllTeacherAvailabilityCache } from "@/lib/teacher-availability/repository";
@@ -23,39 +29,69 @@ import { warmStudentDirectoryCache } from "@/lib/students/repository";
 import { warmAdminMessagingCache } from "@/lib/admin/messages/repository";
 
 let enrollmentSchedulesSynced = false;
+let maintenanceInitialized = false;
+let maintenanceInitialization: Promise<void> | null = null;
+let lastMaintenanceRefreshAt = 0;
+const MAINTENANCE_REFRESH_MS = 15 * 60 * 1000;
 
-async function runWarm(label: string, fn: () => Promise<unknown>) {
-  try {
+const initializedReadModels = new Set<string>();
+const readModelInitializations = new Map<string, Promise<void>>();
+
+/**
+ * Populate a process-local read model once and share concurrent initialization.
+ * Repository mutations patch their related caches, so request handlers do not
+ * need to download every table again on each request.
+ */
+async function ensureReadModel(label: string, fn: () => Promise<unknown>): Promise<void> {
+  if (initializedReadModels.has(label)) return;
+
+  const pending = readModelInitializations.get(label);
+  if (pending) {
+    await pending;
+    return;
+  }
+
+  const initialization = (async () => {
     await fn();
+    initializedReadModels.add(label);
+  })();
+  readModelInitializations.set(label, initialization);
+
+  try {
+    await initialization;
   } catch (error) {
     console.error(`[ensureReadModelsBootstrapped] ${label}`, error);
+  } finally {
+    readModelInitializations.delete(label);
   }
 }
 
 /** Server-only: populate in-memory read models without changing persisted state. */
 export async function ensureReadModelsBootstrapped(): Promise<void> {
-  await runWarm("pricing plans", warmPricingPlanCache);
-  await runWarm("enrollments", warmEnrollmentCache);
-  await runWarm("student directory", warmStudentDirectoryCache);
-  await runWarm("admin messaging", warmAdminMessagingCache);
-  await runWarm("lessons", warmLessonCache);
-  await runWarm("reschedule", warmRescheduleCache);
-  await runWarm("teacher availability", warmAllTeacherAvailabilityCache);
-  await runWarm("learning", warmLearningCache);
-  await runWarm("salary", warmSalaryCache);
-  await runWarm("faq", warmFaqCache);
-  await runWarm("dashboard settings", warmDashboardSettingsCache);
-  await runWarm("teacher applications", warmTeacherApplicationCache);
-  await runWarm("admin review logs", () => warmAdminReviewLogCache());
-  await runWarm("admin lesson operation logs", warmAdminLessonOperationLogCache);
-  await runWarm("teacher payroll penalties", warmTeacherPayrollPenaltyCache);
-  await runWarm("salary bonus policy", warmSalaryBonusPolicyCache);
-  await runWarm("salary adjustments", warmTeacherSalaryAdjustmentCache);
-  await runWarm("teacher student context", warmTeacherStudentContextCache);
-  await runWarm("teacher profiles", warmTeacherProfileCache);
-  await runWarm("student registration reviews", warmStudentRegistrationCache);
-  await runWarm("chat", warmChatCache);
-  await runWarm("finance", warmFinanceCache);
+  await Promise.all([
+    ensureReadModel("pricing plans", warmPricingPlanCache),
+    ensureReadModel("enrollments", warmEnrollmentCache),
+    ensureReadModel("student directory", warmStudentDirectoryCache),
+    ensureReadModel("admin messaging", warmAdminMessagingCache),
+    ensureReadModel("lessons", warmLessonCache),
+    ensureReadModel("reschedule", warmRescheduleCache),
+    ensureReadModel("teacher availability", warmAllTeacherAvailabilityCache),
+    ensureReadModel("learning", warmLearningCache),
+    ensureReadModel("salary", warmSalaryCache),
+    ensureReadModel("faq", warmFaqCache),
+    ensureReadModel("dashboard settings", warmDashboardSettingsCache),
+    ensureReadModel("teacher applications", warmTeacherApplicationCache),
+    ensureReadModel("admin review logs", () => warmAdminReviewLogCache()),
+    ensureReadModel("admin lesson operation logs", warmAdminLessonOperationLogCache),
+    ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
+    ensureReadModel("salary bonus policy", warmSalaryBonusPolicyCache),
+    ensureReadModel("salary adjustments", warmTeacherSalaryAdjustmentCache),
+    ensureReadModel("teacher student context", warmTeacherStudentContextCache),
+    ensureReadModel("teacher profiles", warmTeacherProfileCache),
+    ensureReadModel("student registration reviews", warmStudentRegistrationCache),
+    ensureReadModel("chat", warmChatCache),
+    ensureReadModel("finance", warmFinanceCache),
+  ]);
 }
 
 /**
@@ -65,6 +101,19 @@ export async function ensureReadModelsBootstrapped(): Promise<void> {
  */
 export const ensureSchedulesBootstrapped = ensureReadModelsBootstrapped;
 
+export const ensurePricingPlansBootstrapped = () =>
+  ensureReadModel("pricing plans", warmPricingPlanCache);
+export const ensureEnrollmentsBootstrapped = () =>
+  ensureReadModel("enrollments", warmEnrollmentCache);
+export const ensureLessonsBootstrapped = () =>
+  ensureReadModel("lessons", warmLessonCache);
+export const ensureReschedulesBootstrapped = () =>
+  ensureReadModel("reschedule", warmRescheduleCache);
+export const ensureLearningBootstrapped = () =>
+  ensureReadModel("learning", warmLearningCache);
+export const ensureSalaryBootstrapped = () =>
+  ensureReadModel("salary", warmSalaryCache);
+
 export interface ScheduleMaintenanceResult {
   opened: number;
   expired: number;
@@ -72,12 +121,39 @@ export interface ScheduleMaintenanceResult {
 
 /** Server-only: perform scheduled repairs and lifecycle transitions. */
 export async function runScheduleMaintenanceInDb(): Promise<ScheduleMaintenanceResult> {
-  await ensureReadModelsBootstrapped();
-  await restoreOccupiedWeeklyAvailabilityInDb();
+  // Availability repair and the one-time schedule backfill need the broader
+  // supporting models, but only on the first maintenance run per app process.
+  // Share the promise so concurrent invocations cannot duplicate the warm-up.
+  if (!maintenanceInitialized) {
+    maintenanceInitialization ??= (async () => {
+      await Promise.all([
+        ensureEnrollmentsBootstrapped(),
+        ensureLessonsBootstrapped(),
+        ensurePricingPlansBootstrapped(),
+        ensureReadModel("teacher availability", warmAllTeacherAvailabilityCache),
+        ensureReadModel("teacher profiles", warmTeacherProfileCache),
+      ]);
+      await restoreOccupiedWeeklyAvailabilityInDb();
+      if (!enrollmentSchedulesSynced) {
+        await bootstrapActiveEnrollmentSchedulesInDb();
+        enrollmentSchedulesSynced = true;
+      }
+      await dedupeAllRenewalHoldsInDb();
+      await syncEnrollmentCompletionStatusInDb();
+      lastMaintenanceRefreshAt = Date.now();
+      maintenanceInitialized = true;
+    })();
+    await maintenanceInitialization;
+  }
 
-  if (!enrollmentSchedulesSynced) {
-    await bootstrapActiveEnrollmentSchedulesInDb();
-    enrollmentSchedulesSynced = true;
+  // Writes made by the app update these process-local read models immediately.
+  // Periodically reconcile external/manual DB changes without downloading all
+  // lessons, enrollments and payments on every one-minute cron tick.
+  if (Date.now() - lastMaintenanceRefreshAt >= MAINTENANCE_REFRESH_MS) {
+    await Promise.all([warmEnrollmentCache(), warmLessonCache()]);
+    await dedupeAllRenewalHoldsInDb();
+    await syncEnrollmentCompletionStatusInDb();
+    lastMaintenanceRefreshAt = Date.now();
   }
 
   const opened = await ensureRenewalOffersInDb();
@@ -87,8 +163,17 @@ export async function runScheduleMaintenanceInDb(): Promise<ScheduleMaintenanceR
 
 /** Lighter bootstrap for public/marketing pages. */
 export async function ensurePublicContentBootstrapped(): Promise<void> {
-  await runWarm("faq", warmFaqCache);
-  await runWarm("teacher profiles", warmTeacherProfileCache);
-  await runWarm("teacher availability", warmAllTeacherAvailabilityCache);
-  await runWarm("pricing plans", warmPricingPlanCache);
+  await Promise.all([
+    ensureReadModel("faq", warmFaqCache),
+    ensureReadModel("teacher profiles", warmTeacherProfileCache),
+    ensureReadModel("pricing plans", warmPricingPlanCache),
+  ]);
+}
+
+/** Enrollment-only: load weekly templates when the learner compares teachers. */
+export async function ensureEnrollmentAvailabilityBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureReadModel("teacher profiles", warmTeacherProfileCache),
+    ensureReadModel("teacher availability", warmAllTeacherAvailabilityCache),
+  ]);
 }

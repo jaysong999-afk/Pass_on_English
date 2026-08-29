@@ -39,3 +39,4 @@ next-env.d.ts
 
 # supabase
 supabase/.temp
+/migration-backups/

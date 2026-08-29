@@ -4,17 +4,17 @@ import {
   getUpcomingLessonsForAdmin,
   findAvailableTeachersAt,
 } from "@/lib/admin/lesson-operations-store";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
-import { warmLessonCache } from "@/lib/lessons/repository";
+import {
+  ensureLessonsBootstrapped,
+  ensureSchedulesBootstrapped,
+} from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
   await ensureSchedulesBootstrapped();
-  // Refresh the operation list from Supabase so deleted/test-only cache rows
-  // cannot remain actionable in the admin modal.
-  await warmLessonCache();
+  await ensureLessonsBootstrapped();
   const { searchParams } = new URL(request.url);
   const teacherId = searchParams.get("teacherId") ?? undefined;
   const studentId = searchParams.get("studentId") ?? undefined;

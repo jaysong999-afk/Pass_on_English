@@ -4,10 +4,12 @@ import { requireTeacherAuth } from "@/lib/auth/session";
 import {
   getSalaryStatementInDb,
   getSalaryStatementsForTeacherInDb,
-  warmSalaryCache,
 } from "@/lib/teacher-salary/repository";
 import { getBonusPolicy, getSalaryMonthsForTeacher } from "@/lib/teacher-salary-store-sync";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import {
+  ensureSalaryBootstrapped,
+  ensureSchedulesBootstrapped,
+} from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
   try {
@@ -15,7 +17,7 @@ export async function GET(request: Request) {
     const { teacherId } = await requireTeacherAuth();
 
     try {
-      await warmSalaryCache();
+      await ensureSalaryBootstrapped();
     } catch (error) {
       console.error("[teacher/salary GET] warm cache", error);
     }

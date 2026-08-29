@@ -18,7 +18,7 @@ import { getStudentTimezone } from "@/lib/availability/timezone";
 import type { Locale } from "@/lib/i18n/config";
 import { formatDate, formatLessonTimeRange } from "@/lib/utils";
 import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
-import type { Lesson, StudentEnrollment } from "@/types";
+import type { Lesson, LessonRescheduleRequest, StudentEnrollment } from "@/types";
 
 export function MyLessonsHub() {
   const { activeLearnerId: learnerId, account, loading: accountLoading } = useActiveLearner();
@@ -34,27 +34,25 @@ export function MyLessonsHub() {
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [studentLessons, setStudentLessons] = useState<Lesson[]>([]);
   const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([]);
+  const [rescheduleRequests, setRescheduleRequests] = useState<LessonRescheduleRequest[]>([]);
   const [makeupRemaining, setMakeupRemaining] = useState(2);
   const makeupLimit = 2;
 
   const loadData = useCallback(async () => {
     if (!learnerId) return;
-    const [lessonsRes, rescheduleRes, enrollmentsRes] = await Promise.all([
-      fetch(`/api/teacher/lessons?scope=student&studentId=${learnerId}`),
-      fetch(`/api/lessons/reschedule?studentId=${learnerId}`),
-      fetch(`/api/enrollments?studentId=${learnerId}`),
-    ]);
-    const lessonsData = lessonsRes.ok ? await lessonsRes.json() : { lessons: [] };
-    const rescheduleData = rescheduleRes.ok ? await rescheduleRes.json() : {};
-    const enrollmentsData = enrollmentsRes.ok ? await enrollmentsRes.json() : {};
+    const response = await fetch(
+      `/api/student/lessons-dashboard?studentId=${encodeURIComponent(learnerId)}`
+    );
+    const data = response.ok ? await response.json() : {};
     setStudentLessons(
-      (lessonsData.lessons ?? []).sort(
+      (data.lessons ?? []).sort(
         (a: Lesson, b: Lesson) =>
           new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
       )
     );
-    setEnrollments(enrollmentsData.enrollments ?? []);
-    setMakeupRemaining(rescheduleData.makeupRemaining ?? 2);
+    setEnrollments(data.enrollments ?? []);
+    setRescheduleRequests(data.requests ?? []);
+    setMakeupRemaining(data.makeupRemaining ?? 2);
   }, [learnerId]);
 
   useEffect(() => {
@@ -189,6 +187,7 @@ export function MyLessonsHub() {
         fetchUrl={
           learnerId ? `/api/lessons/reschedule?studentId=${learnerId}` : ""
         }
+        initialRequests={rescheduleRequests}
         timeZone={studentTz}
         locale={locale === "zh-CN" ? "zh" : locale === "ko" ? "ko" : "en"}
         title={tReschedule("progressTitle")}

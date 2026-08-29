@@ -9,6 +9,7 @@ import {
 } from "@/lib/teachers/teacher-profile-cache";
 import { linkTeacherApplicationToTeacherInDb } from "@/lib/teacher-applications/repository";
 import { createPrivilegedClient } from "@/lib/supabase/admin";
+import { persistTeacherAvatarUrl } from "@/lib/teachers/avatar-storage";
 
 export interface TeacherSelfSettings {
   teacher: Teacher;
@@ -126,6 +127,7 @@ export async function updateTeacherProfileInDb(
 ): Promise<Teacher | null> {
   const supabase = createPrivilegedClient();
   const existing = getTeacherFromCache(id);
+  const avatarUrl = await persistTeacherAvatarUrl(id, input.avatarUrl);
   const payload = {
     ...profileInputToRow(input),
     status: input.status ?? existing?.status ?? "pending",
@@ -146,11 +148,18 @@ export async function updateTeacherProfileInDb(
   }
   if (!data) return null;
 
-  if (input.avatarUrl !== undefined) {
-    await supabase.from("profiles").update({ avatar_url: input.avatarUrl }).eq("id", id);
+  if (avatarUrl !== undefined) {
+    const { error: avatarError } = await supabase
+      .from("profiles")
+      .update({ avatar_url: avatarUrl })
+      .eq("id", id);
+    if (avatarError) throw new Error(`teacher_avatar_update_failed: ${avatarError.message}`);
   }
 
-  const teacher = rowToTeacher(data as TeacherRow);
+  const teacher = {
+    ...rowToTeacher(data as TeacherRow),
+    ...(avatarUrl !== undefined ? { avatarUrl: avatarUrl || undefined } : {}),
+  };
   patchTeacherProfileCache(teacher);
   return { ...teacher, specialties: [...teacher.specialties] };
 }
@@ -250,6 +259,7 @@ export async function updateTeacherSelfSettingsInDb(
   if (!current) return null;
 
   const admin = createPrivilegedClient();
+  const avatarUrl = await persistTeacherAvatarUrl(teacherId, input.avatarUrl);
   const { error: teacherError } = await admin
     .from("teachers")
     .update({
@@ -264,7 +274,7 @@ export async function updateTeacherSelfSettingsInDb(
 
   const { error: profileError } = await admin
     .from("profiles")
-    .update({ phone: input.phone.trim(), ...(input.avatarUrl !== undefined ? { avatar_url: input.avatarUrl } : {}) })
+    .update({ phone: input.phone.trim(), ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}) })
     .eq("id", teacherId);
   if (profileError) throw new Error(`teacher_contact_update_failed: ${profileError.message}`);
 
@@ -300,6 +310,7 @@ export async function createTeacherProfileFromApplicationInDb(
   // before entering this server-only persistence boundary. Direct clients do
   // not receive access to hourly_rate_php/application_id columns.
   const supabase = createPrivilegedClient();
+  const avatarUrl = await persistTeacherAvatarUrl(teacherUserId, input.avatarUrl);
   const payload = {
     id: teacherUserId,
     display_name: input.displayName.trim(),
@@ -325,16 +336,19 @@ export async function createTeacherProfileFromApplicationInDb(
     throw new Error(`teacher_create_failed: ${error.message}`);
   }
 
-  if (input.avatarUrl) {
+  if (avatarUrl) {
     await supabase
       .from("profiles")
-      .update({ avatar_url: input.avatarUrl })
+      .update({ avatar_url: avatarUrl })
       .eq("id", teacherUserId);
   }
 
   await linkTeacherApplicationToTeacherInDb(applicationId, teacherUserId);
 
-  const teacher = rowToTeacher(data as TeacherRow);
+  const teacher = {
+    ...rowToTeacher(data as TeacherRow),
+    ...(avatarUrl ? { avatarUrl } : {}),
+  };
   patchTeacherProfileCache(teacher);
   return { ...teacher, specialties: [...teacher.specialties] };
 }

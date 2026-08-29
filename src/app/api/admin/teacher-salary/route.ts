@@ -7,7 +7,6 @@ import {
   markSalaryPhpPaidInDb,
   markSalaryProcessingInDb,
   updateSalaryStatementStatusInDb,
-  warmSalaryCache,
 } from "@/lib/teacher-salary/repository";
 import {
   getVerificationLessons,
@@ -27,7 +26,10 @@ import {
   buildSalaryOverviewCsvRows,
   salaryCsvFilename,
 } from "@/lib/teacher-salary-csv";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import {
+  ensureSalaryBootstrapped,
+  ensureSchedulesBootstrapped,
+} from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
   const guard = await guardAdminApi();
@@ -35,7 +37,7 @@ export async function GET(request: Request) {
 
   await ensureSchedulesBootstrapped();
   try {
-    await warmSalaryCache();
+    await ensureSalaryBootstrapped();
   } catch (error) {
     console.error("[admin/teacher-salary GET] warm cache", error);
   }
@@ -81,7 +83,7 @@ export async function PATCH(request: Request) {
 
   try {
     await ensureSchedulesBootstrapped();
-    await warmSalaryCache();
+    await ensureSalaryBootstrapped();
 
     const body = await request.json();
     const action = body.action as string;

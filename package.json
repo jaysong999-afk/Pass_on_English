@@ -36,7 +36,8 @@
     "test:rls": "node scripts/test-rls.mjs",
     "test:transactions": "node scripts/test-transaction-boundaries.mjs",
     "test:release-reconciliation": "node scripts/test-release-reconciliation.mjs",
-    "test:admin-page-auth": "node scripts/test-admin-page-auth.mjs"
+    "test:admin-page-auth": "node scripts/test-admin-page-auth.mjs",
+    "migrate:avatar-storage": "node --env-file=.env.local scripts/migrate-avatar-data-urls.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.3",

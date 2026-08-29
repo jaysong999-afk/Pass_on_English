@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import type { Locale } from "@/lib/i18n/config";
 import { ensureAccountSession, getAccountHolder, getActiveLearner, getLearnerById } from "@/lib/account-store";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
-import { getPricingPlanById, warmPricingPlanCache } from "@/lib/pricing-plans/repository";
+import {
+  ensurePricingPlansBootstrapped,
+  ensureSchedulesBootstrapped,
+} from "@/lib/lesson-scheduler-bootstrap";
+import { getPricingPlanById } from "@/lib/pricing-plans/repository";
 import {
   confirmNewEnrollmentInDb,
   confirmRenewalEnrollmentInDb,
@@ -33,7 +36,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await warmPricingPlanCache();
+    await ensurePricingPlansBootstrapped();
     await ensureSchedulesBootstrapped();
   } catch (error) {
     console.error("[enrollments/confirm POST] bootstrap", error);
