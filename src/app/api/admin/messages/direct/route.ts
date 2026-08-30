@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureAdminMessagingBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
   ensureAdminDirectThreadInDb,
   getAdminDirectInboxSummaryFromCache,
@@ -11,7 +11,7 @@ export async function GET() {
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureAdminMessagingBootstrapped();
     const { threads, totalUnread } = getAdminDirectInboxSummaryFromCache();
     return NextResponse.json({ threads, totalUnread });
   } catch (error) {
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureAdminMessagingBootstrapped();
     const body = (await request.json()) as {
       targetType?: "student" | "teacher";
       targetId?: string;

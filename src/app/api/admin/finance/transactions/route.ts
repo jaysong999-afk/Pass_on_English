@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureFinanceBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { getAllFinanceTransactionsFromCache } from "@/lib/finance/repository";
 
 export async function GET() {
@@ -8,7 +8,7 @@ export async function GET() {
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureFinanceBootstrapped();
     const transactions = getAllFinanceTransactionsFromCache();
     return NextResponse.json({ transactions });
   } catch (error) {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAllTeachers } from "@/lib/teacher-profile-store-sync";
 import { createTeacherProfileFromApplicationInDb } from "@/lib/teachers/repository";
 import { getTeacherApplicationForApplicantInDb } from "@/lib/teacher-applications/repository";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureTeacherProfilesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { requireRole } from "@/lib/auth/session";
 import { isAuthError } from "@/lib/auth/errors";
 import { parseTeacherSignupProfileDto } from "@/lib/teachers/profile-dto";
@@ -10,7 +10,7 @@ import { parseTeacherSignupProfileDto } from "@/lib/teachers/profile-dto";
 export async function GET() {
   try {
     await requireRole("admin");
-    await ensureSchedulesBootstrapped();
+    await ensureTeacherProfilesBootstrapped();
     return NextResponse.json({ teachers: getAllTeachers() });
   } catch (err) {
     if (isAuthError(err)) {
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     }
     const body = parsed.data;
 
-    await ensureSchedulesBootstrapped();
+    await ensureTeacherProfilesBootstrapped();
 
     const application = await getTeacherApplicationForApplicantInDb(
       body.applicationId,

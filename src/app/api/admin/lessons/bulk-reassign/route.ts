@@ -5,13 +5,13 @@ import {
   getBulkEnrollmentTransferPreview,
   previewEnrollmentTransferSlots,
 } from "@/lib/admin/lesson-operations-store";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureLessonOperationsBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureLessonOperationsBootstrapped();
   const { searchParams } = new URL(request.url);
   const fromTeacherId = searchParams.get("fromTeacherId");
   if (!fromTeacherId) {
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
   if (isAdminGuardResponse(guard)) return guard;
 
   let body: {
+    action?: "preview";
     fromTeacherId: string;
     transfers: { enrollmentId: string; toTeacherId: string }[];
   };
@@ -50,6 +51,23 @@ export async function POST(request: Request) {
 
   if (!body.fromTeacherId || !body.transfers?.length) {
     return NextResponse.json({ error: "transfers_required" }, { status: 400 });
+  }
+
+  await ensureLessonOperationsBootstrapped();
+
+  if (body.action === "preview") {
+    return NextResponse.json({
+      slotsByEnrollment: Object.fromEntries(
+        body.transfers.map((transfer) => [
+          transfer.enrollmentId,
+          previewEnrollmentTransferSlots(
+            transfer.enrollmentId,
+            body.fromTeacherId,
+            transfer.toTeacherId
+          ),
+        ])
+      ),
+    });
   }
 
   try {

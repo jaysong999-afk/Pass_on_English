@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureAdminStudentsBootstrapped, ensureLearningBootstrapped, ensureLessonsBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { getAdminStudentDetail } from "@/lib/admin/student-detail-store";
 
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await Promise.all([ensureAdminStudentsBootstrapped(), ensureLearningBootstrapped(), ensureLessonsBootstrapped()]);
   const { id } = await params;
   const detail = getAdminStudentDetail(id);
   if (!detail) {

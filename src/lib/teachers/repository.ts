@@ -109,6 +109,23 @@ export async function warmTeacherProfileCache() {
   return getAllTeachersFromCache();
 }
 
+export async function listTeacherOptionsInDb(): Promise<
+  { id: string; displayName: string; status: Teacher["status"] }[]
+> {
+  const supabase = createPrivilegedClient();
+  const { data, error } = await supabase
+    .from("teachers")
+    .select("id, display_name, status")
+    .order("display_name", { ascending: true });
+
+  if (error) throw new Error(`teacher_options_fetch_failed: ${error.message}`);
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    displayName: String(row.display_name),
+    status: row.status as Teacher["status"],
+  }));
+}
+
 function profileInputToRow(input: TeacherProfileInput) {
   return {
     display_name: input.displayName.trim(),

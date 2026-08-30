@@ -140,6 +140,30 @@ async function fetchLessonRows(filter?: {
   return (data ?? []) as unknown as LessonJoinRow[];
 }
 
+export async function listLessonsInDb(filter: {
+  teacherId?: string;
+  studentId?: string;
+  enrollmentId?: string;
+  from?: string;
+  to?: string;
+}): Promise<Lesson[]> {
+  const supabase = await createClient();
+  let query = supabase.from("lessons").select(LESSON_SELECT);
+
+  if (filter.teacherId) query = query.eq("teacher_id", filter.teacherId);
+  if (filter.studentId) query = query.eq("student_id", filter.studentId);
+  if (filter.enrollmentId) query = query.eq("enrollment_id", filter.enrollmentId);
+  if (filter.from) query = query.gte("scheduled_at", filter.from);
+  if (filter.to) query = query.lte("scheduled_at", filter.to);
+
+  const { data, error } = await query.order("scheduled_at", { ascending: true });
+  if (error) throw new Error(`lessons_fetch_failed: ${error.message}`);
+
+  const lessons = ((data ?? []) as unknown as LessonJoinRow[]).map((row) => rowToLesson(row));
+  lessons.forEach(patchLessonInCache);
+  return lessons;
+}
+
 export async function warmLessonCache(): Promise<Lesson[]> {
   const rows = await fetchLessonRows();
   const lessons = rows.map((row) => rowToLesson(row));

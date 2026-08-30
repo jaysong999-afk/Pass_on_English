@@ -27,17 +27,15 @@ import {
   salaryCsvFilename,
 } from "@/lib/teacher-salary-csv";
 import {
-  ensureSalaryBootstrapped,
-  ensureSchedulesBootstrapped,
+  ensureAdminSalaryBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
   try {
-    await ensureSalaryBootstrapped();
+    await ensureAdminSalaryBootstrapped();
   } catch (error) {
     console.error("[admin/teacher-salary GET] warm cache", error);
   }
@@ -82,8 +80,7 @@ export async function PATCH(request: Request) {
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
-    await ensureSalaryBootstrapped();
+    await ensureAdminSalaryBootstrapped();
 
     const body = await request.json();
     const action = body.action as string;

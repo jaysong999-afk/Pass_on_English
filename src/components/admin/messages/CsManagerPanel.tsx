@@ -125,13 +125,11 @@ export function CsManagerPanel() {
       const data = await res.json();
       const threads = (data.threads ?? []) as DirectThreadPreview[];
       setDirectThreads(threads);
-      if (!selectedDirectId && threads[0]) {
-        setSelectedDirectId(threads[0].id);
-      }
+      setSelectedDirectId((current) => current || threads[0]?.id || "");
     } finally {
       setDirectLoading(false);
     }
-  }, [selectedDirectId]);
+  }, []);
 
   const loadDirectMessages = useCallback(async (threadId: string) => {
     const res = await fetch(`/api/admin/messages/direct/${threadId}`);
@@ -180,11 +178,11 @@ export function CsManagerPanel() {
       const data = await res.json();
       const list = (data.rooms ?? []) as ChatRoom[];
       setRooms(list);
-      if (!selectedRoomId && list[0]) setSelectedRoomId(list[0].id);
+      setSelectedRoomId((current) => current || list[0]?.id || "");
     } finally {
       setRoomsLoading(false);
     }
-  }, [selectedRoomId]);
+  }, []);
 
   useEffect(() => {
     void loadRooms();

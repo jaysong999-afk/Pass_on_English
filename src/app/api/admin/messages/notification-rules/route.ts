@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureAdminMessagingBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
   getSystemNotificationRulesFromCache,
   updateSystemNotificationRulesInDb,
@@ -11,7 +11,7 @@ export async function GET() {
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureAdminMessagingBootstrapped();
     return NextResponse.json({ rules: getSystemNotificationRulesFromCache() });
   } catch (error) {
     console.error("[GET /api/admin/messages/notification-rules]", error);
@@ -25,7 +25,7 @@ export async function PATCH(request: Request) {
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureAdminMessagingBootstrapped();
     const body = (await request.json()) as {
       rules?: { id: string; enabled: boolean }[];
     };

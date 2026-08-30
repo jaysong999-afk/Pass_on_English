@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureLessonOperationsBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { undoAdminLessonOperation } from "@/lib/admin/lesson-operations-store";
 
 export async function POST(
@@ -10,7 +10,7 @@ export async function POST(
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureLessonOperationsBootstrapped();
   const { id } = await params;
 
   try {

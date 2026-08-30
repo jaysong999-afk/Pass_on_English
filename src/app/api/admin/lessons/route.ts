@@ -1,20 +1,17 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
 import {
-  getUpcomingLessonsForAdmin,
   findAvailableTeachersAt,
 } from "@/lib/admin/lesson-operations-store";
 import {
-  ensureLessonsBootstrapped,
-  ensureSchedulesBootstrapped,
+  ensureLessonOperationsBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
+import { listLessonsInDb } from "@/lib/lessons/repository";
 
 export async function GET(request: Request) {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
-  await ensureLessonsBootstrapped();
   const { searchParams } = new URL(request.url);
   const teacherId = searchParams.get("teacherId") ?? undefined;
   const studentId = searchParams.get("studentId") ?? undefined;
@@ -25,11 +22,12 @@ export async function GET(request: Request) {
   const ignoreLessonId = searchParams.get("ignoreLessonId") ?? undefined;
 
   if (scheduledAt) {
+    await ensureLessonOperationsBootstrapped();
     return NextResponse.json({
       teachers: findAvailableTeachersAt(scheduledAt, excludeTeacherId, ignoreLessonId),
     });
   }
 
-  const lessons = getUpcomingLessonsForAdmin({ teacherId, studentId, from, to });
+  const lessons = await listLessonsInDb({ teacherId, studentId, from, to });
   return NextResponse.json({ lessons });
 }

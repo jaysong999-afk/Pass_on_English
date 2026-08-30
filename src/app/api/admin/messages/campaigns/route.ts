@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureAdminMessagingBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
   getPushCampaignsFromCache,
   getPushCampaignTotalsFromCache,
@@ -11,7 +11,7 @@ export async function GET() {
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureAdminMessagingBootstrapped();
     return NextResponse.json({
       campaigns: getPushCampaignsFromCache(),
       totals: getPushCampaignTotalsFromCache(),

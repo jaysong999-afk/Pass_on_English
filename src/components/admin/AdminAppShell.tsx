@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard,
   CalendarClock,
@@ -203,6 +203,7 @@ export function AdminAppShell({ children }: AdminAppShellProps) {
   const router = useRouter();
   const header = resolvePageHeader(pathname);
   const [sessionReady, setSessionReady] = useState(false);
+  const initialPathname = useRef(pathname);
 
   useEffect(() => {
     let cancelled = false;
@@ -215,7 +216,7 @@ export function AdminAppShell({ children }: AdminAppShellProps) {
       .then((data) => {
         if (cancelled) return;
         if (data?.profile?.role !== "admin") {
-          const next = encodeURIComponent(pathname);
+          const next = encodeURIComponent(initialPathname.current);
           router.replace(`/admin/login?next=${next}`);
           return;
         }
@@ -230,7 +231,9 @@ export function AdminAppShell({ children }: AdminAppShellProps) {
     return () => {
       cancelled = true;
     };
-  }, [pathname, router]);
+  // The admin layout persists across client-side navigation; middleware still
+  // validates every protected request and route transition.
+  }, [router]);
 
   if (!sessionReady) {
     return (

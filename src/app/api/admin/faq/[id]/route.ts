@@ -5,7 +5,7 @@ import {
   getFaqItemByIdInDb,
   updateFaqItemInDb,
 } from "@/lib/faq/repository";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureFaqBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import type { UpsertFaqInput } from "@/types";
 
 function validateInput(body: UpsertFaqInput): string | null {
@@ -22,7 +22,7 @@ export async function PATCH(
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureFaqBootstrapped();
   const { id } = await params;
 
   try {
@@ -50,7 +50,7 @@ export async function DELETE(
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureFaqBootstrapped();
   const { id } = await params;
   const existing = await getFaqItemByIdInDb(id);
   if (!existing) {

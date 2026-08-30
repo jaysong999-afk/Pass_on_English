@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureAdminMessagingBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { resolveBroadcastRecipientProfileIds } from "@/lib/admin/messages/repository";
 import type {
   BroadcastAudience,
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureAdminMessagingBootstrapped();
     const { searchParams } = new URL(request.url);
     const audience = parseAudience(searchParams.get("audience"));
     const filters = parseFilters(searchParams.getAll("filter"));

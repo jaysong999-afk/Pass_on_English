@@ -22,6 +22,7 @@ const serverSupabaseSource = readFileSync(
   resolve(root, "src/lib/supabase/server.ts"),
   "utf8"
 );
+const adminApiDirectory = resolve(root, "src/app/api/admin");
 
 function section(source, startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -92,6 +93,12 @@ for (const apiFile of sourceFilesUnder(resolve(root, "src/app/api"))) {
     throw new Error(`API route bypasses shared read-model initialization: ${apiFile}`);
   }
 }
+for (const apiFile of sourceFilesUnder(adminApiDirectory)) {
+  const source = readFileSync(apiFile, "utf8");
+  if (source.includes("ensureSchedulesBootstrapped")) {
+    throw new Error(`admin API must use a feature-specific bootstrap: ${apiFile}`);
+  }
+}
 if (!cronRouteSource.includes("runScheduleMaintenanceInDb")) {
   throw new Error("enrollment maintenance cron is not connected to the maintenance entry point");
 }
@@ -109,3 +116,4 @@ console.log("PASS cron bearer authentication is isolated from Supabase user JWT 
 console.log("PASS read models share initialization instead of reloading on every API request");
 console.log("PASS public pages do not download weekly teacher availability");
 console.log("PASS API routes do not directly reload full caches per request");
+console.log("PASS admin APIs use feature-specific read-model bootstraps");

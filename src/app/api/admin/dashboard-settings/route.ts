@@ -5,13 +5,13 @@ import {
   getDashboardSloganInDb,
   setDashboardSloganInDb,
 } from "@/lib/admin/dashboard-settings/repository";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureDashboardSettingsBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET() {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureDashboardSettingsBootstrapped();
   await getDashboardSloganInDb();
   return NextResponse.json({ slogan: getDashboardSlogan() });
 }
@@ -20,7 +20,7 @@ export async function PATCH(request: Request) {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureDashboardSettingsBootstrapped();
   try {
     const body = await request.json();
     const slogan = await setDashboardSloganInDb(String(body.slogan ?? ""));

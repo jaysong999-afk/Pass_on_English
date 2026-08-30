@@ -113,6 +113,89 @@ export const ensureLearningBootstrapped = () =>
   ensureReadModel("learning", warmLearningCache);
 export const ensureSalaryBootstrapped = () =>
   ensureReadModel("salary", warmSalaryCache);
+export const ensureTeacherProfilesBootstrapped = () =>
+  ensureReadModel("teacher profiles", warmTeacherProfileCache);
+export const ensureTeacherAvailabilityBootstrapped = () =>
+  ensureReadModel("teacher availability", warmAllTeacherAvailabilityCache);
+export const ensureDashboardSettingsBootstrapped = () =>
+  ensureReadModel("dashboard settings", warmDashboardSettingsCache);
+export const ensureFaqBootstrapped = () =>
+  ensureReadModel("faq", warmFaqCache);
+export const ensureFinanceBootstrapped = () =>
+  ensureReadModel("finance", warmFinanceCache);
+
+export async function ensureAdminStudentsBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureReadModel("student directory", warmStudentDirectoryCache),
+    ensureEnrollmentsBootstrapped(),
+  ]);
+}
+
+export async function ensureAdminMessagingBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureReadModel("admin messaging", warmAdminMessagingCache),
+    ensureTeacherProfilesBootstrapped(),
+  ]);
+}
+
+export async function ensureAdminReviewsBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureEnrollmentsBootstrapped(),
+    ensureLessonsBootstrapped(),
+    ensureReschedulesBootstrapped(),
+    ensureReadModel("student directory", warmStudentDirectoryCache),
+    ensureReadModel("teacher applications", warmTeacherApplicationCache),
+    ensureReadModel("student registration reviews", warmStudentRegistrationCache),
+    ensureReadModel("admin review logs", () => warmAdminReviewLogCache()),
+    ensureTeacherProfilesBootstrapped(),
+  ]);
+}
+
+export async function ensureAdminTeachersBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureTeacherProfilesBootstrapped(),
+    ensureTeacherAvailabilityBootstrapped(),
+    ensureEnrollmentsBootstrapped(),
+    ensureLessonsBootstrapped(),
+    ensureLearningBootstrapped(),
+    ensureSalaryBootstrapped(),
+    ensureReadModel("student directory", warmStudentDirectoryCache),
+    ensureReadModel("teacher applications", warmTeacherApplicationCache),
+    ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
+  ]);
+}
+
+export async function ensureAdminSalaryBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureSalaryBootstrapped(),
+    ensureLessonsBootstrapped(),
+    ensureTeacherProfilesBootstrapped(),
+    ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
+    ensureReadModel("salary bonus policy", warmSalaryBonusPolicyCache),
+    ensureReadModel("salary adjustments", warmTeacherSalaryAdjustmentCache),
+  ]);
+}
+
+export async function ensureLessonOperationsBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureLessonsBootstrapped(),
+    ensureEnrollmentsBootstrapped(),
+    ensurePricingPlansBootstrapped(),
+    ensureTeacherProfilesBootstrapped(),
+    ensureTeacherAvailabilityBootstrapped(),
+    ensureReadModel("student directory", warmStudentDirectoryCache),
+    ensureReadModel("admin lesson operation logs", warmAdminLessonOperationLogCache),
+    ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
+  ]);
+}
+
+export async function ensureAdminDashboardBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureFinanceBootstrapped(),
+    ensureAdminReviewsBootstrapped(),
+    ensureAdminTeachersBootstrapped(),
+  ]);
+}
 
 export interface ScheduleMaintenanceResult {
   opened: number;

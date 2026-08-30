@@ -156,29 +156,20 @@ export function AdminOperationsCenter() {
 
     let cancelled = false;
     (async () => {
-      const next: Record<
-        string,
-        { movableCount: number; totalScheduled: number; canAbsorbAll: boolean }
-      > = {};
-      await Promise.all(
-        bulkEnrollments.map(async (row) => {
-          const toTeacherId = bulkTransfers[row.enrollmentId];
-          if (!toTeacherId) return;
-          const params = new URLSearchParams({
-            fromTeacherId: bulkFrom,
-            enrollmentId: row.enrollmentId,
-            toTeacherId,
-          });
-          const res = await fetch(`/api/admin/lessons/bulk-reassign?${params}`);
-          const data = await res.json();
-          next[row.enrollmentId] = data.slots ?? {
-            movableCount: 0,
-            totalScheduled: row.upcomingLessonCount,
-            canAbsorbAll: false,
-          };
-        })
-      );
-      if (!cancelled) setBulkSlotPreview(next);
+      const transfers = bulkEnrollments
+        .map((row) => ({ enrollmentId: row.enrollmentId, toTeacherId: bulkTransfers[row.enrollmentId] }))
+        .filter((transfer): transfer is { enrollmentId: string; toTeacherId: string } => Boolean(transfer.toTeacherId));
+      if (transfers.length === 0) {
+        if (!cancelled) setBulkSlotPreview({});
+        return;
+      }
+      const res = await fetch("/api/admin/lessons/bulk-reassign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "preview", fromTeacherId: bulkFrom, transfers }),
+      });
+      const data = await res.json();
+      if (!cancelled) setBulkSlotPreview(data.slotsByEnrollment ?? {});
     })();
 
     return () => {
@@ -186,16 +177,11 @@ export function AdminOperationsCenter() {
     };
   }, [bulkFrom, bulkEnrollments, bulkTransfers]);
 
-  const load = useCallback(async () => {
+  const loadTeachers = useCallback(async () => {
     setLoading(true);
     try {
-      const [lessonsRes, teachersRes] = await Promise.all([
-        fetch("/api/admin/lessons"),
-        fetch("/api/teachers/profile"),
-      ]);
-      const lessonsData = await lessonsRes.json();
+      const teachersRes = await fetch("/api/admin/teachers/options");
       const teachersData = await teachersRes.json();
-      setLessons(lessonsData.lessons ?? []);
       setTeachers(
         (teachersData.teachers ?? []).map((t: { id: string; displayName: string }) => ({
           id: t.id,
@@ -206,6 +192,29 @@ export function AdminOperationsCenter() {
       setLoading(false);
     }
   }, []);
+
+  const loadLessons = useCallback(async () => {
+    if (filterTeacher === "all") {
+      setLessons([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const from = scheduleWeekStart.toISOString();
+      const weekEnd = new Date(scheduleWeekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      const params = new URLSearchParams({
+        teacherId: filterTeacher,
+        from,
+        to: weekEnd.toISOString(),
+      });
+      const res = await fetch(`/api/admin/lessons?${params}`);
+      const data = await res.json();
+      setLessons(data.lessons ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, [filterTeacher, scheduleWeekStart]);
 
   const loadOperationLogs = useCallback(async () => {
     if (filterTeacher === "all") {
@@ -226,13 +235,17 @@ export function AdminOperationsCenter() {
   }, [filterTeacher, scheduleWeekStart]);
 
   const refreshScheduleView = useCallback(async () => {
-    await load();
+    await loadLessons();
     await loadOperationLogs();
-  }, [load, loadOperationLogs]);
+  }, [loadLessons, loadOperationLogs]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadTeachers();
+  }, [loadTeachers]);
+
+  useEffect(() => {
+    void loadLessons();
+  }, [loadLessons]);
 
   useEffect(() => {
     loadOperationLogs();
@@ -248,7 +261,7 @@ export function AdminOperationsCenter() {
 
     let cancelled = false;
     setSlotsLoading(true);
-    fetch(`/api/teacher/availability?teacherId=${encodeURIComponent(filterTeacher)}`)
+    fetch(`/api/teacher/availability?teacherId=${encodeURIComponent(filterTeacher)}&availabilityOnly=1`)
       .then((r) => r.json())
       .then((data) => {
         if (!cancelled) setTeacherSlots(data.availability?.slots ?? null);
@@ -297,7 +310,7 @@ export function AdminOperationsCenter() {
           (t.lessonsSkipped > 0 ? ` · ${t.lessonsSkipped}회 시간 충돌` : "")
       );
       setBulkResult(lines.join("\n") || "이관 완료");
-      await load();
+      await loadLessons();
       const previewRes = await fetch(
         `/api/admin/lessons/bulk-reassign?fromTeacherId=${encodeURIComponent(bulkFrom)}`
       );

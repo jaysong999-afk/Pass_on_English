@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureAdminTeachersBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
   getAdminTeacherListItems,
   getAdminTeacherSummaryCounts,
@@ -11,7 +11,7 @@ export async function GET() {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureAdminTeachersBootstrapped();
   return NextResponse.json({
     summary: getAdminTeacherSummaryCounts(),
     teachers: getAdminTeacherListItems(),

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureAdminMessagingBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
   getAdminDirectMessagesFromCache,
   markAdminDirectThreadReadInDb,
@@ -16,7 +16,7 @@ export async function GET(
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureAdminMessagingBootstrapped();
     const { threadId } = await params;
     let messages = getAdminDirectMessagesFromCache(threadId);
     if (messages.length === 0) {
@@ -38,7 +38,7 @@ export async function POST(
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureAdminMessagingBootstrapped();
     const { threadId } = await params;
     const body = (await request.json()) as { body?: string };
     if (!body.body?.trim()) {
@@ -64,7 +64,7 @@ export async function PATCH(
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureAdminMessagingBootstrapped();
     const { threadId } = await params;
     await markAdminDirectThreadReadInDb(threadId);
     return NextResponse.json({ ok: true });

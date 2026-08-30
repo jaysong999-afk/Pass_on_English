@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTeacherById } from "@/lib/teacher-profile-store-sync";
 import { updateTeacherProfileInDb } from "@/lib/teachers/repository";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureTeacherProfilesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { requireRole } from "@/lib/auth/session";
 import { isAuthError } from "@/lib/auth/errors";
 import { parseAdminTeacherProfileDto } from "@/lib/teachers/profile-dto";
@@ -12,7 +12,7 @@ export async function GET(
 ) {
   try {
     await requireRole("admin");
-    await ensureSchedulesBootstrapped();
+    await ensureTeacherProfilesBootstrapped();
     const { id } = await params;
     const teacher = getTeacherById(id);
     if (!teacher) {
@@ -39,7 +39,7 @@ export async function PUT(
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
 
-    await ensureSchedulesBootstrapped();
+    await ensureTeacherProfilesBootstrapped();
     const { id } = await params;
     const teacher = await updateTeacherProfileInDb(id, parsed.data);
     if (!teacher) {

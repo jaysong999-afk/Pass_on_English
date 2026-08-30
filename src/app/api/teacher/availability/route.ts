@@ -8,7 +8,7 @@ import {
 import { authErrorResponse } from "@/lib/auth/api-guard";
 import { requireTeacherAuth } from "@/lib/auth/session";
 import { buildScheduleSlotViews, getOpenSlotsForTeacher } from "@/lib/teacher-availability";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { listLessonsInDb } from "@/lib/lessons/repository";
 import {
   copyTeacherDaySlotsInDb,
   ensureTeacherAvailabilityLoaded,
@@ -37,8 +37,6 @@ async function resolveRawTeacherId(explicitId: string | null): Promise<string> {
 
 export async function GET(request: Request) {
   try {
-    await ensureSchedulesBootstrapped();
-
     const { searchParams } = new URL(request.url);
     const planDays = searchParams.get("planDays");
     const explicitTeacherId = searchParams.get("teacherId");
@@ -64,8 +62,8 @@ export async function GET(request: Request) {
       return emptyAvailabilityResponse(rawTeacherId);
     }
 
-    await ensureTeacherAvailabilityLoaded(teacherId);
     if (planDays) {
+      await ensureTeacherAvailabilityLoaded(teacherId);
       const days = planDays.split(",").filter(Boolean);
       const sessionMinutes = searchParams.get("sessionMinutes");
       const minutes = sessionMinutes ? Number(sessionMinutes) : undefined;
@@ -77,7 +75,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ openSlots });
     }
 
-    const availability = await getTeacherWeeklyAvailabilityFromDb(teacherId);
+    if (searchParams.get("availabilityOnly") === "1") {
+      const availability = await getTeacherWeeklyAvailabilityFromDb(teacherId);
+      return NextResponse.json({ availability });
+    }
+
+    const [availability] = await Promise.all([
+      getTeacherWeeklyAvailabilityFromDb(teacherId),
+      listLessonsInDb({ teacherId }),
+    ]);
     const scheduleViews = buildScheduleSlotViews(teacherId);
 
     return NextResponse.json({ availability, scheduleViews });
@@ -89,8 +95,6 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    await ensureSchedulesBootstrapped();
-
     const body = await request.json();
     const action = body.action as string | undefined;
 
@@ -111,6 +115,8 @@ export async function PUT(request: Request) {
     if (!teacherId) {
       return NextResponse.json({ error: "teacher_not_found" }, { status: 404 });
     }
+
+    await ensureTeacherAvailabilityLoaded(teacherId);
 
     if (action === "toggle") {
       const day = body.day as DayLabel;

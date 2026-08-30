@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureLessonOperationsBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
   assignSubstituteTeacher,
   markTeacherNoShow,
@@ -30,7 +30,7 @@ export async function GET(
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureLessonOperationsBootstrapped();
   const { id } = await params;
   const lesson = getLessonById(id);
   if (!lesson) {
@@ -55,7 +55,7 @@ export async function PATCH(
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureLessonOperationsBootstrapped();
   const { id } = await params;
   let body: OperationBody;
   try {

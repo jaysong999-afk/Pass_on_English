@@ -4,13 +4,13 @@ import {
   getAdminReviewSnapshot,
   processAdminReviewAction,
 } from "@/lib/admin/admin-review-store";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureAdminReviewsBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET() {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureAdminReviewsBootstrapped();
   return NextResponse.json(getAdminReviewSnapshot());
 }
 
@@ -18,7 +18,7 @@ export async function PATCH(request: Request) {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureAdminReviewsBootstrapped();
   try {
     const body = await request.json();
     const category = body.category as

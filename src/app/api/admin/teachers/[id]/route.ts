@@ -3,7 +3,7 @@ import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard"
 import type { Teacher } from "@/types";
 import { getAdminTeacherDetail } from "@/lib/admin/teacher-detail-store";
 import { updateTeacherStatusInDb } from "@/lib/teachers/repository";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureAdminTeachersBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(
   _request: Request,
@@ -12,7 +12,7 @@ export async function GET(
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureAdminTeachersBootstrapped();
   const { id } = await params;
   const detail = getAdminTeacherDetail(id);
   if (!detail) {
@@ -28,7 +28,7 @@ export async function PATCH(
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureAdminTeachersBootstrapped();
   const { id } = await params;
   let body: { status?: Teacher["status"] };
   try {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
 import { createFaqItemInDb, getAllFaqItemsInDb } from "@/lib/faq/repository";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureFaqBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import type { UpsertFaqInput } from "@/types";
 
 function validateInput(body: UpsertFaqInput): string | null {
@@ -15,7 +15,7 @@ export async function GET() {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureFaqBootstrapped();
   const items = await getAllFaqItemsInDb();
   return NextResponse.json({ items });
 }
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
 
-  await ensureSchedulesBootstrapped();
+  await ensureFaqBootstrapped();
   try {
     const body = (await request.json()) as UpsertFaqInput;
     const error = validateInput(body);

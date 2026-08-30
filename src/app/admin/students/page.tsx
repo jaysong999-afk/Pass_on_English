@@ -37,20 +37,13 @@ export default function AdminStudentsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [activeRes, pastRes] = await Promise.all([
-        fetch("/api/admin/students?tab=active"),
-        fetch("/api/admin/students?tab=past"),
-      ]);
-      if (activeRes.ok) {
-        const data = await activeRes.json();
-        setActiveStudents(data.students ?? []);
+      const res = await fetch("/api/admin/students");
+      if (res.ok) {
+        const data = await res.json();
+        setActiveStudents(data.activeStudents ?? []);
+        setPastStudents(data.pastStudents ?? []);
       } else {
         setActiveStudents([]);
-      }
-      if (pastRes.ok) {
-        const data = await pastRes.json();
-        setPastStudents(data.students ?? []);
-      } else {
         setPastStudents([]);
       }
     } finally {

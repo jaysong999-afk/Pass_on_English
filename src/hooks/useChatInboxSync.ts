@@ -4,7 +4,9 @@ import { useEffect, useId, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { CHAT_INBOX_CHANGED } from "@/lib/chat-inbox-events";
 
-const POLL_MS = 15_000;
+// Realtime/focus events are the primary refresh mechanism. Polling is only a
+// safety net for dropped subscriptions, so avoid downloading the inbox every 15s.
+const POLL_MS = 60_000;
 
 /** Keeps chat inbox badges fresh via polling, focus, custom events, and Supabase realtime. */
 export function useChatInboxSync(onRefresh: () => void, enabled = true) {
