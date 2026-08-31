@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { UserRole } from "@/types";
 import { requireTeacherAuth } from "@/lib/auth/session";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureChatBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureAccountSession } from "@/lib/account-store";
 import { getAccountSessionCache } from "@/lib/account-session-cache";
 import {
@@ -18,7 +18,7 @@ async function resolveStudentIdFromBody(bodyStudentId?: string): Promise<string 
 }
 
 export async function GET(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureChatBootstrapped();
 
   const { searchParams } = new URL(request.url);
   const roomId = searchParams.get("roomId");
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureChatBootstrapped();
 
   const body = (await request.json()) as {
     roomId?: string;

@@ -3,7 +3,7 @@ import type { Locale } from "@/lib/i18n/config";
 import { ensureAccountSession, getAccountHolder, getActiveLearner, getLearnerById } from "@/lib/account-store";
 import {
   ensurePricingPlansBootstrapped,
-  ensureSchedulesBootstrapped,
+  ensureEnrollmentWorkflowBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
 import { getPricingPlanById } from "@/lib/pricing-plans/repository";
 import {
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
   try {
     await ensurePricingPlansBootstrapped();
-    await ensureSchedulesBootstrapped();
+    await ensureEnrollmentWorkflowBootstrapped();
   } catch (error) {
     console.error("[enrollments/confirm POST] bootstrap", error);
   }

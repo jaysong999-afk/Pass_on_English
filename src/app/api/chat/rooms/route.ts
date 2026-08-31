@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireTeacherAuth } from "@/lib/auth/session";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureChatBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureAccountSession } from "@/lib/account-store";
 import { getAccountSessionCache } from "@/lib/account-session-cache";
 import {
   ensureAdminDirectThreadInDb,
-  getAdminDirectInboxForProfileInDb,
+  getAdminDirectThreadForProfileInDb,
 } from "@/lib/admin/messages/repository";
 import {
   ensureStudentTeacherChatRoomsInDb,
@@ -59,7 +59,7 @@ async function resolveTeacherIdForRole(): Promise<string | undefined> {
 
 export async function GET(request: Request) {
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureChatBootstrapped();
 
     const { searchParams } = new URL(request.url);
     const role = parseRole(searchParams.get("role"));
@@ -124,10 +124,9 @@ export async function GET(request: Request) {
           targetId: teacherId,
         });
       }
-      const inbox = await getAdminDirectInboxForProfileInDb(profileId);
-      adminSupport = inbox.thread;
-      if (inbox.thread?.unread) {
-        totalUnread += inbox.thread.unread;
+      adminSupport = await getAdminDirectThreadForProfileInDb(profileId);
+      if (adminSupport?.unread) {
+        totalUnread += adminSupport.unread;
       }
     }
 
@@ -145,7 +144,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureChatBootstrapped();
 
     const { searchParams } = new URL(request.url);
     const role = parseRole(searchParams.get("role"));

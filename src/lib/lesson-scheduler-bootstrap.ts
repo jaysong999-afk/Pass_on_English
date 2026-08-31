@@ -32,7 +32,9 @@ let enrollmentSchedulesSynced = false;
 let maintenanceInitialized = false;
 let maintenanceInitialization: Promise<void> | null = null;
 let lastMaintenanceRefreshAt = 0;
-const MAINTENANCE_REFRESH_MS = 15 * 60 * 1000;
+// App mutations patch these caches immediately. The periodic read is only a
+// reconciliation safety net for manual/external DB edits.
+const MAINTENANCE_REFRESH_MS = 60 * 60 * 1000;
 
 const initializedReadModels = new Set<string>();
 const readModelInitializations = new Map<string, Promise<void>>();
@@ -194,6 +196,59 @@ export async function ensureAdminDashboardBootstrapped(): Promise<void> {
     ensureFinanceBootstrapped(),
     ensureAdminReviewsBootstrapped(),
     ensureAdminTeachersBootstrapped(),
+  ]);
+}
+
+export async function ensureChatBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureReadModel("chat", warmChatCache),
+    ensureReadModel("admin messaging", warmAdminMessagingCache),
+    ensureEnrollmentsBootstrapped(),
+    ensureTeacherProfilesBootstrapped(),
+  ]);
+}
+
+export async function ensureEnrollmentWorkflowBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensurePricingPlansBootstrapped(),
+    ensureEnrollmentsBootstrapped(),
+    ensureLessonsBootstrapped(),
+    ensureTeacherProfilesBootstrapped(),
+    ensureTeacherAvailabilityBootstrapped(),
+  ]);
+}
+
+export async function ensureLearningWorkflowBootstrapped(): Promise<void> {
+  await Promise.all([ensureLearningBootstrapped(), ensureLessonsBootstrapped()]);
+}
+
+export async function ensureRescheduleWorkflowBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureReschedulesBootstrapped(),
+    ensureLessonsBootstrapped(),
+    ensureEnrollmentsBootstrapped(),
+    ensureTeacherAvailabilityBootstrapped(),
+  ]);
+}
+
+export const ensureTeacherApplicationsBootstrapped = () =>
+  ensureReadModel("teacher applications", warmTeacherApplicationCache);
+
+export async function ensureTeacherSalaryBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureSalaryBootstrapped(),
+    ensureLessonsBootstrapped(),
+    ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
+    ensureReadModel("salary bonus policy", warmSalaryBonusPolicyCache),
+    ensureReadModel("salary adjustments", warmTeacherSalaryAdjustmentCache),
+  ]);
+}
+
+export async function ensureTeacherStudentContextBootstrapped(): Promise<void> {
+  await Promise.all([
+    ensureReadModel("teacher student context", warmTeacherStudentContextCache),
+    ensureReadModel("student directory", warmStudentDirectoryCache),
+    ensureTeacherProfilesBootstrapped(),
   ]);
 }
 

@@ -50,7 +50,7 @@ for (const profile of profiles ?? []) {
     .from("profiles")
     .update({ avatar_url: publicUrl })
     .eq("id", profile.id)
-    .eq("avatar_url", profile.avatar_url);
+    .like("avatar_url", "data:image/%");
   if (updateError) throw updateError;
   migrated += 1;
 }

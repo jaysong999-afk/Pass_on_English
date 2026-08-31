@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureLearningWorkflowBootstrapped, ensureReschedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { buildLessonDisplayContext } from "@/lib/teacher-lesson-context";
 import {
   completeLessonAsStudentAbsentInDb,
@@ -12,7 +12,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await ensureSchedulesBootstrapped();
+  await Promise.all([ensureLearningWorkflowBootstrapped(), ensureReschedulesBootstrapped()]);
   const { id } = await params;
   const lesson = await getLessonByIdInDb(id);
   if (!lesson) {
@@ -34,7 +34,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await ensureSchedulesBootstrapped();
+  await Promise.all([ensureLearningWorkflowBootstrapped(), ensureReschedulesBootstrapped()]);
   const { id } = await params;
   const lesson = await getLessonByIdInDb(id);
   if (!lesson) {

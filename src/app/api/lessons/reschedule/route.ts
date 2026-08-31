@@ -20,7 +20,7 @@ import { getLessonById } from "@/lib/teacher-lesson-store-sync";
 import {
   ensureLessonsBootstrapped,
   ensureReschedulesBootstrapped,
-  ensureSchedulesBootstrapped,
+  ensureRescheduleWorkflowBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureRescheduleWorkflowBootstrapped();
     await Promise.all([ensureLessonsBootstrapped(), ensureReschedulesBootstrapped()]);
 
     const body = await request.json();
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureRescheduleWorkflowBootstrapped();
     const body = await request.json();
     const id = body.id as string;
     const action = body.action as "approve" | "reject" | "cancel";

@@ -5,7 +5,7 @@ import {
   listTeacherApplicationsInDb,
 } from "@/lib/teacher-applications/repository";
 import { registerTeacherApplicantInDb } from "@/lib/teacher-applications/register-applicant";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureTeacherApplicationsBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import type { TeacherSignupInput } from "@/types";
 import { requireRole } from "@/lib/auth/session";
 import { isAuthError } from "@/lib/auth/errors";
@@ -84,7 +84,7 @@ function mapRegisterError(error: unknown) {
 }
 
 export async function GET(request: Request) {
-  await ensureSchedulesBootstrapped();
+    await ensureTeacherApplicationsBootstrapped();
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
 
@@ -114,7 +114,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureTeacherApplicationsBootstrapped();
   try {
     const body = await request.json();
     const input = parseSignupInput(body);

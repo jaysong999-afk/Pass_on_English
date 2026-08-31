@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureAdminMessagingBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureAccountSession } from "@/lib/account-store";
 import { requireTeacherAuth } from "@/lib/auth/session";
 import {
@@ -27,7 +27,7 @@ async function resolveProfileId(
 }
 
 export async function GET(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureAdminMessagingBootstrapped();
 
   const { searchParams } = new URL(request.url);
   const role = searchParams.get("role");
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureAdminMessagingBootstrapped();
 
   const body = (await request.json()) as {
     role?: "student" | "teacher";
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureAdminMessagingBootstrapped();
 
   const body = (await request.json()) as {
     role?: "student" | "teacher";

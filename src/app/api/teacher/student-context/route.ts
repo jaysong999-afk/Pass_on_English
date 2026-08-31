@@ -7,7 +7,7 @@ import {
   getTeacherStudentContextInDb,
   updateTeacherStudentContextInDb,
 } from "@/lib/teacher-student-context-repository";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureTeacherStudentContextBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
 import { getTeacherById } from "@/lib/teacher-profile-store-sync";
 import { resolveLessonVideoPlatform } from "@/lib/video-platforms";
@@ -22,7 +22,7 @@ async function resolveVideoPlatformOptions(studentId: string, teacherId: string)
 }
 
 export async function GET(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureTeacherStudentContextBootstrapped();
   const { searchParams } = new URL(request.url);
   const studentId = searchParams.get("studentId");
   const teacherId = searchParams.get("teacherId");
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 }
 
 async function handleUpdate(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureTeacherStudentContextBootstrapped();
   let body: {
     studentId?: string;
     teacherId?: string;

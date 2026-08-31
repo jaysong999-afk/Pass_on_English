@@ -7,13 +7,13 @@ import {
   confirmEnrollmentPaymentInDb,
   rejectEnrollmentPaymentInDb,
 } from "@/lib/enrollments/repository";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureEnrollmentWorkflowBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await ensureSchedulesBootstrapped();
+  await ensureEnrollmentWorkflowBootstrapped();
   const { id } = await params;
   const enrollment = getEnrollmentById(id);
   if (!enrollment) {
@@ -26,7 +26,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await ensureSchedulesBootstrapped();
+  await ensureEnrollmentWorkflowBootstrapped();
   const { id } = await params;
 
   let body: { action?: string; adminName?: string };

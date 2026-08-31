@@ -13,7 +13,7 @@ import { decorateEnrollmentRenewal } from "@/lib/enrollments/renewal-window";
 import { ensureAccountSession, getActiveLearner, getLearnerById } from "@/lib/account-store";
 import {
   ensureEnrollmentsBootstrapped,
-  ensureSchedulesBootstrapped,
+  ensureEnrollmentWorkflowBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
-  await ensureSchedulesBootstrapped();
+  await ensureEnrollmentWorkflowBootstrapped();
 
   const session = await ensureAccountSession();
   if (!session) {

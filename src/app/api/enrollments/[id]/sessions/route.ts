@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { adjustEnrollmentSessionsInDb } from "@/lib/enrollments/repository";
 import { adjustEnrollmentSessionsWithScheduleBatchInDb } from "@/lib/lessons/schedule-service";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureEnrollmentWorkflowBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function PATCH(
   request: Request,
@@ -27,7 +27,7 @@ export async function PATCH(
   }
 
   try {
-    await ensureSchedulesBootstrapped();
+  await ensureEnrollmentWorkflowBootstrapped();
   } catch (error) {
     console.error("[enrollments/sessions PATCH] bootstrap", error);
   }

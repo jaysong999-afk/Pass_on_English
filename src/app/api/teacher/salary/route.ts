@@ -8,12 +8,12 @@ import {
 import { getBonusPolicy, getSalaryMonthsForTeacher } from "@/lib/teacher-salary-store-sync";
 import {
   ensureSalaryBootstrapped,
-  ensureSchedulesBootstrapped,
+  ensureTeacherSalaryBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureTeacherSalaryBootstrapped();
     const { teacherId } = await requireTeacherAuth();
 
     try {

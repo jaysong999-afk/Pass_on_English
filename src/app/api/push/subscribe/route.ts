@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { ensureSchedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { upsertPushSubscriptionInDb } from "@/lib/push/repository";
 import {
   resolveNotificationUserId,
@@ -32,7 +31,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "missing_subscription_fields" }, { status: 400 });
   }
 
-  await ensureSchedulesBootstrapped();
   const userId = await resolveNotificationUserId(role);
   if (!userId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

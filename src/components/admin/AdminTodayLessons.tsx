@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Lesson } from "@/types";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
+import { getDateKeyInTimezone } from "@/lib/availability/timezone";
 import { formatDate, formatLessonTimeRange } from "@/lib/utils";
 import { AdminLessonDualModal } from "@/components/admin/operations/AdminLessonDualModal";
 import { useAdminLessonModal } from "@/components/admin/operations/useAdminLessonModal";
@@ -25,7 +26,12 @@ export function AdminTodayLessons() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/lessons");
+      const todayKey = getDateKeyInTimezone(new Date(), CANONICAL_TIMEZONE);
+      const from = new Date(`${todayKey}T00:00:00+09:00`);
+      const to = new Date(from);
+      to.setDate(to.getDate() + 1);
+      const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+      const res = await fetch(`/api/admin/lessons?${params}`);
       const data = await res.json();
       setLessons(data.lessons ?? []);
     } finally {

@@ -1080,6 +1080,15 @@ export async function getAdminDirectInboxForProfileInDb(profileId: string): Prom
   thread: DirectThreadPreview | null;
   messages: DirectMessage[];
 }> {
+  const thread = await getAdminDirectThreadForProfileInDb(profileId);
+  if (!thread) return { thread: null, messages: [] };
+  const messages = await reloadAdminDirectMessagesInDb(thread.id);
+  return { thread, messages };
+}
+
+export async function getAdminDirectThreadForProfileInDb(
+  profileId: string
+): Promise<DirectThreadPreview | null> {
   const supabase = await createClient();
   const { data: threadRow } = await supabase
     .from("admin_direct_threads")
@@ -1088,12 +1097,10 @@ export async function getAdminDirectInboxForProfileInDb(profileId: string): Prom
     .maybeSingle();
 
   if (!threadRow) {
-    return { thread: null, messages: [] };
+    return null;
   }
 
-  const thread = await buildRecipientThreadPreview(threadRow as DirectThreadRow);
-  const messages = await reloadAdminDirectMessagesInDb(threadRow.id);
-  return { thread, messages };
+  return buildRecipientThreadPreview(threadRow as DirectThreadRow);
 }
 
 export async function sendAdminDirectReplyFromRecipientInDb(input: {

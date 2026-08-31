@@ -8,11 +8,11 @@ import {
 import { getReportsByStudent, getReportsByTeacher } from "@/lib/learning-store-sync";
 import {
   ensureLearningBootstrapped,
-  ensureSchedulesBootstrapped,
+  ensureLearningWorkflowBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureLearningWorkflowBootstrapped();
   try {
     await ensureLearningBootstrapped();
   } catch (error) {
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await ensureSchedulesBootstrapped();
+    await ensureLearningWorkflowBootstrapped();
 
     const body = await request.json();
     const report = await addMonthlyReportInDb(body);
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureLearningWorkflowBootstrapped();
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   const action = searchParams.get("action");

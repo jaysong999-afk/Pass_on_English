@@ -8,11 +8,11 @@ import {
 import { buildFeedbackCsvRows, feedbackCsvFilename } from "@/lib/feedback-csv";
 import {
   ensureLearningBootstrapped,
-  ensureSchedulesBootstrapped,
+  ensureLearningWorkflowBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
 
 export async function GET(request: Request) {
-  await ensureSchedulesBootstrapped();
+  await ensureLearningWorkflowBootstrapped();
 
   let teacherId: string;
   try {
