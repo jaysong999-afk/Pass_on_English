@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { Globe2, Menu, X } from "lucide-react";
+import { Globe2, LogIn, Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { LocaleSwitcher } from "@/components/shared/LocaleSwitcher";
-import { cn } from "@/lib/utils";
 
 export function LandingHeader({ locale }: { locale: string }) {
   const t = useTranslations("common");
@@ -31,12 +30,12 @@ export function LandingHeader({ locale }: { locale: string }) {
   return (
     <header className="sticky top-0 z-50 border-b border-brand-100/80 bg-surface/95 backdrop-blur-md">
       <div className="landing-container flex h-16 items-center justify-between md:h-[4.5rem]">
-        <Link href={`/${locale}`} className="flex items-center gap-2.5">
+        <Link href={`/${locale}`} className="flex min-w-0 shrink items-center gap-2.5">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-700 to-brand-600 text-sm font-black text-white shadow-md shadow-brand-900/25">
             PE
           </div>
-          <div className="leading-tight">
-            <span className="block text-base font-extrabold text-ink">{t("brand")}</span>
+          <div className="min-w-0 leading-tight">
+            <span className="block truncate text-base font-extrabold text-ink">{t("brand")}</span>
             <span className="hidden text-[11px] font-medium text-ink-muted sm:block">
               {t("tagline")}
             </span>
@@ -71,52 +70,71 @@ export function LandingHeader({ locale }: { locale: string }) {
           </Link>
         </div>
 
-        <button
-          type="button"
-          className="flex h-11 w-11 items-center justify-center rounded-xl border border-brand-100 lg:hidden"
-          onClick={() => setOpen(!open)}
-          aria-label={open ? t("menuClose") : t("menuOpen")}
-          aria-expanded={open}
-          aria-controls="landing-mobile-menu"
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        <div className="flex items-center gap-1.5 lg:hidden">
+          <LocaleSwitcher compact />
+          <Link
+            href={`/${locale}/login`}
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-brand-200 px-2.5 text-sm font-bold text-brand-700 transition-colors hover:bg-brand-50 min-[390px]:px-3"
+            aria-label={t("login")}
+          >
+            <LogIn className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="hidden min-[390px]:inline">{t("login")}</span>
+          </Link>
+          <button
+            type="button"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand-200 bg-white text-brand-700 shadow-sm transition-colors hover:bg-brand-50"
+            onClick={() => setOpen(!open)}
+            aria-label={open ? t("menuClose") : t("menuOpen")}
+            aria-expanded={open}
+            aria-controls="landing-mobile-menu"
+          >
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
-      <div id="landing-mobile-menu"
-        className={cn(
-          "fixed inset-x-0 bottom-0 top-16 z-50 border-t border-brand-100 bg-white lg:hidden md:top-[4.5rem]",
-          open ? "block" : "hidden"
-        )}
-      >
-        <nav className="landing-container flex h-full flex-col gap-1 overflow-y-auto py-6 pb-[calc(6rem+env(safe-area-inset-bottom))]">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-xl px-4 py-3 text-base font-semibold text-ink hover:bg-brand-50"
-              onClick={() => setOpen(false)}
-            >
-              {link.label}
-            </Link>
-          ))}
-          <div className="mt-auto flex flex-col gap-2 border-t border-brand-100 pt-4">
-            <LocaleSwitcher className="w-full justify-center" />
-            <Link
-              href={`/${locale}/login`}
-              className="rounded-xl px-4 py-3 text-center font-semibold text-ink-muted"
-            >
-              {t("login")}
-            </Link>
-            <Link
-              href={`/${locale}/signup`}
-              className="rounded-xl bg-brand-600 px-4 py-3 text-center font-bold text-white"
-            >
-              {t("freeTrial")}
-            </Link>
+      {open ? (
+        <div
+          id="landing-mobile-menu"
+          className="fixed inset-x-0 bottom-0 top-16 z-[60] lg:hidden md:top-[4.5rem]"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("menuOpen")}
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-ink/35 backdrop-blur-[2px]"
+            onClick={() => setOpen(false)}
+            aria-label={t("menuClose")}
+          />
+          <div className="absolute inset-x-0 top-0 max-h-[calc(100dvh-4rem)] overflow-hidden rounded-b-3xl border-b border-brand-100 bg-white shadow-[0_24px_50px_-24px_rgba(18,47,22,0.45)] md:max-h-[calc(100dvh-4.5rem)]">
+            <nav className="landing-container flex max-h-[calc(100dvh-4rem)] flex-col gap-1 overflow-y-auto overscroll-contain py-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:max-h-[calc(100dvh-4.5rem)]">
+              <p className="px-4 pb-2 text-xs font-bold uppercase tracking-[0.14em] text-ink-muted/70">
+                {t("menuLabel")}
+              </p>
+              {links.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="rounded-xl px-4 py-3 text-base font-semibold text-ink transition-colors hover:bg-brand-50 focus-visible:bg-brand-50 focus-visible:outline-none"
+                  onClick={() => setOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              ))}
+              <div className="mt-4 border-t border-brand-100 pt-4">
+                <Link
+                  href={`/${locale}/signup`}
+                  className="flex min-h-12 items-center justify-center rounded-xl bg-brand-600 px-4 py-3 text-center font-bold text-white shadow-md shadow-brand-600/20 transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+                  onClick={() => setOpen(false)}
+                >
+                  {t("freeTrial")}
+                </Link>
+              </div>
+            </nav>
           </div>
-        </nav>
-      </div>
+        </div>
+      ) : null}
     </header>
   );
 }

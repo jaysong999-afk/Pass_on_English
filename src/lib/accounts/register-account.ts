@@ -1,4 +1,4 @@
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createPrivilegedClient } from "@/lib/supabase/admin";
 import type { RegisterAccountInput } from "@/lib/account-store.types";
@@ -101,53 +101,45 @@ async function createStudentUserViaAdmin(input: RegisterAccountDbInput): Promise
   return userId;
 }
 
-async function findAuthUserByEmail(email: string): Promise<User | null> {
-  const admin = createPrivilegedClient();
-  const normalizedEmail = email.trim().toLowerCase();
-
-  for (let page = 1; ; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) {
-      throw new Error(`auth_user_lookup_failed: ${error.message}`);
-    }
-
-    const user = data.users.find(
-      (candidate) => candidate.email?.trim().toLowerCase() === normalizedEmail
-    );
-    if (user) return user;
-    if (data.users.length < 200) return null;
-  }
-}
-
-/** Recover only a partial signup whose original password is proven correct. */
+/**
+ * Recover only a partial signup whose password is proven correct.
+ *
+ * Signing in gives us the exact user id in one indexed Auth request. Avoid
+ * admin.listUsers here: that endpoint scans every Auth user page and makes a
+ * retry progressively more expensive as the service grows.
+ */
 async function recoverIncompleteStudentAuth(
   supabase: SupabaseClient,
   input: RegisterAccountDbInput
 ): Promise<string | null> {
   const admin = createPrivilegedClient();
-  const user = await findAuthUserByEmail(input.email);
-  if (!user || user.email_confirmed_at || user.last_sign_in_at) return null;
-
-  const { count, error: studentError } = await admin
-    .from("students")
-    .select("id", { count: "exact", head: true })
-    .eq("account_holder_id", user.id);
-  if (studentError) {
-    throw new Error(`student_lookup_failed: ${studentError.message}`);
-  }
-  if ((count ?? 0) > 0) return null;
-
-  // A correct password reaches email_not_confirmed; invalid credentials do not.
-  const { error: verificationError } = await supabase.auth.signInWithPassword({
+  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
     email: input.email.trim(),
     password: input.password,
   });
-  const verificationDetail =
-    `${verificationError?.code ?? ""} ${verificationError?.message ?? ""}`.toLowerCase();
-  if (
-    !verificationDetail.includes("email_not_confirmed") &&
-    !verificationDetail.includes("email not confirmed")
-  ) {
+  const user = signInData.user;
+  if (signInError || !user) return null;
+
+  const [profileResult, studentResult] = await Promise.all([
+    admin.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+    admin
+      .from("students")
+      .select("id")
+      .eq("account_holder_id", user.id)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const { data: profile, error: profileError } = profileResult;
+  if (profileError) {
+    throw new Error(`profile_lookup_failed: ${profileError.message}`);
+  }
+
+  const { data: existingStudent, error: studentError } = studentResult;
+  if (studentError) {
+    throw new Error(`student_lookup_failed: ${studentError.message}`);
+  }
+  if (profile?.role !== "student" || existingStudent) {
+    await supabase.auth.signOut();
     return null;
   }
 
@@ -166,7 +158,6 @@ async function recoverIncompleteStudentAuth(
     throw new Error(`auth_signup_failed: ${confirmError.message}`);
   }
 
-  await signInStudent(supabase, input);
   await updateRegisteredProfile(admin, user.id, input);
   return user.id;
 }
@@ -175,8 +166,6 @@ export async function createRegisteredStudentAuth(
   input: RegisterAccountDbInput
 ): Promise<{ supabase: SupabaseClient; userId: string }> {
   const supabase = await createClient();
-
-  await supabase.auth.signOut();
 
   if (hasServiceRoleKey()) {
     try {
@@ -214,6 +203,7 @@ export async function createRegisteredStudentAuth(
   }
 
   if (!signUpError && signUpData.user?.id && signUpData.session) {
+    await updateRegisteredProfile(supabase, signUpData.user.id, input);
     return { supabase, userId: signUpData.user.id };
   }
 

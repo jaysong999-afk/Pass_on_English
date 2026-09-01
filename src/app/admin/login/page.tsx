@@ -11,6 +11,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid_credentials: "이메일 또는 비밀번호가 올바르지 않습니다.",
+  email_not_confirmed: "이메일 인증을 완료한 후 다시 로그인해 주세요.",
+  auth_rate_limited: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+  auth_temporarily_unavailable: "인증 서버가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해 주세요.",
+  auth_failed: "인증 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.",
   wrong_role: "관리자 계정이 아닙니다.",
   profile_not_found: "프로필을 찾을 수 없습니다. 관리자에게 문의해 주세요.",
 };

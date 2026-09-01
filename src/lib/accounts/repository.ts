@@ -14,7 +14,6 @@ import { createClient, getBearerAccessToken } from "@/lib/supabase/server";
 import { createPrivilegedClient } from "@/lib/supabase/admin";
 import {
   createRegisteredStudentAuth,
-  updateRegisteredProfile,
   type RegisterAccountDbInput,
 } from "@/lib/accounts/register-account";
 import {
@@ -323,10 +322,15 @@ export async function registerAccountInDb(
   input: RegisterAccountDbInput
 ): Promise<AccountSession> {
   const { supabase, userId } = await createRegisteredStudentAuth(input);
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const registrationClient =
+    serviceKey && serviceKey !== "placeholder-service-key"
+      ? createPrivilegedClient()
+      : supabase;
 
-  await updateRegisteredProfile(supabase, userId, input);
-
-  const { data: student, error: studentError } = await supabase
+  // Select the client once. Retrying every failed user-scoped insert with the
+  // service role can duplicate work on timeout and doubles PostgREST traffic.
+  const { data: student, error: studentError } = await registrationClient
     .from("students")
     .insert({
       account_holder_id: userId,
@@ -344,55 +348,10 @@ export async function registerAccountInDb(
     .single();
 
   if (studentError) {
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-    if (serviceKey && serviceKey !== "placeholder-service-key") {
-      const admin = createPrivilegedClient();
-      const { data: adminStudent, error: adminStudentError } = await admin
-        .from("students")
-        .insert({
-          account_holder_id: userId,
-          full_name: input.learnerFullName.trim(),
-          english_name: input.learnerEnglishName.trim(),
-          date_of_birth: input.learnerDateOfBirth,
-          gender: input.learnerGender,
-          country: mapDbCountry(input.country),
-          trial_used: false,
-          video_platforms: input.videoPlatforms,
-        })
-        .select(
-          "id, account_holder_id, full_name, english_name, date_of_birth, gender, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at, video_platforms"
-        )
-        .single();
-
-      if (adminStudentError) {
-        throw new Error(`student_create_failed: ${adminStudentError.message}`);
-      }
-
-      const { error: adminActiveError } = await admin
-        .from("profiles")
-        .update({ active_student_id: adminStudent.id })
-        .eq("id", userId);
-
-      if (adminActiveError) {
-        throw new Error(`active_student_set_failed: ${adminActiveError.message}`);
-      }
-
-      await registerStudentForReviewInDb({
-        ...input,
-        learnerId: adminStudent.id,
-      });
-
-      const session = await loadAccountSession();
-      if (!session) {
-        throw new Error("account_session_load_failed");
-      }
-      return session;
-    }
-
     throw new Error(`student_create_failed: ${studentError.message}`);
   }
 
-  const { error: activeError } = await supabase
+  const { error: activeError } = await registrationClient
     .from("profiles")
     .update({ active_student_id: student.id })
     .eq("id", userId);

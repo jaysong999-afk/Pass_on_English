@@ -34,13 +34,15 @@ export default function TeacherLoginPage() {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(
-          data.error === "invalid_credentials"
-            ? "Invalid email or password."
-            : data.error === "teacher_not_active"
-              ? "Your teacher account is not active yet."
-              : "Sign in failed. Please try again."
-        );
+        const messages: Record<string, string> = {
+          invalid_credentials: "Invalid email or password.",
+          email_not_confirmed: "Please verify your email before signing in.",
+          auth_rate_limited: "Too many sign-in attempts. Please wait and try again.",
+          auth_temporarily_unavailable: "The authentication service is temporarily unavailable. Please try again shortly.",
+          auth_failed: "The authentication request could not be completed. Please try again shortly.",
+          teacher_not_active: "Your teacher account is not active yet.",
+        };
+        setError(messages[data.error] ?? "Sign in failed. Please try again.");
         return;
       }
 

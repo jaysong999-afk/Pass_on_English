@@ -11,6 +11,8 @@
     "seed:demo": "node scripts/seed-demo.mjs",
     "test:api": "node scripts/test-api.mjs",
     "test:auth": "node scripts/test-api-auth.mjs",
+    "test:auth:login-errors": "node --experimental-strip-types scripts/test-auth-login-classification.mjs",
+    "test:auth:signup": "node scripts/test-signup-auth-boundaries.mjs",
     "test:auth:default-deny": "node scripts/test-api-default-deny.mjs",
     "test:auth:teacher-profile": "node scripts/test-teacher-profile-auth.mjs",
     "test:bootstrap-boundaries": "node scripts/test-bootstrap-boundaries.mjs",

@@ -40,13 +40,15 @@ export default function LoginPage() {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(
-          data.error === "invalid_credentials"
-            ? t("loginFailed")
-            : data.error === "wrong_role"
-              ? t("loginFailed")
-              : t("loginFailed")
-        );
+        const messages: Record<string, string> = {
+          invalid_credentials: t("loginFailed"),
+          wrong_role: t("loginFailed"),
+          email_not_confirmed: t("emailNotConfirmed"),
+          auth_rate_limited: t("loginRateLimited"),
+          auth_temporarily_unavailable: t("authUnavailable"),
+          auth_failed: t("authUnavailable"),
+        };
+        setError(messages[data.error] ?? t("authUnavailable"));
         return;
       }
 
