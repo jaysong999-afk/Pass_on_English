@@ -14,6 +14,7 @@ import { useTeacherSession } from "@/contexts/TeacherSessionContext";
 import type { DirectThreadPreview } from "@/lib/admin/messages/types";
 import type { ChatRoom } from "@/types";
 import { useChatInboxSync } from "@/hooks/useChatInboxSync";
+import { fetchChatInbox } from "@/lib/chat-inbox-client";
 import {
   AdminSupportChatCard,
   ChatConversationCard,
@@ -33,9 +34,7 @@ export default function TeacherChatPage() {
     if (!teacherId) return;
     setError(false);
     try {
-      const res = await fetch("/api/chat/rooms?role=teacher");
-      if (!res.ok) throw new Error("chat_rooms_load_failed");
-      const data = await res.json();
+      const data = await fetchChatInbox("/api/chat/rooms?role=teacher");
       setRooms(data.rooms ?? []);
       setAdminThread(data.adminSupport ?? null);
     } catch {

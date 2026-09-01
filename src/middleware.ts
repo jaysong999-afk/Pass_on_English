@@ -129,9 +129,24 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  const pageRole = requiredRoleForPage(pathname);
+
+  // Public pages do not need an auth refresh. Besides avoiding an unnecessary
+  // Supabase round trip, this keeps refresh-token Set-Cookie headers off public
+  // responses and prevents a stale/chunked session from overflowing the proxy
+  // response-header buffer.
+  if (!pathname.startsWith("/api/") && (!pageRole || isPublicPagePath(pathname))) {
+    if (isIntlRoute(pathname)) {
+      const localeFromPathname = pathname.split("/")[1];
+      if (isValidLocale(localeFromPathname)) {
+        response.cookies.set("NEXT_LOCALE", localeFromPathname, { path: "/" });
+      }
+    }
+    return response;
+  }
+
   const auth = await getMiddlewareAuthUser(request, response);
 
-  const pageRole = requiredRoleForPage(pathname);
   if (pageRole && !isPublicPagePath(pathname)) {
     const denied = await enforceRole(request, response, pageRole, auth);
     if (denied) return denied;

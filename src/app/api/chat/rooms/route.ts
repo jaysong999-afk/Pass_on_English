@@ -1,18 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireTeacherAuth } from "@/lib/auth/session";
-import { ensureChatBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
-import { ensureAccountSession } from "@/lib/account-store";
-import { getAccountSessionCache } from "@/lib/account-session-cache";
+import { getAuthContext } from "@/lib/auth/session";
+import { getAdminDirectThreadForProfileInDb } from "@/lib/admin/messages/repository";
 import {
-  ensureAdminDirectThreadInDb,
-  getAdminDirectThreadForProfileInDb,
-} from "@/lib/admin/messages/repository";
-import {
-  ensureStudentTeacherChatRoomsInDb,
-  ensureTeacherStudentChatRoomsInDb,
-  ensureTeacherChatRoomInDb,
-  getChatRoomsFromCache,
-  getTotalUnreadFromCache,
+  getChatInboxInDb,
   markChatRoomReadInDb,
   type PortalRole,
 } from "@/lib/chat/repository";
@@ -24,117 +14,54 @@ function parseRole(value: string | null): PortalRole | null {
   return null;
 }
 
-async function resolveStudentId(searchParams: URLSearchParams): Promise<string | undefined> {
-  const session = await ensureAccountSession();
-  if (!session) return undefined;
-  const fromQuery = searchParams.get("studentId");
-  if (fromQuery && session.learners.some((learner) => learner.id === fromQuery)) {
-    return fromQuery;
+async function requireRequestedRole(role: PortalRole) {
+  const auth = await getAuthContext();
+  if (!auth) {
+    return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
   }
-  return session.activeLearnerId ?? undefined;
+  if (auth.profile.role !== role) {
+    return { error: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
+  }
+  return { auth };
 }
 
-async function resolveInboxProfileId(
-  role: PortalRole,
-  teacherId?: string
-): Promise<string | undefined> {
-  if (role === "teacher") {
-    return teacherId;
-  }
-  if (role === "student") {
-    await ensureAccountSession();
-    return getAccountSessionCache()?.account.id;
-  }
-  return undefined;
-}
-
-async function resolveTeacherIdForRole(): Promise<string | undefined> {
-  try {
-    const { teacherId } = await requireTeacherAuth();
-    return teacherId;
-  } catch {
-    return undefined;
-  }
+async function loadInbox(role: PortalRole, profileId: string, studentId?: string) {
+  const rooms = await getChatInboxInDb(role === "student" ? studentId : undefined);
+  const adminSupport =
+    role === "student" || role === "teacher"
+      ? await getAdminDirectThreadForProfileInDb(profileId)
+      : null;
+  const totalUnread =
+    rooms.reduce((sum, room) => sum + room.unread, 0) + (adminSupport?.unread ?? 0);
+  return { rooms, totalUnread, adminSupport };
 }
 
 export async function GET(request: Request) {
   try {
-    await ensureChatBootstrapped();
-
     const { searchParams } = new URL(request.url);
     const role = parseRole(searchParams.get("role"));
     if (!role) {
       return NextResponse.json({ error: "role required" }, { status: 400 });
     }
 
-    const studentId =
-      role === "student" ? await resolveStudentId(searchParams) : undefined;
-    const teacherId =
-      role === "teacher" ? await resolveTeacherIdForRole() : undefined;
+    const authResult = await requireRequestedRole(role);
+    if ("error" in authResult) return authResult.error;
 
-    if (role === "teacher" && !teacherId) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+    const studentId = role === "student" ? searchParams.get("studentId") ?? undefined : undefined;
+    const inbox = await loadInbox(role, authResult.auth.userId, studentId);
 
-    const displayName = searchParams.get("displayName");
-
-    if (role === "teacher" && searchParams.get("studentId") && teacherId) {
-      try {
-        const room = await ensureTeacherChatRoomInDb({
-          teacherId,
-          teacherName: searchParams.get("teacherName") ?? "Teacher",
-          studentId: searchParams.get("studentId")!,
-          displayName: displayName ?? "Student",
-        });
-        return NextResponse.json({ room });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "chat_room_failed";
-        return NextResponse.json({ error: message }, { status: 400 });
+    // Teacher deep links retain the historical { room } response contract, but
+    // room creation now belongs to the enrollment lifecycle DB trigger.
+    const requestedStudentId = role === "teacher" ? searchParams.get("studentId") : null;
+    if (requestedStudentId) {
+      const room = inbox.rooms.find((item) => item.studentId === requestedStudentId);
+      if (!room) {
+        return NextResponse.json({ error: "chat_room_not_found" }, { status: 404 });
       }
+      return NextResponse.json({ room });
     }
 
-    const context = {
-      viewerRole: role,
-      studentId,
-      teacherId: role === "teacher" ? teacherId : undefined,
-    };
-
-    if (role === "student" && studentId) {
-      await ensureStudentTeacherChatRoomsInDb(studentId);
-    }
-    if (role === "teacher" && teacherId) {
-      await ensureTeacherStudentChatRoomsInDb(teacherId);
-    }
-
-    const rooms = getChatRoomsFromCache(context);
-    let totalUnread = getTotalUnreadFromCache(context);
-    let adminSupport = null;
-
-    const profileId = await resolveInboxProfileId(role, teacherId);
-    if (profileId && (role === "student" || role === "teacher")) {
-      if (role === "student" && studentId) {
-        await ensureAdminDirectThreadInDb({
-          targetType: "student",
-          targetId: studentId,
-        });
-      }
-      if (role === "teacher" && teacherId) {
-        await ensureAdminDirectThreadInDb({
-          targetType: "teacher",
-          targetId: teacherId,
-        });
-      }
-      adminSupport = await getAdminDirectThreadForProfileInDb(profileId);
-      if (adminSupport?.unread) {
-        totalUnread += adminSupport.unread;
-      }
-    }
-
-    return NextResponse.json({
-      rooms,
-      totalUnread,
-      adminSupport,
-    });
+    return NextResponse.json(inbox);
   } catch (error) {
     console.error("[GET /api/chat/rooms]", error);
     const message = error instanceof Error ? error.message : "chat_rooms_failed";
@@ -144,45 +71,37 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    await ensureChatBootstrapped();
-
     const { searchParams } = new URL(request.url);
     const role = parseRole(searchParams.get("role"));
     const id = searchParams.get("id");
     const action = searchParams.get("action");
-
     if (!role) {
       return NextResponse.json({ error: "role required" }, { status: 400 });
     }
 
-    const studentId =
-      role === "student" ? await resolveStudentId(searchParams) : undefined;
-    const teacherId =
-      role === "teacher" ? await resolveTeacherIdForRole() : undefined;
+    const authResult = await requireRequestedRole(role);
+    if ("error" in authResult) return authResult.error;
 
-    if (role === "teacher" && !teacherId) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
-
-    const context = {
-      viewerRole: role,
-      studentId,
-      teacherId: role === "teacher" ? teacherId : undefined,
-    };
+    const studentId = role === "student" ? searchParams.get("studentId") ?? undefined : undefined;
+    const inbox = await loadInbox(role, authResult.auth.userId, studentId);
 
     if (action === "readAll") {
-      const rooms = getChatRoomsFromCache(context);
-      for (const room of rooms) {
-        if (room.unread > 0) {
-          await markChatRoomReadInDb(room.id, role);
-        }
-      }
-      return NextResponse.json({ totalUnread: 0 });
+      await Promise.all(
+        inbox.rooms
+          .filter((room) => room.unread > 0)
+          .map((room) => markChatRoomReadInDb(room.id, role))
+      );
+      const refreshed = await loadInbox(role, authResult.auth.userId, studentId);
+      return NextResponse.json({ totalUnread: refreshed.totalUnread });
     }
 
     if (id && action === "read") {
+      if (!inbox.rooms.some((room) => room.id === id)) {
+        return NextResponse.json({ error: "chat_room_not_found" }, { status: 404 });
+      }
       await markChatRoomReadInDb(id, role);
-      return NextResponse.json({ totalUnread: getTotalUnreadFromCache(context) });
+      const refreshed = await loadInbox(role, authResult.auth.userId, studentId);
+      return NextResponse.json({ totalUnread: refreshed.totalUnread });
     }
 
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });

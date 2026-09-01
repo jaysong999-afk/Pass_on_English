@@ -51,7 +51,7 @@
 | Auth | Supabase Auth |
 | Realtime | Supabase Realtime (채팅) |
 | Storage | Supabase Storage |
-| Infra | **Tencent Cloud 홍콩 리전** |
+| Infra | **Tencent Cloud Lighthouse 싱가포르 리전** |
 
 ### 2.1 중국 접속 제약
 
@@ -63,11 +63,11 @@
 
 **필수**:
 
-- 홍콩 리전 배포로 한·중 양국 접속
+- 싱가포르 리전 배포로 한·중 양국 접속
 - Self-host fonts/assets
-- Supabase/API latency HK 기준 검증
+- Supabase/API latency 싱가포르 기준 검증
 
-### 2.2 MVP 구현 현황 (2026-08-17)
+### 2.2 MVP 구현 현황 (2026-09-01)
 
 | 기능 | 상태 | 구현 위치 |
 |------|------|-----------|
@@ -85,7 +85,7 @@
 | Monthly Growth Report (5필드) | ✅ | `MonthlyGrowthReportEditor` |
 | Teacher Salary (월별 명세·EN 보너스 정책) | ✅ | `TeacherSalaryDashboard` |
 | Admin: teacher-profiles, pricing, FAQ | ✅ | `/admin/teacher-profiles`, `/admin/pricing`, `/admin/faq` |
-| **Supabase DDL** | ✅ | 운영 migration `001`~`035` (`024` 제외) — [`db.md`](./db.md) §8 |
+| **Supabase DDL** | ✅ | 운영 migration `001`~`042` (`024` 제외) — [`db.md`](./db.md) §8 |
 | **`pricing_plans` → Supabase** | ✅ | `pricing-plans/repository.ts`, `/api/pricing-plans` |
 | **도메인 데이터 → Supabase** | ✅ | repository write + 제한된 bootstrap/cache read — [`backend.md`](./backend.md) §1.2 |
 | **Auth · RLS** | ✅ **2차 완료** | middleware 다역할 + session UUID + learner access 검증 |
@@ -102,7 +102,7 @@
 | 급여 정산·재무 원자화 | ✅ | migration 027~029; 신규/live 분기 보너스 방지 035 |
 | 랜딩·SEO·정책 페이지 | ✅ | DB 요금제 전체 노출, locale metadata, about/privacy/terms/refund |
 
-### 2.3 보안·배포 잔여 (2026-08-17)
+### 2.3 보안·배포 잔여 (2026-09-01)
 
 | 항목 | 상태 |
 |------|------|
@@ -116,7 +116,7 @@
 | 보강·급여 정산 트랜잭션 경계 | ✅ |
 | 자동 시스템 알림 cron | ⏳ |
 | PWA install 안내 배너 | ✅ (실제 설치 가능 여부는 브라우저 정책에 따름) |
-| HK 배포 | ⏳ |
+| Tencent Cloud 싱가포르 배포 | ✅ `passonenglish.com`, Docker Compose |
 
 **테스트 묶음**: `test:auth*`, `test:rls`, `test:transactions`, `test:api:e2e`, 설정·채팅·boundary 회귀 테스트. 실행 명령은 `package.json`을 SSOT로 한다.
 
@@ -296,7 +296,7 @@ supabase start
 cp .env.example .env.local
 # NEXT_PUBLIC_SUPABASE_URL, ANON_KEY, VAPID keys 등 입력
 
-# 5. DB 마이그레이션 (운영 migration 001 → 035 순서, 024 제외)
+# 5. DB 마이그레이션 (운영 migration 001 → 042 순서, 024 제외)
 supabase db push
 # 프로젝트 스크립트로 보안/RLS migration 적용 시: npm run apply:rls
 # E2E 데이터는 migration이 아니라: npm run seed:e2e
@@ -369,7 +369,7 @@ Pass_on_English/
 - [x] 학생: 가입, 설문, My Lessons, Learning Results
 - [x] 선생님: My Lessons, availability, schedule, feedback
 - [x] 관리자: teacher-profiles, pricing, students/teachers UI
-- [x] DB migrations DDL (`001`~`035`, 024 제외) — [`db.md`](./db.md) §8
+- [x] DB migrations DDL (`001`~`042`, 024 제외) — [`db.md`](./db.md) §8
 - [x] `pricing_plans` Supabase CRUD (첫 도메인 이전)
 - [x] 도메인 데이터 → Supabase (chat·finance 포함) — [`backend.md`](./backend.md) §9
 
@@ -399,7 +399,7 @@ Pass_on_English/
 
 ### Phase 4 — 배포·QA
 
-- [ ] Tencent Cloud HK Lighthouse 배포 (Docker 구성 완료, 도메인·HTTPS 대기)
+- [x] Tencent Cloud Singapore Lighthouse 배포 (`passonenglish.com`, Docker Compose, HTTPS)
 - [ ] 한·중 접속 테스트
 - [ ] PWA iOS/Android 검증 (실제 install prompt)
 - [x] Auth·RLS 1·2차 (세션 UUID, 학생 API, pricing mutation 보호)
@@ -409,13 +409,13 @@ Pass_on_English/
 
 ---
 
-## 9. 배포 (Tencent Cloud HK)
+## 9. 배포 (Tencent Cloud Singapore)
 
 ### 9.1 권장 구성
 
 | 구성요소 | 옵션 |
 |----------|------|
-| Next.js | Docker Compose on Tencent Cloud Lighthouse (Hong Kong) |
+| Next.js | Docker Compose on Tencent Cloud Lighthouse (Singapore) |
 | CDN | Tencent Cloud CDN (정적 자산) |
 | SSL | Tencent SSL / Let's Encrypt |
 | DNS | DNSPod — dual region resolve |
@@ -425,10 +425,10 @@ Pass_on_English/
 
 ### 9.2 체크리스트
 
-- [ ] HTTPS everywhere
+- [x] HTTPS everywhere
 - [ ] `next.config` — `images.domains` Supabase storage
 - [ ] Service Worker scope `/`
-- [ ] Push: production VAPID on HK domain
+- [ ] Push: production VAPID on production domain
 - [ ] 중국에서 Google CDN 미사용 확인
 - [ ] Real User Monitoring (선택, Tencent APM)
 
@@ -533,7 +533,7 @@ Pass_on_English/
 3. ~~Auth·RLS 2차 (선생님 UUID, 학생 logout, API 보호)~~ ✅
 4. ~~Realtime 채팅 (messages)~~ ✅
 5. ~~관리자 메시지 · CS · 단체 발송~~ ✅
-6. Tencent Cloud HK 배포 + 한·중 QA
+6. ~~Tencent Cloud Singapore 배포~~ ✅ + 한·중 지속 QA
 7. 자동 시스템 알림 발송 엔진 (cron, `system_notification_rules` dispatch)
 8. demo 시드 → 운영 시드 분리 (`SUPABASE_SERVICE_ROLE_KEY` 필수)
 

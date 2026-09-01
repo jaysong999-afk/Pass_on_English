@@ -2,6 +2,8 @@
 
 필리핀 원어민 화상 영어 플랫폼 — Next.js PWA
 
+> AI와 개발자는 작업 전에 반드시 [`AI_GUIDE.md`](AI_GUIDE.md)를 읽어야 합니다. 운영 인프라, Supabase 대상과 배포 안전 규칙의 최우선 SSOT입니다.
+
 ## Quick Start
 
 ```bash
@@ -29,11 +31,13 @@ Open [http://localhost:3000](http://localhost:3000)
 - Next.js 15 (App Router) + TypeScript
 - Tailwind CSS 4 + Shadcn-style UI
 - next-intl (ko / zh-CN — 학생·랜딩)
-- Supabase (Auth, DB — skeleton)
-- PWA manifest (Web Push stub)
+- Supabase (Auth, PostgreSQL, Realtime, Storage)
+- PWA manifest + Web Push
 
 ## Documentation
 
+- [AI_GUIDE.md](AI_GUIDE.md) — AI 작업 및 운영 대상 SSOT
+- [개발요청서_현재빌드및향후계획.md](docs/개발요청서_현재빌드및향후계획.md) — 현재 구현·운영 상태와 후속 계획
 - [front.md](docs/front.md) — Frontend spec
 - [backend.md](docs/backend.md) — Backend spec
 - [db.md](docs/db.md) — Database spec

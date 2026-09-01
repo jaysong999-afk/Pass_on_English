@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ChatRoom, UserRole } from "@/types";
+import { fetchChatInbox } from "@/lib/chat-inbox-client";
 
 interface UseChatRoomOptions {
   roomId: string;
@@ -21,8 +22,7 @@ export function useChatRoom({ roomId, role, enabled = true, readEnabled = enable
     if (studentId) params.set("studentId", studentId);
     let cancelled = false;
 
-    fetch(`/api/chat/rooms?${params}`)
-      .then((response) => response.json())
+    fetchChatInbox(`/api/chat/rooms?${params}`)
       .then((data) => {
         if (cancelled) return;
         const found = (data.rooms as ChatRoom[] | undefined)?.find((item) => item.id === roomId);

@@ -8,6 +8,8 @@ import { getChatHref } from "@/lib/chat-store";
 import type { DirectThreadPreview } from "@/lib/admin/messages/types";
 import type { ChatRoom } from "@/types";
 import { useChatInboxSync } from "@/hooks/useChatInboxSync";
+import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
+import { fetchChatInbox } from "@/lib/chat-inbox-client";
 import {
   AdminSupportChatCard,
   ChatConversationCard,
@@ -22,21 +24,16 @@ export default function StudentChatListPage() {
   const [adminThread, setAdminThread] = useState<DirectThreadPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const { activeLearnerId, loading: accountLoading } = useActiveLearner();
 
   const load = useCallback(async () => {
+    if (accountLoading) return;
     setError(false);
     try {
-      const profileRes = await fetch("/api/student/profile");
-      if (!profileRes.ok) throw new Error("profile_load_failed");
-      const profile = await profileRes.json();
-      const learnerId = profile.activeLearnerId as string | undefined;
-      const qs = learnerId
-        ? `?role=student&studentId=${encodeURIComponent(learnerId)}`
+      const qs = activeLearnerId
+        ? `?role=student&studentId=${encodeURIComponent(activeLearnerId)}`
         : "?role=student";
-
-      const roomsRes = await fetch(`/api/chat/rooms${qs}`);
-      if (!roomsRes.ok) throw new Error("chat_rooms_load_failed");
-      const roomsData = await roomsRes.json();
+      const roomsData = await fetchChatInbox(`/api/chat/rooms${qs}`);
       setRooms(roomsData.rooms ?? []);
       setAdminThread(roomsData.adminSupport ?? null);
     } catch {
@@ -46,7 +43,7 @@ export default function StudentChatListPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [accountLoading, activeLearnerId]);
 
   useEffect(() => {
     void load();

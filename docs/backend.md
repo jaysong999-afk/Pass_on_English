@@ -11,7 +11,9 @@
 | **DB 상세** | 컬럼·ENUM·인덱스는 [`db.md`](./db.md)를 SSOT로 따른다. 본 문서는 **UI가 실제로 쓰는 테이블·필드**만 강조한다 |
 | **목표 스택** | Next.js Route Handlers + Supabase PostgreSQL + Auth + (선택) Realtime |
 
-> **현재 (2026-08-17)**: Route Handler **60+**개 + Supabase PostgreSQL 데이터 레이어. 세 역할의 세션 UUID 바인딩, API **기본 거부(default deny)**, 열 단위 DTO 제한, RLS·트랜잭션 보강을 완료했다. 운영 migration은 `001`~`035`이며 E2E 시드는 `supabase/seeds/`로 분리한다.
+> **현재 (2026-09-01)**: Route Handler **60+**개 + Supabase PostgreSQL 데이터 레이어. 세 역할의 세션 UUID 바인딩, API **기본 거부(default deny)**, 열 단위 DTO 제한, RLS·트랜잭션 보강을 완료했다. 운영 migration은 `001`~`042`이며 E2E 시드는 `supabase/seeds/`로 분리한다. 운영 대상은 신규 싱가포르 프로젝트이며 루트 `AI_GUIDE.md`가 project ref의 SSOT다.
+
+> `041_targeted_chat_inbox.sql`은 전체 채팅 cache warm을 사용자 범위 집계로 교체하고, `042_harden_chat_rpc_privileges.sql`은 해당 RPC의 익명 실행 권한을 제거한다. 두 migration 모두 신규 싱가포르 운영 DB에 적용됐다.
 
 ---
 
@@ -100,7 +102,7 @@
   └── Route Handlers (/api/*)  ← 본 명세 SSOT
         ↓
 [Supabase]
-  ├── PostgreSQL (migration 001~035)
+  ├── PostgreSQL (migration 001~042)
   ├── `@supabase/ssr` request client + service/bootstrap client 분리
   ├── repository writes + 제한된 bootstrap/cache reads
   ├── Auth (profiles.role) + middleware default-deny + RLS
@@ -158,7 +160,7 @@
 
 > **범례**: ✅ Route Handler 구현 · 🗄️ Supabase 연동 · ⚠️ DDL 미포함(in-memory) · 🔇 UI 미호출
 
-**집계**: Route Handler **60+**개 · DDL migration **001~035** · 핵심 도메인 Supabase 연동 · API 기본 거부 적용
+**집계**: Route Handler **60+**개 · DDL migration **001~042** · 핵심 도메인 Supabase 연동 · API 기본 거부 적용
 
 ### 5.1 Public · 공통
 
@@ -493,7 +495,7 @@
 
 ---
 
-## 8. RLS·트랜잭션 보안 (production — migration 017~035)
+## 8. RLS·트랜잭션·Auth 이전 복구 (production — migration 017~042)
 
 | Migration | 내용 |
 |-----------|------|
@@ -505,6 +507,8 @@
 | `022_teacher_application_applicant_read.sql` | 지원자 본인 application 읽기 |
 | `028_schema_rls_hardening.sql` | 스키마 무결성·누락 RLS 보강 |
 | `029_transaction_and_column_security.sql` | 보강/급여 정산 RPC 원자화, profile·교사 단가 열 노출 제한 |
+| `041_targeted_chat_inbox.sql` | 사용자 범위 채팅 집계 RPC와 lifecycle trigger |
+| `042_harden_chat_rpc_privileges.sql` | 채팅 RPC 익명 실행 권한 제거 |
 
 **적용·검증**: `npm run apply:rls` · `npm run test:rls` · `npm run test:schema-rls-boundaries` · `npm run test:transactions`
 
@@ -527,7 +531,7 @@
 
 | # | 작업 | 상태 | 검증 (UI) |
 |---|------|------|-----------|
-| 0 | 운영 DDL migration (`001`~`035`, 024는 seed로 이동) | ✅ | `npm run apply:rls` 또는 SQL Editor |
+| 0 | 운영 DDL migration (`001`~`042`, 024는 seed로 이동) | ✅ | `npm run apply:rls` 또는 SQL Editor |
 | 1 | Auth + `profiles.role` + API default deny | ✅ | `test:auth*`, `test:admin-page-auth` |
 | 2 | `students` + activeLearner (`profiles.active_student_id`) | **✅** | StudentSwitcher |
 | 3 | **`pricing_plans` + `session_minutes`** | **✅** | 랜딩·`/admin/pricing` CRUD·40/60분 |

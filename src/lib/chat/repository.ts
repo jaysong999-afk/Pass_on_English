@@ -46,6 +46,26 @@ interface ChatMessageRow {
   created_at: string;
 }
 
+interface ChatInboxRow {
+  id: string;
+  teacher_id: string;
+  teacher_name: string;
+  student_id: string;
+  student_name: string;
+  display_name: string;
+  avatar_url: string | null;
+  teacher_avatar_url: string | null;
+  student_avatar_url: string | null;
+  last_message: string | null;
+  last_message_at: string;
+  unread: number | string;
+}
+
+interface ChatThreadMessageRow extends ChatMessageRow {
+  sender_name: string;
+  sender_avatar_url: string | null;
+}
+
 interface ChatListContext {
   studentId?: string;
   teacherId?: string;
@@ -59,6 +79,39 @@ const ROOM_SELECT =
 
 const MESSAGE_SELECT =
   "id, room_id, sender_id, sender_role, body, read_at, created_at";
+
+/**
+ * Fetch only the authenticated viewer's inbox summary. The database function
+ * derives the viewer role from auth.uid(), enforces room ownership inside the
+ * function, and aggregates the latest message/unread count without downloading
+ * full message history. The function is SECURITY DEFINER only so it can return
+ * the other participant's display name/avatar despite profile self-read RLS.
+ */
+export async function getChatInboxInDb(studentId?: string): Promise<ChatRoom[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_chat_inbox", {
+    p_student_id: studentId || null,
+  });
+
+  if (error) {
+    throw new Error(`chat_inbox_fetch_failed: ${error.message}`);
+  }
+
+  return ((data ?? []) as ChatInboxRow[]).map((row) => ({
+    id: row.id,
+    teacherId: row.teacher_id,
+    teacherName: row.teacher_name,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url?.trim() || undefined,
+    teacherAvatarUrl: row.teacher_avatar_url?.trim() || undefined,
+    studentAvatarUrl: row.student_avatar_url?.trim() || undefined,
+    lastMessage: row.last_message ?? "",
+    lastMessageAt: row.last_message_at,
+    unread: Number(row.unread) || 0,
+  }));
+}
 
 async function fetchSenderProfile(
   senderId: string,
@@ -611,23 +664,26 @@ export async function markChatRoomReadInDb(
 
 export async function reloadChatMessagesInDb(roomId: string): Promise<ChatMessage[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("chat_messages")
-    .select(MESSAGE_SELECT)
-    .eq("room_id", roomId)
-    .order("created_at", { ascending: true });
+  const { data, error } = await supabase.rpc("get_chat_thread_messages", {
+    p_room_id: roomId,
+  });
 
   if (error) {
     throw new Error(`chat_messages_fetch_failed: ${error.message}`);
   }
 
-  const messages: ChatMessage[] = [];
-  const meta: { id: string; senderRole: UserRole; readAt: string | null }[] = [];
-  for (const row of (data ?? []) as ChatMessageRow[]) {
-    const sender = await fetchSenderProfile(row.sender_id, row.sender_role);
-    messages.push(rowToMessage(row, sender));
-    meta.push({ id: row.id, senderRole: row.sender_role, readAt: row.read_at });
-  }
+  const rows = (data ?? []) as ChatThreadMessageRow[];
+  const messages = rows.map((row) =>
+    rowToMessage(row, {
+      name: row.sender_name,
+      avatarUrl: row.sender_avatar_url?.trim() || undefined,
+    })
+  );
+  const meta = rows.map((row) => ({
+    id: row.id,
+    senderRole: row.sender_role,
+    readAt: row.read_at,
+  }));
 
   setChatMessagesForRoom(roomId, messages, meta);
   return messages.map((m) => ({ ...m }));

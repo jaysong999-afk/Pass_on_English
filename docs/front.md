@@ -1,6 +1,6 @@
 # Pass on English — 프론트엔드 명세서
 
-## 0. MVP 구현 현황 (2026-08-17)
+## 0. MVP 구현 현황 (2026-09-01)
 
 | 영역 | 상태 | 비고 |
 |------|------|------|
@@ -529,7 +529,7 @@ Shadcn UI 기준 설치: Button, Card, Dialog, Form, Input, Select, Tabs, Toast,
 
 - Google Fonts / Firebase / blocked CDN 사용 금지
 - 정적 자산 self-host 또는 Tencent CDN
-- Supabase·API 엔드포인트 홍콩 리전 배치 (guide.md 참고)
+- Supabase와 Tencent 애플리케이션을 싱가포르 리전에 배치 (guide.md 및 루트 AI_GUIDE.md 참고)
 - third-party script 최소화
 
 ---

@@ -1,6 +1,6 @@
 # Pass on English — 데이터베이스 설계 명세서
 
-## 0. MVP 구현 현황 (2026-08-17)
+## 0. MVP 구현 현황 (2026-09-01)
 
 | 단계 | 상태 | 비고 |
 |------|------|------|
@@ -858,6 +858,13 @@ supabase db push
 | 33 | `033_student_registration_review_details.sql` | 가입 검토 카드용 성별·플랫폼·설문/메모 등 상세 필드 |
 | 34 | `034_lesson_feedback_textbook_snapshot.sql` | 피드백에 수업 당시 교재 스냅샷 저장 |
 | 35 | `035_fix_ineligible_live_quarterly_bonus.sql` | live estimate에 잘못 저장된 분기 보너스를 0으로 정리 |
+| 36 | `036_restore_lesson_reschedule_requests.sql` | 이전 과정에서 누락된 보강 요청 스키마 복구 |
+| 37 | `037_admin_lesson_delete_rls.sql` | 관리자 수업 삭제 RLS 보강 |
+| 38 | `038_finance_exchange_rate_audit.sql` | 환율·원금액·환산금액 감사 필드 추가 |
+| 39 | `039_repair_auth_refresh_token_sequence.sql` | DB 이전 후 Auth refresh token PK/sequence 충돌 복구 |
+| 40 | `040_restore_auth_profile_provisioning.sql` | `auth.users`→`profiles` 트리거 복구와 누락 프로필 backfill |
+| 41 | `041_targeted_chat_inbox.sql` | 사용자 범위 채팅 집계 RPC, 메시지 인덱스, enrollment/admin 대화방 lifecycle trigger |
+| 42 | `042_harden_chat_rpc_privileges.sql` | 채팅 RPC의 익명 실행 권한 제거와 trigger 함수 실행 권한 강화 |
 | E2E seed | `supabase/seeds/e2e_rich_seed.sql` | 운영 migration history와 분리된 통합 테스트 시드 (수강신청·홀드·입금·스케줄·보강·피드백·재수강) |
 
 ### 8.3 `001` 포함 항목 (개념적 순서)

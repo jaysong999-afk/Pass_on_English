@@ -23,6 +23,7 @@ import {
 } from "@/lib/chat-active-room";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { useChatInboxSync } from "@/hooks/useChatInboxSync";
+import { fetchChatInbox } from "@/lib/chat-inbox-client";
 
 export interface ChatBellCopy {
   title: string;
@@ -84,6 +85,7 @@ export function ChatNotificationBell({
   teacherId,
   enabled = true,
   enableInboxSync = true,
+  mediaQuery,
 }: {
   role: PortalRole;
   locale?: Locale;
@@ -98,6 +100,8 @@ export function ChatNotificationBell({
   enabled?: boolean;
   /** Set false on duplicate bells (e.g. mobile header) to avoid double realtime subs. */
   enableInboxSync?: boolean;
+  /** Only the visually active responsive bell may fetch or subscribe. */
+  mediaQuery?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -105,11 +109,24 @@ export function ChatNotificationBell({
   const [adminDirectThreads, setAdminDirectThreads] = useState<DirectThreadPreview[]>([]);
   const [adminSupport, setAdminSupport] = useState<DirectThreadPreview | null>(null);
   const [totalUnread, setTotalUnread] = useState(0);
+  const [mediaMatches, setMediaMatches] = useState(!mediaQuery);
   const panelRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
+  useEffect(() => {
+    if (!mediaQuery) {
+      setMediaMatches(true);
+      return;
+    }
+    const query = window.matchMedia(mediaQuery);
+    const update = () => setMediaMatches(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, [mediaQuery]);
+
   const canFetch =
-    enabled &&
+    enabled && mediaMatches &&
     (role === "admin" ||
       (role === "teacher" && Boolean(teacherId)) ||
       (role === "student" && Boolean(studentId)));
@@ -144,28 +161,7 @@ export function ChatNotificationBell({
         url += `&studentId=${encodeURIComponent(studentId)}`;
       }
 
-      const roomsRes = await fetch(url);
-
-      if (!roomsRes.ok) {
-        setRooms([]);
-        setAdminSupport(null);
-        setTotalUnread(0);
-        return;
-      }
-
-      const text = await roomsRes.text();
-      if (!text) {
-        setRooms([]);
-        setAdminSupport(null);
-        setTotalUnread(0);
-        return;
-      }
-
-      const data = JSON.parse(text) as {
-        rooms?: ChatRoom[];
-        totalUnread?: number;
-        adminSupport?: DirectThreadPreview | null;
-      };
+      const data = await fetchChatInbox(url);
 
       const next = applyActiveRoomUnread(
         data.rooms ?? [],

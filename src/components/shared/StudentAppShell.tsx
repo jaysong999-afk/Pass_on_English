@@ -89,6 +89,7 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
       />
       <ChatNotificationBell
         role="student"
+        mediaQuery="(min-width: 768px)"
         locale={locale}
         studentId={activeLearnerId ?? undefined}
         enabled={!accountLoading && Boolean(activeLearnerId)}
@@ -137,10 +138,10 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
               />
               <ChatNotificationBell
                 role="student"
+                mediaQuery="(max-width: 767px)"
                 locale={locale}
                 studentId={activeLearnerId ?? undefined}
                 enabled={!accountLoading && Boolean(activeLearnerId)}
-                enableInboxSync={false}
                 copy={{
                   title: tChat("bellTitle"),
                   viewAll: tChat("viewAll"),

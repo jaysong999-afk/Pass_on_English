@@ -1,12 +1,17 @@
-# Tencent Cloud Lighthouse (Hong Kong) deployment
+# Tencent Cloud Lighthouse (Singapore) deployment
 
-This directory is the production deployment package for one Hong Kong Lighthouse
+This directory is the production deployment package for one Singapore Lighthouse
 instance. Supabase remains external; only the Next.js application, its minute
 scheduler, and the reverse proxy run on Lighthouse.
 
+The operational SSOT is [`../../AI_GUIDE.md`](../../AI_GUIDE.md). The production
+Supabase project is the Singapore project `mvngtkoqjejvwygikvhi`; the retired
+project must never be used by runtime configuration.
+
 ## Recommended instance
 
-- Region: Hong Kong (China)
+- Region: Singapore
+- Production IPv4: `43.134.7.175`
 - OS: Ubuntu 24.04 LTS x86_64
 - Minimum: 2 vCPU / 4 GB RAM / 60 GB SSD
 - Firewall: allow TCP 80 and 443 from the internet; allow TCP 22 only from the
@@ -18,10 +23,11 @@ For a 2 GB plan, build and push the image from CI instead of building on the hos
 
 ## Files and secrets
 
-On the server, place the repository at `/opt/pass-on-english`, then run:
+Production upgrades use immutable commit-based release directories at
+`/opt/pass-on-english/releases/<git-short-sha>`. In the selected release, run:
 
 ```bash
-cd /opt/pass-on-english/deploy/tencent-lighthouse
+cd /opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse
 cp .env.production.example .env.production
 chmod 600 .env.production
 ```
@@ -29,6 +35,9 @@ chmod 600 .env.production
 Fill every placeholder in `.env.production`. Public `NEXT_PUBLIC_*` values are
 embedded during `docker compose build`, so changing them requires a rebuild.
 Never copy `.env.local` to the server without reviewing it.
+
+Before every build, verify that `NEXT_PUBLIC_SUPABASE_URL` is exactly
+`https://mvngtkoqjejvwygikvhi.supabase.co`. Do not print secret key values.
 
 Generate a production cron secret with:
 
@@ -101,6 +110,8 @@ smoke tests pass. Roll back by restoring that tag in `.env.production` and runni
 ## Required post-start checks
 
 - `/ko` and `/zh-CN` load over HTTPS
+- Nginx logs contain no `upstream sent too big header`; the HTTPS config reserves
+  response-header buffers for chunked Supabase SSR session cookies
 - student, teacher, and admin login/authorization boundaries still pass
 - student KST and teacher Manila time displays describe the same lesson instant
 - cron logs show successful broadcast and enrollment-hold maintenance calls
