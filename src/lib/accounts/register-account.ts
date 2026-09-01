@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createPrivilegedClient } from "@/lib/supabase/admin";
 import type { RegisterAccountInput } from "@/lib/account-store.types";
 import { countryToTimezone } from "@/lib/account-location";
+import { ensurePrivilegedAuthProfile } from "@/lib/auth/profile-provisioning";
 
 export interface RegisterAccountDbInput extends RegisterAccountInput {
   password: string;
@@ -42,7 +43,20 @@ export async function updateRegisteredProfile(
   userId: string,
   input: RegisterAccountDbInput
 ) {
-  const { error: profileError } = await supabase
+  if (hasServiceRoleKey()) {
+    await ensurePrivilegedAuthProfile({
+      userId,
+      role: "student",
+      fullName: input.fullName,
+      phone: input.phone,
+      accountType: input.accountType,
+      country: input.country,
+      timezone: countryToTimezone(input.country),
+    });
+    return;
+  }
+
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .update({
       full_name: input.fullName.trim(),
@@ -51,25 +65,15 @@ export async function updateRegisteredProfile(
       country: input.country,
       timezone: countryToTimezone(input.country),
     })
-    .eq("id", userId);
+    .eq("id", userId)
+    .eq("role", "student")
+    .select("id")
+    .maybeSingle();
 
   if (profileError) {
-    const admin = createPrivilegedClient();
-    const { error: adminProfileError } = await admin
-      .from("profiles")
-      .update({
-        full_name: input.fullName.trim(),
-        phone: input.phone.trim(),
-        account_type: input.accountType,
-        country: input.country,
-        timezone: countryToTimezone(input.country),
-      })
-      .eq("id", userId);
-
-    if (adminProfileError) {
-      throw new Error(`profile_update_failed: ${adminProfileError.message}`);
-    }
+    throw new Error(`profile_update_failed: ${profileError.message}`);
   }
+  if (!profile) throw new Error("profile_missing");
 }
 
 async function createStudentUserViaAdmin(input: RegisterAccountDbInput): Promise<string> {
@@ -138,7 +142,7 @@ async function recoverIncompleteStudentAuth(
   if (studentError) {
     throw new Error(`student_lookup_failed: ${studentError.message}`);
   }
-  if (profile?.role !== "student" || existingStudent) {
+  if ((profile && profile.role !== "student") || existingStudent) {
     await supabase.auth.signOut();
     return null;
   }

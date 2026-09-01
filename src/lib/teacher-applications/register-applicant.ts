@@ -6,6 +6,7 @@ import {
   saveTeacherApplicationInDb,
   getTeacherApplicationForApplicantInDb,
 } from "@/lib/teacher-applications/repository";
+import { ensurePrivilegedAuthProfile } from "@/lib/auth/profile-provisioning";
 
 function hasServiceRoleKey(): boolean {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
@@ -27,28 +28,32 @@ async function updateTeacherProfile(
   userId: string,
   input: TeacherSignupInput
 ) {
-  const { error: profileError } = await supabase
+  if (hasServiceRoleKey()) {
+    await ensurePrivilegedAuthProfile({
+      userId,
+      role: "teacher",
+      fullName: input.fullName,
+      phone: input.phone,
+      locale: "ko",
+    });
+    return;
+  }
+
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .update({
       full_name: input.fullName.trim(),
       phone: input.phone.trim(),
     })
-    .eq("id", userId);
+    .eq("id", userId)
+    .eq("role", "teacher")
+    .select("id")
+    .maybeSingle();
 
   if (profileError) {
-    const admin = createPrivilegedClient();
-    const { error: adminProfileError } = await admin
-      .from("profiles")
-      .update({
-        full_name: input.fullName.trim(),
-        phone: input.phone.trim(),
-      })
-      .eq("id", userId);
-
-    if (adminProfileError) {
-      throw new Error(`profile_update_failed: ${adminProfileError.message}`);
-    }
+    throw new Error(`profile_update_failed: ${profileError.message}`);
   }
+  if (!profile) throw new Error("profile_missing");
 }
 
 async function signInApplicant(
