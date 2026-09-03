@@ -43,7 +43,7 @@ export function ChatMonitorThread({ roomId, readOnly = true }: ChatMonitorThread
       if (prev.some((m) => m.id === message.id)) return prev;
       return [...prev, message];
     });
-  });
+  }, () => { void load(); });
 
   if (loading) {
     return (

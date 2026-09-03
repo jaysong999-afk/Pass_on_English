@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { PersonAvatar } from "@/components/shared/PersonAvatar";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ChatMessage, UserRole } from "@/types";
 import { useChatRealtime } from "@/hooks/useChatRealtime";
+import { useChatPresence } from "@/hooks/useChatPresence";
+import { usePageVisible } from "@/hooks/usePageVisible";
 import { useStickToBottomScroll } from "@/hooks/useStickToBottomScroll";
 import { setActiveChatRoom } from "@/lib/chat-active-room";
 import { notifyChatInboxChanged } from "@/lib/chat-inbox-events";
@@ -42,6 +44,10 @@ export function ChatThread({
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
+  const visible = usePageVisible();
+  const currentRoom = useRef(roomId);
+  currentRoom.current = roomId;
+  const loadingRoom = useRef<string | null>(null);
 
   const { scrollRef, handleScroll, pinToBottom } = useStickToBottomScroll({
     resetKey: roomId,
@@ -57,6 +63,7 @@ export function ChatThread({
   );
 
   const markRoomRead = useCallback(async () => {
+    if (document.visibilityState !== "visible" || !document.hasFocus()) return;
     let url = `/api/chat/rooms?role=${senderRole}&id=${encodeURIComponent(roomId)}&action=read`;
     if (senderRole === "student" && studentId) {
       url += `&studentId=${encodeURIComponent(studentId)}`;
@@ -73,27 +80,46 @@ export function ChatThread({
   }, [roomId, senderRole, studentId, teacherId]);
 
   const loadMessages = useCallback(async () => {
-    const res = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(roomId)}`);
-    const data = await res.json();
-    const loaded = (data.messages ?? []) as ChatMessage[];
-    setMessages(loaded.map(normalizeMessage));
-    void markRoomRead();
+    if (document.visibilityState !== "visible" || loadingRoom.current === roomId) return;
+    loadingRoom.current = roomId;
+    try {
+      const res = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(roomId)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (currentRoom.current !== roomId) return;
+      const loaded = (data.messages ?? []) as ChatMessage[];
+      setMessages((previous) => {
+        const merged = new Map(previous.map((message) => [message.id, message]));
+        loaded.forEach((message) => merged.set(message.id, normalizeMessage(message)));
+        return [...merged.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      });
+      void markRoomRead();
+    } catch { /* Retry on reconnection or a later visit. */ }
+    finally { if (loadingRoom.current === roomId) loadingRoom.current = null; }
   }, [roomId, normalizeMessage, markRoomRead]);
 
   useEffect(() => {
     setActiveChatRoom(roomId);
-    void loadMessages();
+    setMessages([]);
     return () => setActiveChatRoom(null);
-  }, [roomId, loadMessages]);
+  }, [roomId]);
 
-  useChatRealtime(roomId, currentUserId, (message) => {
+  useEffect(() => { if (visible) void loadMessages(); }, [visible, loadMessages]);
+  useEffect(() => {
+    const read = () => { void markRoomRead(); };
+    window.addEventListener("focus", read);
+    return () => window.removeEventListener("focus", read);
+  }, [markRoomRead]);
+
+  const connected = useChatRealtime(roomId, currentUserId, (message) => {
     const normalized = normalizeMessage(message);
     setMessages((prev) => {
       if (prev.some((m) => m.id === normalized.id)) return prev;
       return [...prev, normalized];
     });
     if (!normalized.isOwn) void markRoomRead();
-  });
+  }, () => { void loadMessages(); });
+  useChatPresence(roomId, connected);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();

@@ -35,7 +35,7 @@ export function useChatRoom({ roomId, role, enabled = true, readEnabled = enable
   }, [enabled, role, roomId, studentId]);
 
   useEffect(() => {
-    if (!readEnabled) return;
+    if (!readEnabled || document.visibilityState !== "visible" || !document.hasFocus()) return;
     const params = new URLSearchParams({ role, id: roomId, action: "read" });
     void fetch(`/api/chat/rooms?${params}`, { method: "PATCH" }).then(() => onRead?.());
   }, [onRead, readEnabled, role, roomId]);

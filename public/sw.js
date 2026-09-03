@@ -1,4 +1,6 @@
 /* eslint-disable no-restricted-globals */
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
@@ -20,8 +22,8 @@ self.addEventListener("push", (event) => {
       body,
       tag,
       data: { ...data, url },
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
+      icon: "/icons/pwa-192.png",
+      badge: "/icons/pwa-192.png",
     })
   );
 });
@@ -29,11 +31,22 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification.data || {};
-  const url = data.url || "/";
+  const destination = new URL(data.url || "/", self.location.origin);
+  const url = destination.origin === self.location.origin ? destination.href : self.location.origin;
   const notificationId = data.notificationId;
 
   event.waitUntil(
     (async () => {
+      // Navigate before click tracking: a slow API must never delay opening the chat.
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const client = clients.find((item) => item.url === url) || clients[0];
+      if (client) {
+        if (client.url !== url && "navigate" in client) await client.navigate(url);
+        await client.focus();
+      } else if (self.clients.openWindow) {
+        await self.clients.openWindow(url);
+      }
+
       if (notificationId) {
         try {
           const portalRole = data.portalRole === "teacher" ? "teacher" : "student";
@@ -47,24 +60,6 @@ self.addEventListener("notificationclick", (event) => {
         }
       }
 
-      const clients = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
-
-      for (const client of clients) {
-        if ("focus" in client) {
-          await client.focus();
-          if ("navigate" in client && url) {
-            await client.navigate(url);
-          }
-          return;
-        }
-      }
-
-      if (self.clients.openWindow) {
-        await self.clients.openWindow(url);
-      }
     })()
   );
 });

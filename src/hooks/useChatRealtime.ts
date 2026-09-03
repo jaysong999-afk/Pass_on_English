@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { usePageVisible } from "./usePageVisible";
 import { ADMIN_SENDER_DISPLAY_NAME } from "@/lib/admin/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { ChatMessage, UserRole } from "@/types";
@@ -17,17 +18,24 @@ interface ChatMessageRow {
 export function useChatRealtime(
   roomId: string,
   currentUserId: string | undefined,
-  onMessage: (message: ChatMessage) => void
+  onMessage: (message: ChatMessage) => void,
+  onReconnect?: () => void
 ) {
+  const visible = usePageVisible();
+  const instanceId = useId();
+  const [connected, setConnected] = useState(false);
+  const reconnectRef = useRef(onReconnect);
+  reconnectRef.current = onReconnect;
   const handlerRef = useRef(onMessage);
   handlerRef.current = onMessage;
 
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || !visible) return;
+    let disposed = false;
 
     const supabase = createClient();
     const channel = supabase
-      .channel(`chat-messages:${roomId}`)
+      .channel(`chat-messages:${roomId}:${instanceId}`)
       .on(
         "postgres_changes",
         {
@@ -53,10 +61,17 @@ export function useChatRealtime(
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (disposed) return;
+        setConnected(status === "SUBSCRIBED");
+        if (status === "SUBSCRIBED") reconnectRef.current?.();
+      });
 
     return () => {
+      disposed = true;
+      setConnected(false);
       void supabase.removeChannel(channel);
     };
-  }, [roomId, currentUserId]);
+  }, [roomId, currentUserId, visible, instanceId]);
+  return connected && visible;
 }

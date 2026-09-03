@@ -11,9 +11,8 @@ import { createBootstrapDbClient } from "@/lib/supabase/db-client";
 import { createClient } from "@/lib/supabase/server";
 import {
   ADMIN_SENDER_DISPLAY_NAME,
-  resolveAdminProfileIdInDb,
 } from "@/lib/admin/resolve-admin-sender";
-import { sendNotificationWithOptionalPushInDb } from "@/lib/notifications/repository";
+
 import { isDisplayableAvatarUrl } from "@/lib/avatar-display";
 import {
   appendChatMessageToCache,
@@ -356,39 +355,6 @@ export function getChatMessagesFromCache(roomId: string): ChatMessage[] {
   return getChatMessagesCache(roomId).map((m) => ({ ...m }));
 }
 
-async function resolveSenderProfileId(input: {
-  senderRole: UserRole;
-  studentId?: string;
-  teacherId?: string;
-}): Promise<string> {
-  const supabase = await createClient();
-
-  if (input.senderRole === "admin") {
-    return resolveAdminProfileIdInDb();
-  }
-
-  if (input.senderRole === "teacher") {
-    const teacherId = resolveTeacherId(input.teacherId);
-    if (!teacherId) throw new Error("teacher_not_found");
-    return teacherId;
-  }
-
-  if (input.senderRole === "student") {
-    if (!input.studentId) throw new Error("student_id_required");
-    const { data, error } = await supabase
-      .from("students")
-      .select("account_holder_id")
-      .eq("id", input.studentId)
-      .single();
-    if (error || !data?.account_holder_id) {
-      throw new Error("student_profile_not_found");
-    }
-    return data.account_holder_id;
-  }
-
-  throw new Error("admin_sender_not_resolved");
-}
-
 export async function ensureTeacherChatRoomInDb(input: {
   teacherId: string;
   teacherName: string;
@@ -535,12 +501,9 @@ export async function sendChatMessageInDb(input: {
   studentId?: string;
   teacherId?: string;
   viewerProfileId?: string;
+  senderId: string;
 }): Promise<ChatMessage> {
-  const senderId = await resolveSenderProfileId({
-    senderRole: input.senderRole,
-    studentId: input.studentId,
-    teacherId: input.teacherId,
-  });
+  const senderId = input.senderId;
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -577,46 +540,8 @@ export async function sendChatMessageInDb(input: {
     });
   }
 
-  if (input.senderRole === "admin") {
-    void notifyChatRoomParticipantsOfAdminMessage(input.roomId, message.body);
-  }
 
   return message;
-}
-
-async function notifyChatRoomParticipantsOfAdminMessage(
-  roomId: string,
-  body: string
-): Promise<void> {
-  const supabase = await createClient();
-  const { data: room } = await supabase
-    .from("chat_rooms")
-    .select("student_id, teacher_id")
-    .eq("id", roomId)
-    .single();
-  if (!room) return;
-
-  const { data: student } = await supabase
-    .from("students")
-    .select("account_holder_id")
-    .eq("id", room.student_id)
-    .maybeSingle();
-
-  const recipients = [student?.account_holder_id, room.teacher_id].filter(
-    (id): id is string => !!id
-  );
-
-  const preview = body.trim().slice(0, 500);
-  for (const userId of recipients) {
-    await sendNotificationWithOptionalPushInDb({
-      userId,
-      type: "chat_message",
-      title: ADMIN_SENDER_DISPLAY_NAME,
-      body: preview,
-      payload: { roomId, kind: "admin_chat" },
-      push: true,
-    });
-  }
 }
 
 export async function markChatRoomReadInDb(
@@ -624,37 +549,16 @@ export async function markChatRoomReadInDb(
   viewerRole: PortalRole
 ): Promise<void> {
   const supabase = await createClient();
-  const { data: unreadRows, error: fetchError } = await supabase
-    .from("chat_messages")
-    .select("id, sender_role")
-    .eq("room_id", roomId)
-    .is("read_at", null);
-
-  if (fetchError) {
-    throw new Error(`chat_read_fetch_failed: ${fetchError.message}`);
-  }
-
-  const ids = (unreadRows ?? [])
-    .filter((row) => row.sender_role !== viewerRole)
-    .map((row) => row.id);
-
-  if (ids.length === 0) {
-    const room = getChatRoomCache().find((r) => r.id === roomId);
-    if (room) patchChatRoomInCache({ ...room, unread: 0 });
-    return;
-  }
-
   const { error } = await supabase
     .from("chat_messages")
     .update({ read_at: new Date().toISOString() })
-    .in("id", ids);
-
-  if (error) {
-    throw new Error(`chat_read_update_failed: ${error.message}`);
-  }
+    .eq("room_id", roomId)
+    .neq("sender_role", viewerRole)
+    .is("read_at", null);
+  if (error) throw new Error(`chat_read_update_failed: ${error.message}`);
 
   const meta = getChatMessageMeta(roomId).map((m) =>
-    ids.includes(m.id) ? { ...m, readAt: new Date().toISOString() } : m
+    m.senderRole !== viewerRole && !m.readAt ? { ...m, readAt: new Date().toISOString() } : m
   );
   setChatMessagesForRoom(roomId, getChatMessagesCache(roomId), meta);
 

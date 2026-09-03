@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useId } from "react";
+import { usePageVisible } from "./usePageVisible";
 import { createClient } from "@/lib/supabase/client";
 import type { DirectMessage } from "@/lib/admin/messages/types";
 
@@ -14,17 +15,23 @@ interface AdminDirectMessageRow {
 
 export function useAdminDirectRealtime(
   threadId: string | undefined,
-  onMessage: (message: DirectMessage) => void
+  onMessage: (message: DirectMessage) => void,
+  onReconnect?: () => void
 ) {
+  const visible = usePageVisible();
+  const instanceId = useId();
+  const reconnectRef = useRef(onReconnect);
+  reconnectRef.current = onReconnect;
   const handlerRef = useRef(onMessage);
   handlerRef.current = onMessage;
 
   useEffect(() => {
-    if (!threadId) return;
+    if (!threadId || !visible) return;
+    let disposed = false;
 
     const supabase = createClient();
     const channel = supabase
-      .channel(`admin-direct:${threadId}`)
+      .channel(`admin-direct:${threadId}:${instanceId}`)
       .on(
         "postgres_changes",
         {
@@ -45,10 +52,13 @@ export function useAdminDirectRealtime(
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (!disposed && status === "SUBSCRIBED") reconnectRef.current?.();
+      });
 
     return () => {
+      disposed = true;
       void supabase.removeChannel(channel);
     };
-  }, [threadId]);
+  }, [threadId, visible, instanceId]);
 }

@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatNotificationBell } from "@/components/shared/ChatNotificationBell";
+import { PwaInstallBanner } from "./PwaInstallBanner";
+import { PushSubscribeProvider } from "./PushSubscribeProvider";
 import { LogoutButton } from "@/components/shared/LogoutButton";
 import { StudentAppShell } from "@/components/shared/StudentAppShell";
 import { useTeacherSession } from "@/contexts/TeacherSessionContext";
@@ -91,7 +93,11 @@ export function AppShell({ role, children }: AppShellProps) {
       <div className="mx-auto flex max-w-6xl gap-6 px-4 py-6">
         <PortalNavigation items={config.items} pathname={pathname} rootPath="/teacher" mobileSafeArea={false} />
 
-        <main className="min-w-0 flex-1 pb-24 md:pb-6">{children}</main>
+        <main className="min-w-0 flex-1 pb-24 md:pb-6">
+          {teacherId && <PwaInstallBanner portal />}
+          <PushSubscribeProvider role="teacher" userId={teacherId ?? undefined} />
+          {children}
+        </main>
       </div>
 
     </div>

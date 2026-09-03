@@ -27,7 +27,7 @@ export default function StudentChatListPage() {
   const { activeLearnerId, loading: accountLoading } = useActiveLearner();
 
   const load = useCallback(async () => {
-    if (accountLoading) return;
+    if (accountLoading || !activeLearnerId || document.visibilityState !== "visible") return;
     setError(false);
     try {
       const qs = activeLearnerId
@@ -49,7 +49,7 @@ export default function StudentChatListPage() {
     void load();
   }, [load]);
 
-  useChatInboxSync(load);
+  useChatInboxSync(load, !accountLoading && Boolean(activeLearnerId));
 
   return (
     <div className="space-y-6">

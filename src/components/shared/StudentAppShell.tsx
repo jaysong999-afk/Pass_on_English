@@ -12,6 +12,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { ChatNotificationBell } from "@/components/shared/ChatNotificationBell";
+import { PwaInstallBanner } from "./PwaInstallBanner";
+import { PushSubscribeProvider } from "./PushSubscribeProvider";
 import { useActiveLearner, useActiveLearnerDisplayName } from "@/contexts/ActiveLearnerContext";
 import { LocaleSwitcher } from "@/components/shared/LocaleSwitcher";
 import { LogoutButton } from "@/components/shared/LogoutButton";
@@ -26,7 +28,7 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
   const tShell = useTranslations("studentPortal.shell");
   const tChat = useTranslations("studentPortal.chat");
   const displayName = useActiveLearnerDisplayName();
-  const { activeLearnerId, loading: accountLoading } = useActiveLearner();
+  const { account, activeLearnerId, loading: accountLoading } = useActiveLearner();
 
   const studentBase = studentBasePath(locale);
 
@@ -166,7 +168,11 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
           mobileAriaLabel={tShell("mobileNav")}
         />
 
-        <main className="min-w-0 flex-1 pb-24 md:pb-6">{children}</main>
+        <main className="min-w-0 flex-1 pb-24 md:pb-6">
+          {account && <PwaInstallBanner portal locale={locale} />}
+          <PushSubscribeProvider role="student" userId={account?.id} locale={locale} />
+          {children}
+        </main>
       </div>
 
     </div>

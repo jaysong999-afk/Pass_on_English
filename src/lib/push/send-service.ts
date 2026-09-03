@@ -10,7 +10,6 @@ export interface PushPayload {
 }
 
 export interface PushSubscriptionRow {
-  id: string;
   user_id: string;
   endpoint: string;
   p256dh: string;
@@ -40,7 +39,7 @@ export async function fetchPushSubscriptionsForUsersInDb(
 
   const { data, error } = await supabase
     .from("push_subscriptions")
-    .select("id, user_id, endpoint, p256dh, auth")
+    .select("user_id, endpoint, p256dh, auth")
     .in("user_id", userIds);
 
   if (error) {
@@ -77,19 +76,19 @@ export async function sendPushToUsersInDb(
     };
   }
 
-  const subscriptions = await fetchPushSubscriptionsForUsersInDb(supabase, uniqueUserIds);
-  const usersWithSubscriptions = new Set(subscriptions.map((s) => s.user_id)).size;
-
   if (!ensureWebPushConfigured()) {
     return {
       sent: 0,
-      failed: subscriptions.length,
+      failed: 0,
       expired: 0,
       skipped: true,
       usersReached: 0,
-      usersWithSubscriptions,
+      usersWithSubscriptions: 0,
     };
   }
+
+  const subscriptions = await fetchPushSubscriptionsForUsersInDb(supabase, uniqueUserIds);
+  const usersWithSubscriptions = new Set(subscriptions.map((s) => s.user_id)).size;
 
   const notificationPayload = JSON.stringify({
     title: payload.title,
@@ -115,7 +114,8 @@ export async function sendPushToUsersInDb(
               auth: subscription.auth,
             },
           },
-          notificationPayload
+          notificationPayload,
+          { timeout: 5000, TTL: 3600 }
         );
         sent += 1;
         reachedUsers.add(subscription.user_id);
@@ -129,7 +129,7 @@ export async function sendPushToUsersInDb(
           }
         } else {
           failed += 1;
-          console.warn("[push] send failed", subscription.endpoint, error);
+          console.warn("[push] send failed", { statusCode: (error as { statusCode?: number })?.statusCode });
         }
       }
     })

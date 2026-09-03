@@ -1,89 +1,109 @@
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(base64);
-  const output = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; ++i) {
-    output[i] = raw.charCodeAt(i);
-  }
-  return output;
+export type PushRole = "student" | "teacher";
+export type PushFailure = "denied" | "dismissed" | "unsupported" | "unavailable" | "failed";
+export class PushError extends Error {
+  constructor(public readonly reason: PushFailure) { super(reason); }
 }
 
-export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
-    return null;
-  }
+let registrationRequest: Promise<ServiceWorkerRegistration | null> | undefined;
+const saved = new Map<string, number>();
+const pending = new Map<string, Promise<PushSubscription>>();
 
-  try {
-    return await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-  } catch (error) {
-    console.warn("[push] service worker registration failed", error);
-    return null;
-  }
+function applicationKey(value: string): Uint8Array {
+  const base64 = (value + "=".repeat((4 - value.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
 
-export async function subscribeToPush(
-  role: "student" | "teacher" = "student"
-): Promise<PushSubscription | null> {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+export function supportsPush() {
+  return typeof window !== "undefined" && window.isSecureContext &&
+    "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+
+export function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof window === "undefined" || !window.isSecureContext || !("serviceWorker" in navigator)) {
+    return Promise.resolve(null);
+  }
+  registrationRequest ??= navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
+    registrationRequest = undefined;
     return null;
-  }
-
-  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim();
-  if (!vapidPublicKey) {
-    return null;
-  }
-
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return null;
-
-  const registration = (await navigator.serviceWorker.ready) ?? (await registerServiceWorker());
-  if (!registration) return null;
-
-  let subscription = await registration.pushManager.getSubscription();
-  if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
-    });
-  }
-
-  const json = subscription.toJSON();
-  const endpoint = json.endpoint;
-  const p256dh = json.keys?.p256dh;
-  const auth = json.keys?.auth;
-
-  if (!endpoint || !p256dh || !auth) {
-    return null;
-  }
-
-  const res = await fetch("/api/push/subscribe", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({
-      endpoint,
-      keys: { p256dh, auth },
-      role,
-    }),
   });
-
-  if (!res.ok) {
-    console.warn("[push] subscribe API failed", await res.text());
-    return null;
-  }
-
-  return subscription;
+  return registrationRequest;
 }
 
-export async function ensurePushSubscription(
-  role: "student" | "teacher" = "student"
-): Promise<boolean> {
+async function activeRegistration() {
+  const registration = await registerServiceWorker();
+  if (!registration) throw new PushError("failed");
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const sub = await subscribeToPush(role);
-    return Boolean(sub);
-  } catch (error) {
-    console.warn("[push] ensurePushSubscription failed", error);
-    return false;
-  }
+    return await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new PushError("failed")), 10000);
+      }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+/** Called directly by the click handler: permission is requested before any await. */
+export async function subscribeToPush(role: PushRole, userId: string, requestPermission = true): Promise<PushSubscription> {
+  if (!supportsPush()) throw new PushError("unsupported");
+  const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim();
+  if (!vapid) throw new PushError("unavailable");
+  const permission = Notification.permission === "default" && requestPermission
+    ? await Notification.requestPermission()
+    : Notification.permission;
+  window.dispatchEvent(new Event("push-permission-changed"));
+  if (permission !== "granted") throw new PushError(permission === "denied" ? "denied" : "dismissed");
+
+  const owner = role + ":" + userId;
+  const existing = pending.get(owner);
+  if (existing) return existing;
+  const operation = (async () => {
+    const registration = await activeRegistration();
+    const key = applicationKey(vapid);
+    let subscription = await registration.pushManager.getSubscription();
+    const oldKey = subscription?.options.applicationServerKey;
+    if (oldKey && String(new Uint8Array(oldKey)) !== String(key)) {
+      await subscription!.unsubscribe();
+      subscription = null;
+    }
+    subscription ??= await registration.pushManager.subscribe({
+      userVisibleOnly: true, applicationServerKey: key as BufferSource,
+    });
+    const json = subscription.toJSON();
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) throw new PushError("failed");
+    const cacheKey = owner + ":" + JSON.stringify(json);
+    // No repeated upserts on navigation; retry failures and reconcile on a later visit.
+    if ((saved.get(cacheKey) ?? 0) < Date.now()) {
+      const response = await fetch("/api/push/subscribe", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, role }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new PushError("failed");
+      saved.set(cacheKey, Date.now() + 3600000);
+    }
+    return subscription;
+  })().finally(() => pending.delete(owner));
+  pending.set(owner, operation);
+  return operation;
+}
+
+/** Prevent a shared browser from continuing to receive a signed-out account's messages. */
+export async function detachPushSubscription() {
+  saved.clear();
+  try {
+    await Promise.allSettled([...pending.values()]);
+    const registration = await navigator.serviceWorker?.getRegistration("/");
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return;
+    await subscription.unsubscribe();
+    await fetch("/api/push/subscribe", {
+      method: "DELETE", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subscription.endpoint }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch { /* A cancelled browser subscription is pruned on the next push. */ }
+  finally { saved.clear(); }
 }

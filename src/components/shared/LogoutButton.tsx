@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { detachPushSubscription } from "@/lib/push";
 
 interface LogoutButtonProps {
   redirectTo: string;
@@ -20,6 +21,7 @@ export function LogoutButton({
   const router = useRouter();
 
   async function handleLogout() {
+    await detachPushSubscription();
     await fetch("/api/auth/logout", { method: "POST" });
     router.push(redirectTo);
     router.refresh();

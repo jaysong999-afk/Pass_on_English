@@ -186,8 +186,10 @@ export async function sendNotificationWithOptionalPushInDb(input: {
   body: string;
   payload?: Record<string, unknown>;
   push?: boolean;
-}): Promise<AppNotification> {
-  const supabase = await createRequestDbClient();
+  url?: string;
+  tag?: string;
+}, authorizedDb?: SupabaseClient): Promise<AppNotification> {
+  const supabase = authorizedDb ?? await createRequestDbClient();
   const trimmedBody = input.body.trim();
 
   const { data: row, error } = await supabase
@@ -207,15 +209,17 @@ export async function sendNotificationWithOptionalPushInDb(input: {
   }
 
   if (input.push) {
-    await sendPushToUsersInDb(supabase, [input.userId], {
+    const result = await sendPushToUsersInDb(supabase, [input.userId], {
       title: input.title.trim(),
       body: trimmedBody.slice(0, 500),
-      tag: input.type,
+      url: input.url,
+      tag: input.tag ?? input.type,
       data: {
         notificationId: row.id,
         ...(input.payload ?? {}),
       },
     });
+    if (result.failed || result.skipped) console.warn("[push] delivery incomplete", { failed: result.failed, skipped: result.skipped });
   }
 
   return rowToNotification(row as NotificationRow);

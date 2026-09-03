@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAdminDirectRealtime } from "@/hooks/useAdminDirectRealtime";
+import { usePageVisible } from "@/hooks/usePageVisible";
 import { useStickToBottomScroll } from "@/hooks/useStickToBottomScroll";
 
 interface AdminDirectChatPanelProps {
@@ -31,6 +32,7 @@ export function AdminDirectChatPanel({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const visible = usePageVisible();
 
   const chatReady = Boolean(threadId) && !loading;
 
@@ -41,7 +43,7 @@ export function AdminDirectChatPanel({
   });
 
   const markRead = useCallback(async () => {
-    if (!threadId) return;
+    if (!threadId || document.visibilityState !== "visible" || !document.hasFocus()) return;
     try {
       await fetch("/api/messages/admin-direct", {
         method: "PATCH",
@@ -54,6 +56,7 @@ export function AdminDirectChatPanel({
   }, [role, threadId]);
 
   const loadInbox = useCallback(async () => {
+    if (document.visibilityState !== "visible") return;
     setLoading(true);
     try {
       const res = await fetch(`/api/messages/admin-direct?role=${role}`);
@@ -61,7 +64,7 @@ export function AdminDirectChatPanel({
       const id = data.thread?.id ?? null;
       setThreadId(id);
       setMessages(dedupeDirectMessages(data.messages ?? []));
-      if (id) {
+      if (id && document.visibilityState === "visible" && document.hasFocus()) {
         try {
           await fetch("/api/messages/admin-direct", {
             method: "PATCH",
@@ -80,9 +83,9 @@ export function AdminDirectChatPanel({
 
   useEffect(() => {
     setActiveChatRoom(ADMIN_SUPPORT_ROOM_ID);
-    void loadInbox();
     return () => setActiveChatRoom(null);
-  }, [loadInbox]);
+  }, []);
+  useEffect(() => { if (visible) void loadInbox(); }, [visible, loadInbox]);
 
   useAdminDirectRealtime(threadId ?? undefined, (message) => {
     pinToBottom();
@@ -91,7 +94,7 @@ export function AdminDirectChatPanel({
       void markRead();
       notifyChatInboxChanged();
     }
-  });
+  }, () => { void loadInbox(); });
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();

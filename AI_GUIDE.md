@@ -3,7 +3,7 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-09-01
+최종 검증일: 2026-09-03 (DB 043 적용 및 CLI 대상 재검증; 앱 배포 변경 없음)
 기준 브랜치: `main`
 검증된 운영 기준 커밋: `848666a` (`fix: restore auth profile provisioning`)
 
@@ -22,8 +22,8 @@
 | 폐기 대상 Supabase project ref | `yldtimpsgumheiahcwwi` |
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
-| DB migration 최신 기준 | `042_harden_chat_rpc_privileges.sql` |
-| 다음 배포 시 적용 대기 | 없음 |
+| DB migration 최신 기준 | `043_chat_push_presence.sql` — 2026-09-03 싱가포르 운영 DB 적용·권한 검증 완료 |
+| 다음 배포 시 적용 대기 | DB 043 적용 완료. 운영 환경파일에 VAPID 등록 완료(2026-09-03); 새 이미지 빌드·앱 배포·실기기 검증 필요 |
 
 ### 금지된 연결
 
@@ -87,12 +87,15 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 ### Migration
 
 - migration 디렉터리: `supabase/migrations/`
-- 현재 운영 기준: `001`~`042` 순차 적용, `024`는 운영 migration이 아니라 `supabase/seeds/`로 분리됐다.
+- 현재 운영 기준: 기존 `001`~`042` 적용 기준에 `043`을 2026-09-03 추가 적용. `024`는 운영 migration이 아니라 `supabase/seeds/`로 분리됐다.
 - `039_repair_auth_refresh_token_sequence.sql`: 이전 후 refresh token PK/sequence 충돌 복구.
 - `040_restore_auth_profile_provisioning.sql`: `auth.users` → `public.profiles` 트리거 복구와 누락 프로필 backfill.
 - `041_targeted_chat_inbox.sql`: 사용자 범위 채팅 inbox/thread 집계, 채팅 인덱스와 enrollment/admin 대화방 lifecycle trigger.
 - `042_harden_chat_rpc_privileges.sql`: Supabase가 신규 함수에 부여한 직접 `anon` 실행 권한을 제거하고 채팅 RPC를 인증 사용자와 service role로 제한한다.
 - 이미 적용된 migration 파일을 임의로 재작성하지 않는다. 후속 변경은 새 번호 migration으로 추가한다.
+- `043_chat_push_presence.sql`은 2026-09-03 운영 적용 완료. 채팅방 접속 lease와 저장된 메시지 기반 수신자 RPC를 추가한다. RLS·인덱스·역할별 권한·함수 소유자 등 12개 검사와 service-role 읽기 전용 함수 실행을 통과했다. 앱 코드는 아직 별도 배포가 필요하다.
+- 같은 날 운영 DB에 `supabase_migrations.schema_migrations`가 없음을 확인했다. 043은 Management API를 통한 해당 SQL 파일 단독 트랜잭션 실행으로 적용했고, CLI 이력을 임의로 생성하거나 과거 이력을 복구하지 않았다. `db push`/전체 migration 재적용 금지: 실제 객체와 과거 적용 기록을 대조한 이력 정합화가 먼저 필요하다.
+- 로컬 `supabase/.temp`의 구 프로젝트 연결을 발견하여 실행을 중단한 후, 공식 CLI `link`로 싱가포르 project ref 및 pooler를 재설정·확인했다. 향후 CLI 실행 전 숨김/ignored 파일의 project-ref도 반드시 확인한다.
 - 운영 DB 적용 전 대상 project ref를 출력 가능한 비밀이 아닌 URL/ref 수준에서 확인하고, 데이터 보존형 SQL인지 검토한다.
 
 ### 회원가입 불변조건
@@ -106,6 +109,11 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 ## 5. 환경변수와 비밀 관리
 
 로컬은 `.env.local`, Tencent 운영 서버는 릴리스 디렉터리의 `deploy/tencent-lighthouse/.env.production`을 사용한다.
+
+2026-09-03 VAPID 등록: 실행 중인 `pass-on-english:24b2111`의 실제 Compose 경로를 확인한 뒤,
+해당 릴리스 `.env.production`에 로컬 공개키·비밀키 두 항목만 등록했다. 키 쌍 정상 및 로컬/서버 파일 일치 확인.
+기존 `VAPID_SUBJECT`와 Supabase 설정은 보존했고 원본은 동일 디렉터리의 `.env.production.pre-vapid-*`로 백업했다(두 파일 모두 600).
+앱은 재시작·재빌드하지 않았으므로 현재 실행 컨테이너에는 아직 VAPID 키가 없다. 다음 배포 시 새 이미지 빌드와 환경 반영이 필요하다.
 
 필수 운영 변수:
 

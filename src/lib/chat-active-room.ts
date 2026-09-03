@@ -13,5 +13,6 @@ export function setActiveChatRoom(roomId: string | null) {
 }
 
 export function getActiveChatRoomId(): string | null {
+  if (typeof document !== "undefined" && (document.visibilityState !== "visible" || !document.hasFocus())) return null;
   return activeRoomId;
 }

@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/build-pwa-icons.mjs",
+    "prebuild": "node scripts/build-pwa-icons.mjs",
+    "test:pwa-push": "node scripts/test-pwa-push.mjs",
     "dev": "next dev",
     "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev",
     "build": "next build",
@@ -45,6 +48,7 @@
     "migrate:avatar-storage": "node --env-file=.env.local scripts/migrate-avatar-data-urls.mjs"
   },
   "dependencies": {
+    "sharp": "^0.34.5",
     "@radix-ui/react-avatar": "^1.1.3",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-slot": "^1.1.2",

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { getLocale } from "next-intl/server";
+import { PwaProvider } from "@/components/shared/PwaProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -9,10 +10,10 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icons/pwa-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/pwa-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: "/icons/icon-192.png",
+    apple: "/icons/pwa-192.png",
   },
 };
 
@@ -24,7 +25,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = await getLocale();
   return (
     <html lang={locale} suppressHydrationWarning>
-      <body>{children}</body>
+      <body><PwaProvider>{children}</PwaProvider></body>
     </html>
   );
 }

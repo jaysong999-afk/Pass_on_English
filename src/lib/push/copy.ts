@@ -1,0 +1,48 @@
+const en = {
+  install: "Add app to home screen",
+  installDescription: "Open your lessons and chats from your home screen.",
+  ios: "In Safari, tap Share → Add to Home Screen. Then open the app icon to enable notifications.",
+  manual: "Use your browser menu to install this app. If installation is unavailable, open this page in Safari, Chrome or Edge.",
+  close: "Hide installation guide for 7 days",
+  enable: "Enable chat and lesson notifications",
+  enabled: "Notifications are enabled on this device.",
+  busy: "Enabling notifications…",
+  denied: "Notifications are blocked. Allow them in your browser or device settings, then try again.",
+  unsupported: "This browser does not support push notifications. Try a supported browser.",
+  unavailable: "Notifications are not available yet. Please try again later.",
+  failed: "Could not enable notifications. Check your connection and try again.",
+  dismissed: "Permission was not granted. You can try again whenever you are ready.",
+};
+const ko: typeof en = {
+  install: "홈 화면에 앱 추가",
+  installDescription: "홈 화면의 앱 아이콘으로 수업과 채팅을 바로 열어보세요.",
+  ios: "Safari에서 공유 버튼 → 홈 화면에 추가를 선택하세요. 추가한 앱 아이콘으로 실행한 뒤 알림을 켤 수 있습니다.",
+  manual: "브라우저 메뉴에서 앱 설치를 선택하세요. 설치 메뉴가 없다면 Safari, Chrome 또는 Edge에서 열어주세요.",
+  close: "설치 안내 7일 동안 숨기기",
+  enable: "채팅 및 수업 알림 켜기",
+  enabled: "이 기기에서 알림을 받을 수 있습니다.",
+  busy: "알림 설정 중…",
+  denied: "알림이 차단되어 있습니다. 브라우저 또는 기기 설정에서 허용한 뒤 다시 시도해 주세요.",
+  unsupported: "이 브라우저는 푸시 알림을 지원하지 않습니다. 지원되는 브라우저에서 이용해 주세요.",
+  unavailable: "아직 알림을 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+  failed: "알림을 켜지 못했습니다. 연결을 확인하고 다시 시도해 주세요.",
+  dismissed: "알림 권한을 허용하지 않았습니다. 원하실 때 다시 켤 수 있습니다.",
+};
+const zh: typeof en = {
+  install: "将应用添加到主屏幕",
+  installDescription: "通过主屏幕上的应用图标快速打开课程和聊天。",
+  ios: "在 Safari 中点击分享 → 添加到主屏幕。然后从应用图标打开，再开启通知。",
+  manual: "请在浏览器菜单中安装应用。如果没有安装选项，请使用 Safari、Chrome 或 Edge 打开。",
+  close: "7 天内不再显示安装提示",
+  enable: "开启聊天和课程通知",
+  enabled: "此设备已开启通知。",
+  busy: "正在开启通知…",
+  denied: "通知已被阻止。请在浏览器或设备设置中允许通知，然后重试。",
+  unsupported: "此浏览器不支持推送通知。请使用支持的浏览器。",
+  unavailable: "通知暂时不可用，请稍后重试。",
+  failed: "无法开启通知。请检查网络连接后重试。",
+  dismissed: "尚未允许通知，您可以随时再次开启。",
+};
+export function pushCopy(locale: string) {
+  return locale === "zh-CN" ? zh : locale === "ko" ? ko : en;
+}

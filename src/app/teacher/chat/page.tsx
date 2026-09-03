@@ -31,7 +31,7 @@ export default function TeacherChatPage() {
   const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
-    if (!teacherId) return;
+    if (!teacherId || document.visibilityState !== "visible") return;
     setError(false);
     try {
       const data = await fetchChatInbox("/api/chat/rooms?role=teacher");
@@ -50,7 +50,7 @@ export default function TeacherChatPage() {
     if (teacherId) void load();
   }, [load, teacherId]);
 
-  useChatInboxSync(load);
+  useChatInboxSync(load, Boolean(teacherId));
 
   const filteredRooms = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();

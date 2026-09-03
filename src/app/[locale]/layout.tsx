@@ -27,7 +27,7 @@ export default async function LocaleLayout({
   return (
     <NextIntlClientProvider messages={messages}>
       <div className={`locale-${locale}`}>{children}</div>
-      <PwaInstallBanner />
+      <PwaInstallBanner locale={locale} />
     </NextIntlClientProvider>
   );
 }

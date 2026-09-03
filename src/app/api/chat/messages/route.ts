@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { notifyChatMessageInDb } from "@/lib/chat/notifications";
 import type { UserRole } from "@/types";
 import { assertTeacherIsActive, getAuthContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -86,12 +87,17 @@ export async function POST(request: Request) {
     }
 
     const message = await sendChatMessageInDb({
+      senderId: auth.userId,
       roomId: body.roomId,
       body: body.body,
       senderRole: body.senderRole,
       studentId,
       teacherId: body.senderRole === "teacher" ? auth.userId : undefined,
       viewerProfileId: auth.userId,
+    });
+    after(async () => {
+      try { await notifyChatMessageInDb(message); }
+      catch (error) { console.error("[chat] notification delivery failed", error instanceof Error ? error.message : "unknown"); }
     });
     return NextResponse.json({ message });
   } catch (error) {

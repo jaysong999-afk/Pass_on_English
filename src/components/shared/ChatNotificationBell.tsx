@@ -132,7 +132,7 @@ export function ChatNotificationBell({
       (role === "student" && Boolean(studentId)));
 
   const load = useCallback(async () => {
-    if (!canFetch) return;
+    if (!canFetch || document.visibilityState !== "visible") return;
     try {
       if (role === "admin") {
         const res = await fetch("/api/admin/messages/direct");
