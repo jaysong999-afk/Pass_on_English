@@ -3,9 +3,9 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-09-03 (DB 043 적용 및 CLI 대상 재검증; 앱 배포 변경 없음)
+최종 검증일: 2026-09-03 (DB 043·VAPID 반영 및 앱 배포 후 운영 검증 완료)
 기준 브랜치: `main`
-검증된 운영 기준 커밋: `848666a` (`fix: restore auth profile provisioning`)
+검증된 운영 기준 커밋: `35bb954` (`feat: improve PWA install and chat push delivery`)
 
 ## 1. 절대 혼동하면 안 되는 운영 정보
 
@@ -23,7 +23,8 @@
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
 | DB migration 최신 기준 | `043_chat_push_presence.sql` — 2026-09-03 싱가포르 운영 DB 적용·권한 검증 완료 |
-| 다음 배포 시 적용 대기 | DB 043 적용 완료. 운영 환경파일에 VAPID 등록 완료(2026-09-03); 새 이미지 빌드·앱 배포·실기기 검증 필요 |
+| 현재 운영 이미지 / 릴리스 | `pass-on-english:35bb954` / `/opt/pass-on-english/releases/35bb954` |
+| 남은 검증 | DB 043·VAPID·앱 배포 완료. 실제 기기의 설치·권한 허용·양방향 Push 수신 검증 필요 |
 
 ### 금지된 연결
 
@@ -93,7 +94,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 - `041_targeted_chat_inbox.sql`: 사용자 범위 채팅 inbox/thread 집계, 채팅 인덱스와 enrollment/admin 대화방 lifecycle trigger.
 - `042_harden_chat_rpc_privileges.sql`: Supabase가 신규 함수에 부여한 직접 `anon` 실행 권한을 제거하고 채팅 RPC를 인증 사용자와 service role로 제한한다.
 - 이미 적용된 migration 파일을 임의로 재작성하지 않는다. 후속 변경은 새 번호 migration으로 추가한다.
-- `043_chat_push_presence.sql`은 2026-09-03 운영 적용 완료. 채팅방 접속 lease와 저장된 메시지 기반 수신자 RPC를 추가한다. RLS·인덱스·역할별 권한·함수 소유자 등 12개 검사와 service-role 읽기 전용 함수 실행을 통과했다. 앱 코드는 아직 별도 배포가 필요하다.
+- `043_chat_push_presence.sql`은 2026-09-03 운영 적용 완료. 채팅방 접속 lease와 저장된 메시지 기반 수신자 RPC를 추가한다. RLS·인덱스·역할별 권한·함수 소유자 등 12개 검사와 service-role 읽기 전용 함수 실행을 통과했다. 연계 앱 코드도 `35bb954`로 배포 완료했다.
 - 같은 날 운영 DB에 `supabase_migrations.schema_migrations`가 없음을 확인했다. 043은 Management API를 통한 해당 SQL 파일 단독 트랜잭션 실행으로 적용했고, CLI 이력을 임의로 생성하거나 과거 이력을 복구하지 않았다. `db push`/전체 migration 재적용 금지: 실제 객체와 과거 적용 기록을 대조한 이력 정합화가 먼저 필요하다.
 - 로컬 `supabase/.temp`의 구 프로젝트 연결을 발견하여 실행을 중단한 후, 공식 CLI `link`로 싱가포르 project ref 및 pooler를 재설정·확인했다. 향후 CLI 실행 전 숨김/ignored 파일의 project-ref도 반드시 확인한다.
 - 운영 DB 적용 전 대상 project ref를 출력 가능한 비밀이 아닌 URL/ref 수준에서 확인하고, 데이터 보존형 SQL인지 검토한다.
@@ -110,10 +111,12 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 
 로컬은 `.env.local`, Tencent 운영 서버는 릴리스 디렉터리의 `deploy/tencent-lighthouse/.env.production`을 사용한다.
 
-2026-09-03 VAPID 등록: 실행 중인 `pass-on-english:24b2111`의 실제 Compose 경로를 확인한 뒤,
+2026-09-03 VAPID 최초 등록: 당시 실행 중인 `pass-on-english:24b2111`의 실제 Compose 경로를 확인한 뒤,
 해당 릴리스 `.env.production`에 로컬 공개키·비밀키 두 항목만 등록했다. 키 쌍 정상 및 로컬/서버 파일 일치 확인.
 기존 `VAPID_SUBJECT`와 Supabase 설정은 보존했고 원본은 동일 디렉터리의 `.env.production.pre-vapid-*`로 백업했다(두 파일 모두 600).
-앱은 재시작·재빌드하지 않았으므로 현재 실행 컨테이너에는 아직 VAPID 키가 없다. 다음 배포 시 새 이미지 빌드와 환경 반영이 필요하다.
+이후 사용자 승인으로 `35bb954` 새 릴리스에 환경파일을 복사하고 이미지 태그만 바꿔 새 이미지를 빌드·배포했다.
+현재 환경파일은 `/opt/pass-on-english/releases/35bb954/deploy/tencent-lighthouse/.env.production`이다.
+실행 컨테이너 키와 환경파일 일치, 키 쌍 정상, 실제 HTTPS 브라우저 코드의 공개키 포함 및 비밀키 비노출을 확인했다.
 
 필수 운영 변수:
 
@@ -164,6 +167,16 @@ https://passonenglish.com/api/health     → 200
 - 컨테이너의 `NEXT_PUBLIC_SUPABASE_URL`이 `mvngtkoqjejvwygikvhi`인가
 - app/nginx/cron 최근 로그에 반복 5xx·timeout이 없는가
 - 로그인, 회원가입, 학생·선생님·관리자 권한 경계가 유지되는가
+
+2026-09-03 배포 검증:
+
+- `35bb954` 커밋·origin/main 푸시 후 커밋 아카이브만 배포. 로컬 환경파일/미추적 첨부파일 제외.
+- 실제 서버 RAM은 2GB다. 별도 BuildKit 컨테이너에 CPU 1코어·메모리 1200MB·메모리+스왑 2GB 제한을 걸어 빌드했고 완료 후 빌더를 정지했다.
+- app healthy 확인 후 cron·nginx 전환. nginx 설정 검사 통과. 공개 ko/zh-CN·회원가입·로그인·health 200, manifest/SW/192·512 아이콘 검증 통과.
+- 운영 도메인에서 기존 테스트 계정의 API 기본 거부 10개·선생님 프로필 권한 9개 통과. 신규 presence/구독 API의 익명 POST 401.
+- 배포 후 확인 구간에서 app·cron·nginx 오류 및 nginx 5xx 0건. 두 cron 작업 각 2회 이상 완료.
+- 이전 `24b2111` 릴리스와 이미지는 보존. 이전 환경파일 태그가 실제 실행 이미지와 다르므로 롤백은 반드시 `APP_IMAGE_TAG=24b2111`을 명시한다. 별도 클라우드 스냅샷은 이번 작업에서 생성하지 않았다.
+- `npm audit --omit=dev`: high 4 / moderate 1. 기존 의존성의 호환성 검토·보안 업데이트는 별도 후속 작업이며 이번 배포에서 임의 업그레이드하지 않았다. 상세는 `docs/pwa-push.md` 참고.
 
 ## 7. 테스트 기준
 

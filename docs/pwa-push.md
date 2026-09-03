@@ -1,6 +1,6 @@
 # PWA 설치와 채팅 Push
 
-2026-09-03 로컬 구현, 운영 DB migration 043 적용 및 운영 환경파일 VAPID 등록 완료. 새 이미지 빌드·앱 운영 배포·실제 Push 검증은 별도다.
+2026-09-03 운영 DB migration 043·VAPID 설정 및 앱 `35bb954` 빌드·배포 완료. 실제 기기의 설치·권한 허용·Push 수신 검증은 남아 있다.
 
 ## 핵심 변경
 
@@ -28,14 +28,46 @@
 5. 최종 HTTPS 도메인에서 manifest/SW/192·512 아이콘이 200으로 제공되는지 확인한다.
 
 초기 구현 시 비어 있던 로컬 VAPID 공개키·비밀키를 사용자가 입력했고, 2026-09-03 정상 키 쌍임을 확인했다.
-현재 실행 중인 `pass-on-english:24b2111`의 Compose 경로를 확인한 뒤
+최초 키 등록 당시 실행 중이던 `pass-on-english:24b2111`의 Compose 경로를 확인한 뒤
 `/opt/pass-on-english/releases/24b2111/deploy/tencent-lighthouse/.env.production`에 두 키만 등록했다.
 기존 `VAPID_SUBJECT`와 다른 설정은 보존했고 Supabase URL은 싱가포르를 유지했다.
 로컬과 서버 파일의 두 키 일치를 값 출력 없이 재확인했다.
 원본 백업: 같은 디렉터리의 `.env.production.pre-vapid-20260903T132319Z-1683392`.
 환경파일과 백업 모두 `600 root:root`. 키 원문을 로그/채팅에 출력하지 않았다.
-앱 컨테이너 `a4abe50a92a5`는 변경 없이 healthy이며, 재시작·빌드·배포하지 않아 런타임 키는 아직 비어 있다.
-이 상태를 실제 Push 동작 완료로 해석하지 않는다. 다음 배포에서 등록한 키를 사용해 이미지를 새로 빌드해야 한다.
+키 등록만 진행했던 시점에는 실행 컨테이너가 미반영 상태였다. 이후 아래 배포에서 브라우저 빌드와 런타임에 모두 반영했다.
+
+## 앱 운영 배포 기록 (2026-09-03)
+
+- 코드 커밋: `35bb9543a62387c7c1de34c1c7d88dc6fc92c9ae`, origin/main 푸시 완료.
+- 운영 이미지: `pass-on-english:35bb954`, 이미지 config SHA256 `96877c245d6ffb07be0bba39a412221abb969834597b53277f27c9253e30d629`.
+- 릴리스: `/opt/pass-on-english/releases/35bb954/deploy/tencent-lighthouse`.
+- 앱 시작 시각: 2026-09-03 13:46:36 UTC (22:46:36 KST). healthcheck 통과 후 cron·nginx 전환 및 nginx 설정 검사 통과.
+- 커밋 아카이브만 전송했고 SHA256 `873a65c0c553e40e7e7cebf1f2ab71e9303260e766c17b1f9fb67e82e596758d`를 서버에서 확인했다.
+- 기존 운영 환경파일을 서버 내부에서 복사하고 `APP_IMAGE_TAG=35bb954`만 변경했다. 그 외 모든 변수의 동일성을 확인했다. 환경파일은 600 권한이며 이미지 빌드 컨텍스트에서 제외된다.
+- 실제 서버 메모리 2GB에 맞춰 별도 BuildKit 빌더를 CPU 1코어·RAM 1200MB·메모리+스왑 2GB로 제한했다. 빌드 중 기존 health 응답 200 유지, 빌드 완료 후 빌더는 정지했다. 빌더 캐시는 다음 빌드에 재사용 가능하다.
+- 새 이미지 검사 11개 통과: VAPID 키 쌍·브라우저 공개키 포함·비밀키/서비스키 비노출·구 프로젝트 비포함·Supabase/앱 URL·연락처·manifest scope·아이콘 크기·presence API.
+- 운영 HTTPS 검사: ko/zh-CN/ko signup/teacher login/admin login/health HTTP 200, manifest id·scope, SW 소스 일치, 아이콘 크기, 실제 제공 JS의 공개키 포함·비밀키 비노출, 익명 presence/구독 POST 401.
+- 운영 도메인에서 API 기본 거부 10개·선생님 프로필 권한/DTO 9개 통과. 로컬에서도 동일 검사와 production build·타입·PWA 모의 9그룹·회원가입/성능/i18n/RLS/proxy 경계 검사를 통과했다.
+- 배포 후 확인 구간의 app/cron/nginx 오류 및 nginx 5xx 0건, 두 cron 작업 각각 2회 완료. 실제 채팅·Push는 임의로 발송하지 않았다.
+- 이전 릴리스/이미지 `24b2111` 보존. 기존 환경파일의 태그가 당시 실행 이미지와 달랐으므로 롤백 때 반드시 명시적으로 이미지 태그를 지정한다. 별도 클라우드 스냅샷은 생성하지 않았다.
+
+긴급 롤백(운영 승인 후 실행):
+
+```sh
+cd /opt/pass-on-english/releases/24b2111/deploy/tencent-lighthouse
+sudo APP_IMAGE_TAG=24b2111 docker compose --env-file .env.production up -d --no-build --wait --wait-timeout 180
+```
+
+### 별도 후속 보안 점검
+
+빌드 중 `npm audit` 경고가 있어 production 의존성만 재검사했다. high 4/moderate 1이며 critical은 0이다.
+영향 패키지는 `nanoid`, `next`(전이 의존성), `next-intl`, `postcss`, `sharp`다.
+일부 해결 제안이 메이저 버전 변경이므로 이번 배포에서 `npm audit fix --force`나 임의 업그레이드를 수행하지 않았다.
+실제 사용 경로 영향과 호환성 확인 후 별도 업데이트가 필요하다. 경고 개수는 직접 취약점 개수와 같지 않다.
+관련 원문: [nanoid](https://github.com/advisories/GHSA-2v37-7h3g-55p8),
+[next-intl](https://github.com/advisories/GHSA-8f24-v5vv-gm5j),
+[PostCSS](https://github.com/advisories/GHSA-qx2v-qp2m-jg93),
+[sharp/libvips](https://github.com/advisories/GHSA-f88m-g3jw-g9cj).
 
 ## 043 운영 적용 기록 (2026-09-03)
 
