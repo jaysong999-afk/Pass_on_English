@@ -115,7 +115,7 @@
 | profile private/teacher compensation 열 제한 | ✅ |
 | 보강·급여 정산 트랜잭션 경계 | ✅ |
 | 자동 시스템 알림 cron | ⏳ |
-| PWA install 안내 배너 | ✅ (실제 설치 가능 여부는 브라우저 정책에 따름) |
+| 모바일 PWA 설치·Push 안내 | ✅ (PC 숨김, 실제 설치·알림 수신은 브라우저/기기 정책 및 실기기 검증 필요) |
 | Tencent Cloud 싱가포르 배포 | ✅ `passonenglish.com`, Docker Compose |
 
 **테스트 묶음**: `test:auth*`, `test:rls`, `test:transactions`, `test:api:e2e`, 설정·채팅·boundary 회귀 테스트. 실행 명령은 `package.json`을 SSOT로 한다.
@@ -428,7 +428,7 @@ Pass_on_English/
 - [x] HTTPS everywhere
 - [ ] `next.config` — `images.domains` Supabase storage
 - [ ] Service Worker scope `/`
-- [ ] Push: production VAPID on production domain
+- [x] Push: production VAPID on production domain
 - [ ] 중국에서 Google CDN 미사용 확인
 - [ ] Real User Monitoring (선택, Tencent APM)
 

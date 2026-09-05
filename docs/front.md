@@ -23,7 +23,7 @@
 | **플랫폼 호환 매칭** | ✅ | 가입/설정에서 ZOOM·VOOV 복수 선택, 수강신청 시 교집합이 있는 선생님만 노출 |
 | **성별·가입 메모·교재 이력** | ✅ | 가입→관리자/교사 학생 정보, 과거 교재와 수업별 교재·진도 스냅샷 |
 | **선생님 세션 바인딩** | ✅ | 인증 세션 UUID → `resolveTeacherIdForAuthUser`; 하드코딩 제거 |
-| PWA / Push | ✅ 기본 기능 | manifest, 설치 안내 배너, subscribe/send API, 수동 `public/sw.js`; 실기기 검증은 배포 단계 |
+| PWA / Push | ✅ 기본 기능 | manifest, 모바일 전용 설치 안내/설정 메뉴, subscribe/send API, 수동 `public/sw.js`; 실기기 검증은 별도 |
 
 ---
 
@@ -485,15 +485,19 @@ Shadcn UI 기준 설치: Button, Card, Dialog, Form, Input, Select, Tabs, Toast,
 
 ### 8.1 PWA
 
-- `@ducanh2912/next-pwa` — service worker, offline shell, manifest
+- 수동 `public/sw.js` — Service Worker 등록 및 Web Push 처리 (Next PWA 패키지는 미적용)
 - `manifest.json`: name, icons (192/512), `display: standalone`, theme_color
-- 홈 화면 추가 유도 배너 (iOS Safari / Android Chrome 분기)
+- 설치·Push UI는 Android·iPhone·iPadOS 등 모바일 환경에서만 노출하고 PC에서는 숨김
+- 공개 페이지 헤더의 `앱 설치 안내`, 학생 `내 정보 관리`, 선생님 `My Profile`에서 설치 안내에 재접근 가능
+- 설치 가능한 브라우저는 native install prompt를 실행하고, iOS 및 수동 설치 환경은 브라우저별 안내 표시
+- 일회성 설치 스낵바는 닫은 뒤 7일만 숨기며, Standalone 앱은 설치 UI를 표시하지 않음
 
 ### 8.2 Web Push
 
 - VAPID 키 기반 구독 (`pushManager.subscribe`)
 - 구독 정보 Supabase `push_subscriptions` 저장
 - 알림 트리거: 새 채팅, 보강 요청/승인, 결제 확인, 수업 리마인더(추후)
+- `PushSubscribeProvider`는 모바일 환경에서만 채팅·수업 알림 설정 UI와 구독 흐름을 제공
 - 권한 거부 시 in-app Toast만 사용
 
 ---
