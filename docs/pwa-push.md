@@ -1,6 +1,6 @@
 # PWA 설치와 채팅 Push
 
-2026-09-05 기준 운영 DB migration 043·VAPID 설정 및 앱 `073cb07` 빌드·배포 완료. 실제 기기의 설치·권한 허용·Push 수신 검증은 남아 있다.
+2026-09-05 기준 운영 DB migration 043·VAPID 설정 및 앱 `6187a80` 빌드·배포 완료. 실제 기기의 설치·권한 허용·Push 수신 검증은 남아 있다.
 
 ## 핵심 변경
 
@@ -68,6 +68,13 @@ sudo APP_IMAGE_TAG=24b2111 docker compose --env-file .env.production up -d --no-
 [next-intl](https://github.com/advisories/GHSA-8f24-v5vv-gm5j),
 [PostCSS](https://github.com/advisories/GHSA-qx2v-qp2m-jg93),
 [sharp/libvips](https://github.com/advisories/GHSA-f88m-g3jw-g9cj).
+
+## 모바일 PWA 설치 UX 운영 배포 기록 (2026-09-05)
+
+- 코드 커밋 `762a2c4`와 문서 반영 커밋 `6187a80ac01c3ba3a6abf09f04cf6e0e67f8c223`을 포함한 아카이브를 `/opt/pass-on-english/releases/6187a80`에 배포했다.
+- 운영 이미지 `pass-on-english:6187a80`을 제한형 BuildKit으로 생성하고 app healthcheck 통과 후 cron·Nginx를 전환했다. 이전 `073cb07` 릴리스·이미지는 보존했다.
+- 운영 HTTPS에서 공개 페이지·회원가입·포털 진입·health·manifest·Service Worker·192/512 아이콘 HTTP 200을 확인했다. Service Worker의 알림 클릭 fallback과 standalone manifest를 재확인했다.
+- `npm run test:pwa-push`, TypeScript 검사, production build 및 boundary 검사를 배포 전에 통과했다. 실제 Android/iPhone/iPadOS 기기의 설치·권한·Push 수신과 재부팅 후 세션 유지는 별도 검증이 필요하다.
 
 ## 043 운영 적용 기록 (2026-09-03)
 

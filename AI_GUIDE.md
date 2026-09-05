@@ -3,9 +3,9 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-09-05 (PWA Push 클릭 라우팅 수정 배포 및 운영 종단간 검증 완료)
+최종 검증일: 2026-09-05 (모바일 PWA 설치 UX 배포 및 운영 HTTPS 검증 완료)
 기준 브랜치: `main`
-검증된 운영 기준 커밋: `073cb07` (`fix: make push notification clicks open app routes`)
+검증된 운영 기준 커밋: `6187a80` (`docs: record mobile-only PWA UX`)
 
 ## 1. 절대 혼동하면 안 되는 운영 정보
 
@@ -23,7 +23,7 @@
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
 | DB migration 최신 기준 | `043_chat_push_presence.sql` — 2026-09-03 싱가포르 운영 DB 적용·권한 검증 완료 |
-| 현재 운영 이미지 / 릴리스 | `pass-on-english:073cb07` / `/opt/pass-on-english/releases/073cb07` |
+| 현재 운영 이미지 / 릴리스 | `pass-on-english:6187a80` / `/opt/pass-on-english/releases/6187a80` |
 | 남은 검증 | DB 043·VAPID·PWA 세션 앱 배포 완료. 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신 검증 필요 |
 
 ### 금지된 연결
@@ -115,7 +115,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 해당 릴리스 `.env.production`에 로컬 공개키·비밀키 두 항목만 등록했다. 키 쌍 정상 및 로컬/서버 파일 일치 확인.
 기존 `VAPID_SUBJECT`와 Supabase 설정은 보존했고 원본은 동일 디렉터리의 `.env.production.pre-vapid-*`로 백업했다(두 파일 모두 600).
 이후 사용자 승인으로 `35bb954` 새 릴리스에 환경파일을 복사하고 이미지 태그만 바꿔 새 이미지를 빌드·배포했다.
-현재 환경파일은 `/opt/pass-on-english/releases/073cb07/deploy/tencent-lighthouse/.env.production`이다.
+현재 환경파일은 `/opt/pass-on-english/releases/6187a80/deploy/tencent-lighthouse/.env.production`이다.
 실행 컨테이너 키와 환경파일 일치, 키 쌍 정상, 실제 HTTPS 브라우저 코드의 공개키 포함 및 비밀키 비노출을 확인했다.
 
 필수 운영 변수:
@@ -193,6 +193,15 @@ https://passonenglish.com/api/health     → 200
 - 관리자 직접 메시지와 Broadcast 학생 대상 Push에도 명시적 지원 채팅 URL을 넣었으며, 학생 URL은 기존 locale cookie redirect를 사용해 추가 Supabase 조회를 만들지 않았다. 관리자 직접 메시지는 기존 request DB client를 재사용한다.
 - 운영 HTTPS에서 최신 `sw.js`·manifest·health를 확인했고, 학생·선생님 PWA 세션과 API 기본 거부 10개·선생님 프로필 권한 9개를 재검증했다.
 - 배포 후 app·cron 오류와 nginx 5xx는 0건이었다. 이전 `339be2e` 릴리스와 이미지는 즉시 롤백용으로 보존했다.
+
+2026-09-05 모바일 PWA 설치 UX 배포 검증:
+
+- `6187a80ac01c3ba3a6abf09f04cf6e0e67f8c223` 커밋 아카이브를 `/opt/pass-on-english/releases/6187a80`에 배포하고 app·cron을 `pass-on-english:6187a80`로 전환했다. `762a2c4`의 모바일 전용 PWA·Push UI 변경을 포함한다.
+- 2GB 호스트의 CPU 1코어·RAM 1200MB·메모리+스왑 2GB 제한 BuildKit으로 빌드했다. `npm run build`가 타입 검사와 정적 페이지 84개 생성을 포함해 통과했고 이미지 ID는 `sha256:1a01ac9b4d94c10f238dd23137f843be047618084549bba5e95bbb3b819387aa`다.
+- 기존 운영 `.env.production`을 서버 내부에서 복사하고 `APP_IMAGE_TAG`만 `6187a80`으로 변경했다. Supabase 싱가포르 URL과 VAPID 필수 항목은 값 노출 없이 재확인했다.
+- app·cron·nginx가 모두 healthy/실행 중이며, 최근 cron 응답의 `failed` 집계는 0이고 앱·Nginx HTTP 오류 집계는 0이었다. 이전 `073cb07` 릴리스와 이미지는 롤백용으로 보존했다.
+- 운영 HTTPS에서 `/ko`, `/zh-CN`, `/ko/signup`, `/teacher`, `/admin`, `/api/health`, `/manifest.json`, `/sw.js`, 192·512 아이콘이 모두 HTTP 200이었다. manifest의 standalone·scope와 Service Worker의 notification click fallback을 확인했다.
+- PC 설치·Push UI 숨김과 모바일/태블릿 노출은 자동 테스트와 코드 기준으로 검증했으며, 실제 기기의 설치·권한 허용·재부팅 후 로그인 유지·양방향 Push 수신은 별도 실기기 확인이 남아 있다.
 
 ## 7. 테스트 기준
 
