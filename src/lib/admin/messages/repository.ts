@@ -511,7 +511,10 @@ export async function sendAdminDirectMessageInDb(input: {
     body: trimmed.slice(0, 500),
     payload: { threadId: input.threadId, kind: "admin_direct" },
     push: true,
-  });
+    url: (thread as DirectThreadRow).target_type === "teacher"
+      ? "/teacher/chat/support"
+      : "/student/chat/support",
+  }, supabase);
 
   const message = rowToDirectMessage(row as DirectMessageRow);
   appendAdminDirectMessageToCache(message);
@@ -718,7 +721,7 @@ async function deliverBroadcastPayloadWithClient(
       pushAttempted += 1;
       const portalRole = roleByUserId.get(profileId) ?? "student";
       const pushUrl =
-        portalRole === "teacher" ? "/teacher/chat/support" : "/ko/student/chat/support";
+        portalRole === "teacher" ? "/teacher/chat/support" : "/student/chat/support";
 
       const pushResult = await sendPushToUsersInDb(supabase, [profileId], {
         title: trimmedTitle,

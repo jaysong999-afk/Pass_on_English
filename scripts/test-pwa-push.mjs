@@ -239,6 +239,43 @@ console.log("PASS presence lease SQL ownership, expiry and restricted function g
 }
 console.log("PASS notification click opens the intended chat before analytics");
 
+// Existing mobile clients must fall back to openWindow when navigation is unavailable or rejected.
+for (const mode of ["missing-navigate", "rejected-navigate"]) {
+  const handlers = {}, calls = [];
+  const client = {
+    url: "https://passonenglish.com/ko/student",
+    focus: async () => { calls.push(["focus"]); },
+  };
+  if (mode === "rejected-navigate") {
+    client.navigate = async () => { calls.push(["navigate"]); throw new Error("navigate unavailable"); };
+  }
+  const self = {
+    location: { origin: "https://passonenglish.com" },
+    addEventListener: (name, fn) => { handlers[name] = fn; },
+    clients: {
+      matchAll: async () => [client],
+      openWindow: async (url) => { calls.push(["open", url]); return { focus: async () => { calls.push(["opened-focus"]); } }; },
+    },
+  };
+  vm.runInNewContext(read("public/sw.js"), { self, URL, fetch: async () => {} });
+  let finished;
+  handlers.notificationclick({
+    notification: { close() {}, data: { url: "/teacher/chat/r" } },
+    waitUntil: (promise) => { finished = promise; },
+  });
+  await finished;
+  assert.equal(calls.find((call) => call[0] === "open")?.[1], "https://passonenglish.com/teacher/chat/r");
+  assert.ok(calls.some((call) => call[0] === "opened-focus"));
+}
+console.log("PASS existing-client navigation fallback opens the intended app URL");
+
+const adminMessagesSource = read("src/lib/admin/messages/repository.ts");
+assert.match(adminMessagesSource, /type: "admin_direct"[\s\S]*?push: true,[\s\S]*?url:/);
+assert.match(adminMessagesSource, /target_type === "teacher"[\s\S]*?\/teacher\/chat\/support/);
+assert.match(adminMessagesSource, /\/student\/chat\/support/);
+assert.doesNotMatch(adminMessagesSource, /portalRole === "student" \? "\/ko\/student\/chat\/support"/);
+console.log("PASS direct and broadcast pushes carry role-safe chat destinations");
+
 // Exercise install event/state transitions without browser permissions or production accounts.
 {
   const cells = [];
