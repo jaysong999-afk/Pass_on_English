@@ -3,9 +3,9 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-09-05 (PWA 영속 세션 배포 및 운영 종단간 검증 완료)
+최종 검증일: 2026-09-05 (PWA Push 클릭 라우팅 수정 배포 및 운영 종단간 검증 완료)
 기준 브랜치: `main`
-검증된 운영 기준 커밋: `339be2e` (`fix: persist PWA authentication sessions`)
+검증된 운영 기준 커밋: `073cb07` (`fix: make push notification clicks open app routes`)
 
 ## 1. 절대 혼동하면 안 되는 운영 정보
 
@@ -23,7 +23,7 @@
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
 | DB migration 최신 기준 | `043_chat_push_presence.sql` — 2026-09-03 싱가포르 운영 DB 적용·권한 검증 완료 |
-| 현재 운영 이미지 / 릴리스 | `pass-on-english:339be2e` / `/opt/pass-on-english/releases/339be2e` |
+| 현재 운영 이미지 / 릴리스 | `pass-on-english:073cb07` / `/opt/pass-on-english/releases/073cb07` |
 | 남은 검증 | DB 043·VAPID·PWA 세션 앱 배포 완료. 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신 검증 필요 |
 
 ### 금지된 연결
@@ -115,7 +115,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 해당 릴리스 `.env.production`에 로컬 공개키·비밀키 두 항목만 등록했다. 키 쌍 정상 및 로컬/서버 파일 일치 확인.
 기존 `VAPID_SUBJECT`와 Supabase 설정은 보존했고 원본은 동일 디렉터리의 `.env.production.pre-vapid-*`로 백업했다(두 파일 모두 600).
 이후 사용자 승인으로 `35bb954` 새 릴리스에 환경파일을 복사하고 이미지 태그만 바꿔 새 이미지를 빌드·배포했다.
-현재 환경파일은 `/opt/pass-on-english/releases/339be2e/deploy/tencent-lighthouse/.env.production`이다.
+현재 환경파일은 `/opt/pass-on-english/releases/073cb07/deploy/tencent-lighthouse/.env.production`이다.
 실행 컨테이너 키와 환경파일 일치, 키 쌍 정상, 실제 HTTPS 브라우저 코드의 공개키 포함 및 비밀키 비노출을 확인했다.
 
 필수 운영 변수:
@@ -185,6 +185,14 @@ https://passonenglish.com/api/health     → 200
 - 운영 HTTPS에서 학생·선생님 로그인 쿠키의 30일 수명, PWA 재실행 역할별 자동 연결, 만료 access token 갱신 쿠키 전달을 종단간 검증했다.
 - 공개 ko/zh-CN·회원가입·health 200, API 기본 거부 10개·선생님 프로필 권한 9개 통과. 확인 구간의 app·cron 오류와 nginx 5xx는 0건이었다.
 - 이전 `35bb954` 릴리스와 이미지는 즉시 롤백용으로 보존했다. 별도 클라우드 스냅샷은 생성하지 않았다.
+
+2026-09-05 Push 클릭 라우팅 수정 배포 검증:
+
+- `073cb07` 커밋 아카이브를 `/opt/pass-on-english/releases/073cb07`에 배포하고 app·cron을 `pass-on-english:073cb07`로 전환했다.
+- Service Worker가 기존 창의 `navigate()` 미지원·실패 시 `openWindow()`로 재시도하고, 잘못된 URL·보조 클릭 추적 실패가 앱 열기를 중단하지 않도록 보강했다.
+- 관리자 직접 메시지와 Broadcast 학생 대상 Push에도 명시적 지원 채팅 URL을 넣었으며, 학생 URL은 기존 locale cookie redirect를 사용해 추가 Supabase 조회를 만들지 않았다. 관리자 직접 메시지는 기존 request DB client를 재사용한다.
+- 운영 HTTPS에서 최신 `sw.js`·manifest·health를 확인했고, 학생·선생님 PWA 세션과 API 기본 거부 10개·선생님 프로필 권한 9개를 재검증했다.
+- 배포 후 app·cron 오류와 nginx 5xx는 0건이었다. 이전 `339be2e` 릴리스와 이미지는 즉시 롤백용으로 보존했다.
 
 ## 7. 테스트 기준
 
