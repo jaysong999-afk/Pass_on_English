@@ -2,6 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies, headers } from "next/headers";
 import { createPrivilegedClient } from "@/lib/supabase/admin";
+import {
+  AUTH_COOKIE_OPTIONS,
+  persistentAuthCookieOptions,
+  type SupabaseCookieToSet,
+} from "@/lib/supabase/cookie-options";
 
 function supabaseUrl() {
   return process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co";
@@ -39,14 +44,15 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient(supabaseUrl(), supabaseAnonKey(), {
+      cookieOptions: AUTH_COOKIE_OPTIONS,
       cookies: {
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
+        setAll(cookiesToSet: SupabaseCookieToSet[]) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, persistentAuthCookieOptions(options))
             );
           } catch {
             // Server Component — ignore

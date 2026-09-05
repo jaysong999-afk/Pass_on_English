@@ -11,11 +11,20 @@ const nginx = readFileSync(
 const publicPageGuard = middleware.indexOf(
   'if (!pathname.startsWith("/api/") && (!pageRole || isPublicPagePath(pathname)))'
 );
-const authLookup = middleware.indexOf(
+const rootAuthLookup = middleware.indexOf(
+  "const auth = await getMiddlewareAuthUser(request, authResponse);"
+);
+const protectedAuthLookup = middleware.indexOf(
   "const auth = await getMiddlewareAuthUser(request, response);"
 );
 
-if (publicPageGuard < 0 || authLookup < 0 || publicPageGuard > authLookup) {
+if (
+  rootAuthLookup < 0 ||
+  publicPageGuard < 0 ||
+  protectedAuthLookup < 0 ||
+  rootAuthLookup > publicPageGuard ||
+  publicPageGuard > protectedAuthLookup
+) {
   throw new Error("public pages must return before Supabase middleware auth lookup");
 }
 
@@ -29,5 +38,5 @@ for (const directive of [
   }
 }
 
-console.log("PASS public pages bypass unnecessary Supabase auth refresh");
+console.log("PASS only the PWA root launch checks auth before public pages bypass refresh");
 console.log("PASS Nginx accepts chunked Supabase session response headers");

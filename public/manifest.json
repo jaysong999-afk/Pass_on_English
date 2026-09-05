@@ -2,7 +2,7 @@
   "name": "Pass on English",
   "short_name": "PassEnglish",
   "description": "Native video English with Filipino teachers",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "id": "/",
   "scope": "/",
   "display": "standalone",

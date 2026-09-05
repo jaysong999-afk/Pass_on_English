@@ -42,6 +42,17 @@ function isIntlRoute(pathname: string): boolean {
   );
 }
 
+function copyResponseCookies(source: NextResponse, target: NextResponse): NextResponse {
+  source.cookies.getAll().forEach((cookie) => target.cookies.set(cookie));
+  return target;
+}
+
+function portalPath(role: UserRole, locale: Locale): string {
+  if (role === "teacher") return "/teacher";
+  if (role === "admin") return "/admin";
+  return `/${locale}/student`;
+}
+
 async function enforceRoles(
   request: NextRequest,
   response: NextResponse,
@@ -52,14 +63,17 @@ async function enforceRoles(
 
   if (!user) {
     if (request.nextUrl.pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      return copyResponseCookies(
+        response,
+        NextResponse.json({ error: "unauthorized" }, { status: 401 })
+      );
     }
 
     const locale = localeFromPath(request.nextUrl.pathname);
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = loginPathForRole(requiredRoles[0], locale);
     loginUrl.searchParams.set("next", request.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
+    return copyResponseCookies(response, NextResponse.redirect(loginUrl));
   }
 
   const profile = await fetchAuthProfile(supabase, user.id);
@@ -67,7 +81,10 @@ async function enforceRoles(
     const privilegedProfile = await fetchAuthProfilePrivileged(user.id);
     if (!privilegedProfile || !requiredRoles.includes(privilegedProfile.role)) {
       if (request.nextUrl.pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "forbidden" }, { status: 403 });
+        return copyResponseCookies(
+          response,
+          NextResponse.json({ error: "forbidden" }, { status: 403 })
+        );
       }
 
       const loginUrl = request.nextUrl.clone();
@@ -75,14 +92,17 @@ async function enforceRoles(
       if (requiredRoles[0] === "admin") {
         loginUrl.searchParams.set("next", request.nextUrl.pathname);
       }
-      return NextResponse.redirect(loginUrl);
+      return copyResponseCookies(response, NextResponse.redirect(loginUrl));
     }
     return null;
   }
 
   if (!requiredRoles.includes(profile.role)) {
     if (request.nextUrl.pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+      return copyResponseCookies(
+        response,
+        NextResponse.json({ error: "forbidden" }, { status: 403 })
+      );
     }
 
     const locale = localeFromPath(request.nextUrl.pathname);
@@ -91,7 +111,7 @@ async function enforceRoles(
     if (requiredRoles[0] === "admin") {
       loginUrl.searchParams.set("next", request.nextUrl.pathname);
     }
-    return NextResponse.redirect(loginUrl);
+    return copyResponseCookies(response, NextResponse.redirect(loginUrl));
   }
 
   return null;
@@ -111,7 +131,18 @@ export async function middleware(request: NextRequest) {
 
   if (pathname === "/") {
     const locale = resolveLocale(request);
-    return NextResponse.redirect(new URL(`/${locale}`, request.url));
+    const authResponse = NextResponse.next({ request });
+    const auth = await getMiddlewareAuthUser(request, authResponse);
+    let profile = auth.user ? await fetchAuthProfile(auth.supabase, auth.user.id) : null;
+    if (auth.user && !profile) profile = await fetchAuthProfilePrivileged(auth.user.id);
+    const preferredLocale = profile?.locale && isValidLocale(profile.locale)
+      ? profile.locale
+      : locale;
+    const destination = profile ? portalPath(profile.role, preferredLocale) : `/${locale}`;
+    return copyResponseCookies(
+      authResponse,
+      NextResponse.redirect(new URL(destination, request.url))
+    );
   }
 
   if (pathname === "/student" || pathname.startsWith("/student/")) {

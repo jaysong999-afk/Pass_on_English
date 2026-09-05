@@ -1,6 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import type { NextRequest, NextResponse } from "next/server";
+import {
+  AUTH_COOKIE_OPTIONS,
+  persistentAuthCookieOptions,
+  type SupabaseCookieToSet,
+} from "@/lib/supabase/cookie-options";
 
 function supabaseUrl() {
   return process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co";
@@ -15,14 +20,15 @@ export function createMiddlewareSupabaseClient(
   response: NextResponse
 ) {
   return createServerClient(supabaseUrl(), supabaseAnonKey(), {
+    cookieOptions: AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
-      setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
+      setAll(cookiesToSet: SupabaseCookieToSet[]) {
         cookiesToSet.forEach(({ name, value, options }) => {
           request.cookies.set(name, value);
-          response.cookies.set(name, value, options);
+          response.cookies.set(name, value, persistentAuthCookieOptions(options));
         });
       },
     },
