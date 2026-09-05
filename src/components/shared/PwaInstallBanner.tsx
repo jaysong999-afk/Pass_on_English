@@ -13,7 +13,7 @@ export function PwaInstallBanner({ locale = "en", portal = false }: { locale?: s
   const copy = pushCopy(locale);
   const [guide, setGuide] = useState(false);
   const [busy, setBusy] = useState(false);
-  if (!pwa.ready || pwa.installed || pwa.denied || pwa.dismissed) return null;
+  if (!pwa.ready || !pwa.mobile || pwa.installed || pwa.dismissed) return null;
   if (!portal && (!/^\/(ko|zh-CN)\/?$/.test(pathname) || !pwa.canPrompt)) return null;
 
   async function install() {

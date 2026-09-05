@@ -276,17 +276,34 @@ assert.match(adminMessagesSource, /\/student\/chat\/support/);
 assert.doesNotMatch(adminMessagesSource, /portalRole === "student" \? "\/ko\/student\/chat\/support"/);
 console.log("PASS direct and broadcast pushes carry role-safe chat destinations");
 
+const installBannerSource = read("src/components/shared/PwaInstallBanner.tsx");
+assert.doesNotMatch(installBannerSource, /pwa\.denied/);
+assert.match(installBannerSource, /!pwa\.mobile/);
+const installHelpSource = read("src/components/shared/PwaInstallHelp.tsx");
+assert.match(installHelpSource, /pwa\.canPrompt/);
+assert.match(installHelpSource, /!pwa\.mobile/);
+const pushProviderSource = read("src/components/shared/PushSubscribeProvider.tsx");
+assert.match(pushProviderSource, /!pwa\.mobile/);
+assert.match(read("src/app/[locale]/student/settings/page.tsx"), /<PwaInstallHelp locale=\{locale\} \/>/);
+assert.match(read("src/app/teacher/profile/page.tsx"), /<PwaInstallHelp locale="en" \/>/);
+assert.match(read("src/components/landing/LandingSections.tsx"), /<PwaInstallHelp locale=\{locale\} compact \/>/);
+console.log("PASS persistent install help is available outside the dismissible banner");
+
 // Exercise install event/state transitions without browser permissions or production accounts.
 {
   const cells = [];
-  let cursor = 0, mounted = false, setup, cleanup, registrations = 0, prompts = 0;
+  let cursor = 0, mounted = false, setup, cleanup, registrations = 0, prompts = 0, nextTimer = 0;
   const storage = new Map();
+  const timers = new Map();
   const display = Object.assign(new EventTarget(), { matches: false });
   const win = Object.assign(new EventTarget(), { matchMedia: () => display });
+  const browserNavigator = { userAgent: "iPhone", platform: "iPhone", maxTouchPoints: 1 };
   const notification = { permission: "default" };
   const api = load("src/components/shared/PwaProvider.tsx", {
     react: {
       createContext: () => ({ Provider: "provider" }), useContext: () => null,
+      useCallback: (fn) => fn,
+      useRef: (value) => ({ current: value }),
       useState: (initial) => {
         const index = cursor++;
         if (!(index in cells)) cells[index] = initial;
@@ -297,14 +314,21 @@ console.log("PASS direct and broadcast pushes carry role-safe chat destinations"
     "react/jsx-runtime": { jsx: (type, props) => ({ type, props }) },
     "@/lib/push": { registerServiceWorker: async () => { registrations++; } },
   }, {
-    window: win, Notification: notification, navigator: { userAgent: "iPhone", platform: "iPhone", maxTouchPoints: 1 },
-    localStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+    window: win, Notification: notification, navigator: browserNavigator,
+    localStorage: {
+      getItem: (key) => storage.get(key),
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    },
+    setTimeout: (fn) => { const id = ++nextTimer; timers.set(id, fn); return id; },
+    clearTimeout: (id) => timers.delete(id),
   });
   const render = () => { cursor = 0; return api.PwaProvider({ children: null }).props.value; };
   assert.equal(render().ready, false);
   mounted = true; cleanup = setup();
   let view = render();
   assert.equal(view.ready, true);
+  assert.equal(view.mobile, true);
   assert.equal(view.ios, true);
   assert.equal(view.canPrompt, false);
   assert.equal(registrations, 1);
@@ -313,12 +337,24 @@ console.log("PASS direct and broadcast pushes carry role-safe chat destinations"
   event.userChoice = Promise.resolve({ outcome: "dismissed" });
   win.dispatchEvent(event);
   assert.equal(event.defaultPrevented, true);
-  await render().install();
+  assert.equal(await render().install(), "dismissed");
   view = render();
   assert.equal(prompts, 1);
   assert.equal(view.canPrompt, false);
   assert.equal(view.dismissed, true);
   assert.ok(Number(storage.get("passon-pwa-dismissed-until")) > Date.now() + 6 * 86400000);
+  const dismissalCallback = [...timers.values()][0];
+  dismissalCallback();
+  assert.equal(render().dismissed, false, "dismissal must expire after seven days while the page remains open");
+  assert.equal(storage.has("passon-pwa-dismissed-until"), false);
+  storage.set("passon-pwa-dismissed-until", String(Date.now() - 1));
+  win.dispatchEvent(new Event("focus"));
+  assert.equal(render().dismissed, false, "expired dismissal must not return after a later visit");
+  browserNavigator.userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36";
+  browserNavigator.platform = "Win32";
+  browserNavigator.maxTouchPoints = 0;
+  win.dispatchEvent(new Event("focus"));
+  assert.equal(render().mobile, false, "desktop browsers must not expose mobile PWA UI");
   notification.permission = "denied"; win.dispatchEvent(new Event("focus"));
   assert.equal(render().denied, true);
   win.dispatchEvent(new Event("appinstalled"));

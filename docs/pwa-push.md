@@ -6,7 +6,7 @@
 
 | 영역 | 동작 |
 |---|---|
-| PwaProvider / PwaInstallBanner | 전역 SW 등록·설치 이벤트 보관. 랜딩은 실제 이벤트가 있을 때만 작은 버튼 표시. 포털은 설치 카드와 수동 설치 안내 제공. 거부/Standalone 숨김, 닫으면 7일 숨김 |
+| PwaProvider / PwaInstallBanner / PwaInstallHelp | 전역 SW 등록·설치 이벤트 보관. 설치·Push UI는 모바일과 iPadOS 데스크톱 모드에서만 제공하며 PC에서는 숨긴다. 랜딩은 강제 배너 없이 헤더 메뉴를 제공하고, 포털은 설치 카드와 수동 설치 안내를 제공한다. 일회성 배너만 닫은 뒤 7일 숨김이며 설정·프로필의 설치 메뉴는 계속 접근 가능하다. Standalone에서는 설치 UI를 숨기고, Push 권한 거부는 앱 설치 UI와 분리한다. |
 | PushSubscribeProvider / lib/push | 사용자 클릭 안에서 권한 요청. 허용 후 브라우저 구독과 인증 API 저장. 성공한 계정별 구독은 페이지 메모리에 1시간 캐시, 실패는 재시도 가능 |
 | 로그아웃 | 이 브라우저의 Push 구독 해제와 본인 소유 DB endpoint 삭제. 다른 기기의 구독은 유지 |
 | 채팅 전송 | 인증된 사용자로 메시지 저장 후 Next.js `after`에서 알림 처리. Push 실패는 이미 저장된 메시지를 전송 실패로 바꾸지 않음 |

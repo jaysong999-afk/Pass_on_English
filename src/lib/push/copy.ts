@@ -1,5 +1,8 @@
 const en = {
   install: "Add app to home screen",
+  installMenu: "Install app",
+  installHelpTitle: "Add PassOn English to your home screen",
+  installed: "The app is already installed on this device.",
   installDescription: "Open your lessons and chats from your home screen.",
   ios: "In Safari, tap Share → Add to Home Screen. Then open the app icon to enable notifications.",
   manual: "Use your browser menu to install this app. If installation is unavailable, open this page in Safari, Chrome or Edge.",
@@ -15,6 +18,9 @@ const en = {
 };
 const ko: typeof en = {
   install: "홈 화면에 앱 추가",
+  installMenu: "앱 설치 안내",
+  installHelpTitle: "홈 화면에 PassOn English 추가하기",
+  installed: "이 기기에 앱이 이미 설치되어 있습니다.",
   installDescription: "홈 화면의 앱 아이콘으로 수업과 채팅을 바로 열어보세요.",
   ios: "Safari에서 공유 버튼 → 홈 화면에 추가를 선택하세요. 추가한 앱 아이콘으로 실행한 뒤 알림을 켤 수 있습니다.",
   manual: "브라우저 메뉴에서 앱 설치를 선택하세요. 설치 메뉴가 없다면 Safari, Chrome 또는 Edge에서 열어주세요.",
@@ -30,6 +36,9 @@ const ko: typeof en = {
 };
 const zh: typeof en = {
   install: "将应用添加到主屏幕",
+  installMenu: "安装应用",
+  installHelpTitle: "将 PassOn English 添加到主屏幕",
+  installed: "此设备已经安装了应用。",
   installDescription: "通过主屏幕上的应用图标快速打开课程和聊天。",
   ios: "在 Safari 中点击分享 → 添加到主屏幕。然后从应用图标打开，再开启通知。",
   manual: "请在浏览器菜单中安装应用。如果没有安装选项，请使用 Safari、Chrome 或 Edge 打开。",

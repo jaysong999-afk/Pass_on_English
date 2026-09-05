@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CountryCode, VideoPlatform } from "@/types";
 import { VideoPlatformSelector } from "@/components/shared/VideoPlatformSelector";
+import { PwaInstallHelp } from "@/components/shared/PwaInstallHelp";
 
 type Notice = { type: "success" | "error"; message: string } | null;
 
@@ -142,6 +143,8 @@ export default function StudentSettingsPage() {
   return <form onSubmit={saveSettings} className="mx-auto max-w-4xl space-y-6 pb-24">
     <div><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("title")}</h1>
       <p className="mt-2 text-sm text-muted-foreground sm:text-base">{t("subtitle")}</p></div>
+
+    <PwaInstallHelp locale={locale} />
 
     <Card className="overflow-hidden">
       <CardHeader className="border-b bg-muted/30"><div className="flex items-start gap-3">

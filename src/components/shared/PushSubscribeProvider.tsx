@@ -19,7 +19,7 @@ export function PushSubscribeProvider({ role, userId, locale = "en" }: {
   const visible = usePageVisible();
 
   useEffect(() => {
-    if (!userId || !pwa.ready || !visible) return;
+    if (!userId || !pwa.ready || !pwa.mobile || !visible) return;
     setStatus(pwa.denied ? "denied" : "idle");
     let cancelled = false;
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -28,7 +28,7 @@ export function PushSubscribeProvider({ role, userId, locale = "en" }: {
         .catch((error) => { if (!cancelled) setStatus(error instanceof PushError ? error.reason : "failed"); });
     }
     return () => { cancelled = true; };
-  }, [role, userId, pwa.ready, pwa.denied, visible]);
+  }, [role, userId, pwa.ready, pwa.mobile, pwa.denied, visible]);
 
   async function enable() {
     if (!userId) return;
@@ -42,7 +42,7 @@ export function PushSubscribeProvider({ role, userId, locale = "en" }: {
     }
   }
 
-  if (!userId || !pwa.ready) return null;
+  if (!userId || !pwa.ready || !pwa.mobile) return null;
   return (
     <section className="mb-4 rounded-xl border bg-white p-3">
       {status !== "enabled" && (

@@ -16,6 +16,7 @@ import type { TeacherSelfSettings } from "@/lib/teachers/repository";
 import type { TeacherSpecialty } from "@/types";
 import type { VideoPlatform } from "@/types";
 import { VideoPlatformSelector } from "@/components/shared/VideoPlatformSelector";
+import { PwaInstallHelp } from "@/components/shared/PwaInstallHelp";
 
 type Notice = { type: "success" | "error"; message: string } | null;
 
@@ -139,6 +140,8 @@ export default function TeacherProfilePage() {
 
   return <form onSubmit={save} className="mx-auto max-w-4xl space-y-6 pb-16">
     <div><h2 className="text-2xl font-bold text-ink">My Profile</h2><p className="mt-1 text-sm text-ink-muted">Manage your public teaching profile, contact details, and account security.</p></div>
+
+    <PwaInstallHelp locale="en" />
 
     <Card><CardHeader className="border-b bg-muted/30"><div className="flex gap-3"><div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-700"><UserRound className="h-5 w-5" /></div>
       <div><CardTitle>Teaching profile</CardTitle><CardDescription>Students see this information when choosing a teacher.</CardDescription></div></div></CardHeader>

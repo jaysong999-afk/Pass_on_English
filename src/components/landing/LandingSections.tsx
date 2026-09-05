@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Globe2, LogIn, Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { LocaleSwitcher } from "@/components/shared/LocaleSwitcher";
+import { PwaInstallHelp } from "@/components/shared/PwaInstallHelp";
 
 export function LandingHeader({ locale }: { locale: string }) {
   const t = useTranslations("common");
@@ -56,6 +57,7 @@ export function LandingHeader({ locale }: { locale: string }) {
 
         <div className="hidden items-center gap-3 lg:flex">
           <div className="flex items-center gap-1"><Globe2 className="h-4 w-4 text-ink-muted" /><LocaleSwitcher /></div>
+          <PwaInstallHelp locale={locale} compact />
           <Link
             href={`/${locale}/login`}
             className="px-3 py-2 text-sm font-semibold text-ink-muted hover:text-brand-700"
@@ -122,6 +124,9 @@ export function LandingHeader({ locale }: { locale: string }) {
                   {link.label}
                 </Link>
               ))}
+              <div className="mt-3 border-t border-brand-100 pt-3">
+                <PwaInstallHelp locale={locale} compact className="w-full justify-center" />
+              </div>
               <div className="mt-4 border-t border-brand-100 pt-4">
                 <Link
                   href={`/${locale}/signup`}
