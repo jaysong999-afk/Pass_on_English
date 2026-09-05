@@ -1,6 +1,6 @@
 # PWA 로그인 세션 유지
 
-2026-09-05 구현. 운영 배포는 별도다.
+2026-09-05 구현 및 운영 배포 완료. 운영 이미지와 릴리스는 `339be2e`다.
 
 ## 원인과 수정
 
@@ -20,6 +20,8 @@ npm run test:pwa-session -- http://localhost:3100
 ```
 
 - `npx tsc --noEmit`, `npm run build`, 기존 proxy/PWA Push/auth/i18n 경계 검사도 함께 실행한다.
+- 운영 `https://passonenglish.com`에서 학생·선생님 로그인, 30일 쿠키 속성, 새 PWA 실행 역할별 연결, 강제 만료 access token 갱신과 갱신 쿠키 전달을 통과했다.
+- 배포 후 공개 ko/zh-CN·회원가입·health 200, API 기본 거부 10개, 선생님 프로필 권한 9개, app·cron 오류 0건, nginx 5xx 0건을 확인했다.
 
 ## 보장 범위
 
