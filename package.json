@@ -6,6 +6,7 @@
     "predev": "node scripts/build-pwa-icons.mjs",
     "prebuild": "node scripts/build-pwa-icons.mjs",
     "test:pwa-push": "node scripts/test-pwa-push.mjs",
+    "test:enrollment-transfer": "node scripts/test-enrollment-transfer.mjs",
     "test:pwa-session": "node --no-warnings --experimental-strip-types scripts/test-pwa-session-persistence.mjs",
     "dev": "next dev",
     "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev",

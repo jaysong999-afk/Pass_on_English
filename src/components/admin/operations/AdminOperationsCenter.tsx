@@ -27,6 +27,7 @@ import { AdminLessonDualModal } from "@/components/admin/operations/AdminLessonD
 import { AdminLessonOperationLogPanel } from "@/components/admin/operations/AdminLessonOperationLogPanel";
 import { useAdminLessonModal } from "@/components/admin/operations/useAdminLessonModal";
 import type { AdminLessonOperationLogEntry } from "@/types";
+import { transferIssueLabels, type TransferSlotPreview } from "@/lib/admin/enrollment-transfer";
 
 interface TeacherOption {
   id: string;
@@ -96,8 +97,18 @@ export function AdminOperationsCenter() {
   const [bulkApplyTeacher, setBulkApplyTeacher] = useState("");
   const [bulkResult, setBulkResult] = useState("");
   const [bulkSlotPreview, setBulkSlotPreview] = useState<
-    Record<string, { movableCount: number; totalScheduled: number; canAbsorbAll: boolean }>
+    Record<string, TransferSlotPreview>
   >({});
+  const [bulkCheckedKey, setBulkCheckedKey] = useState("");
+  const [bulkCheckError, setBulkCheckError] = useState("");
+  const [bulkRefresh, setBulkRefresh] = useState(0);
+  const bulkCheckKey = JSON.stringify([bulkFrom, bulkTransfers, bulkEnrollments.map(e => e.enrollmentId)]);
+  const bulkCheckPending = bulkCheckedKey !== bulkCheckKey;
+  const bulkReady = !bulkPreviewLoading && !bulkCheckPending && !bulkCheckError &&
+    bulkEnrollments.length > 0 && bulkEnrollments.every(row =>
+      bulkTransfers[row.enrollmentId] && row.scheduleInSync &&
+      bulkSlotPreview[row.enrollmentId]?.toTeacherId === bulkTransfers[row.enrollmentId] &&
+      bulkSlotPreview[row.enrollmentId]?.canAbsorbAll);
   const [scheduleWeekStart, setScheduleWeekStart] = useState(() =>
     startOfWeekMonday(new Date())
   );
@@ -129,8 +140,15 @@ export function AdminOperationsCenter() {
 
     let cancelled = false;
     setBulkPreviewLoading(true);
+    setBulkEnrollments([]);
+    setBulkTransfers({});
+    setBulkResult("");
     fetch(`/api/admin/lessons/bulk-reassign?fromTeacherId=${encodeURIComponent(bulkFrom)}`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error ?? "이관 목록 조회 실패");
+        return data;
+      })
       .then((data) => {
         if (!cancelled) {
           setBulkEnrollments(data.enrollments ?? []);
@@ -139,6 +157,7 @@ export function AdminOperationsCenter() {
           setBulkResult("");
         }
       })
+      .catch((error) => { if (!cancelled) setBulkResult(error.message ?? "이관 목록 조회 실패"); })
       .finally(() => {
         if (!cancelled) setBulkPreviewLoading(false);
       });
@@ -146,36 +165,47 @@ export function AdminOperationsCenter() {
     return () => {
       cancelled = true;
     };
-  }, [bulkFrom]);
+  }, [bulkFrom, bulkRefresh]);
 
   useEffect(() => {
-    if (!bulkFrom || bulkEnrollments.length === 0) {
-      setBulkSlotPreview({});
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
+    const controller = new AbortController();
+    setBulkCheckError("");
+    const timer = setTimeout(async () => {
       const transfers = bulkEnrollments
         .map((row) => ({ enrollmentId: row.enrollmentId, toTeacherId: bulkTransfers[row.enrollmentId] }))
         .filter((transfer): transfer is { enrollmentId: string; toTeacherId: string } => Boolean(transfer.toTeacherId));
       if (transfers.length === 0) {
-        if (!cancelled) setBulkSlotPreview({});
+        setBulkSlotPreview({});
+        setBulkCheckedKey(bulkCheckKey);
         return;
       }
-      const res = await fetch("/api/admin/lessons/bulk-reassign", {
+      try {
+        const res = await fetch("/api/admin/lessons/bulk-reassign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({ action: "preview", fromTeacherId: bulkFrom, transfers }),
       });
       const data = await res.json();
-      if (!cancelled) setBulkSlotPreview(data.slotsByEnrollment ?? {});
-    })();
+        if (!res.ok) throw new Error(data.error ?? "이관 가능 여부 확인 실패");
+        if (!controller.signal.aborted) {
+          setBulkSlotPreview(data.slotsByEnrollment ?? {});
+          setBulkCheckedKey(bulkCheckKey);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setBulkSlotPreview({});
+          setBulkCheckError(error instanceof Error ? error.message : "이관 가능 여부 확인 실패");
+          setBulkCheckedKey(bulkCheckKey);
+        }
+      }
+    }, 250);
 
     return () => {
-      cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
     };
-  }, [bulkFrom, bulkEnrollments, bulkTransfers]);
+  }, [bulkFrom, bulkEnrollments, bulkTransfers, bulkCheckKey]);
 
   const loadTeachers = useCallback(async () => {
     setLoading(true);
@@ -276,7 +306,7 @@ export function AdminOperationsCenter() {
   }, [filterTeacher]);
 
   async function runBulkTransfer() {
-    if (!bulkFrom || bulkEnrollments.length === 0) return;
+    if (!bulkReady || busy) return;
     const unassigned = bulkEnrollments.filter((e) => !bulkTransfers[e.enrollmentId]);
     if (unassigned.length > 0) {
       setBulkResult(`${unassigned.length}명의 학생에게 받는 선생님이 지정되지 않았습니다.`);
@@ -297,6 +327,8 @@ export function AdminOperationsCenter() {
       });
       const data = await res.json();
       if (!res.ok) {
+        if (data.slotsByEnrollment) setBulkSlotPreview(data.slotsByEnrollment);
+        else setBulkCheckError(data.error ?? "새로 확인해 주세요.");
         setBulkResult(data.error ?? "일괄 이관 실패");
         return;
       }
@@ -315,8 +347,16 @@ export function AdminOperationsCenter() {
         `/api/admin/lessons/bulk-reassign?fromTeacherId=${encodeURIComponent(bulkFrom)}`
       );
       const previewData = await previewRes.json();
+      if (!previewRes.ok) {
+        setBulkTransfers({});
+        setBulkResult(`${lines.join("\n")}\n이관은 완료되었으나 목록을 갱신하지 못했습니다. 새로고침해 주세요.`);
+        return;
+      }
       setBulkEnrollments(previewData.enrollments ?? []);
       setBulkTransfers({});
+    } catch {
+      setBulkCheckError("응답을 확인하지 못했습니다. 새로고침하여 실제 이관 결과를 확인해 주세요.");
+      setBulkResult("응답을 확인하지 못했습니다. 새로고침하여 실제 이관 결과를 확인해 주세요.");
     } finally {
       setBusy(false);
     }
@@ -377,8 +417,8 @@ export function AdminOperationsCenter() {
           variant="outline"
           size="sm"
           className="shrink-0 gap-1.5 border-gray-300"
-          onClick={refreshScheduleView}
-          disabled={loading}
+          onClick={() => tab === "bulk" ? setBulkRefresh(n => n + 1) : void refreshScheduleView()}
+          disabled={loading || busy || bulkPreviewLoading}
         >
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           새로고침
@@ -538,6 +578,7 @@ export function AdminOperationsCenter() {
                       !bulkFrom ? "border-amber-400 bg-white" : "border-amber-300"
                     )}
                     value={bulkFrom}
+                    disabled={busy}
                     onChange={(e) => {
                       setBulkFrom(e.target.value);
                       setBulkApplyTeacher("");
@@ -571,6 +612,7 @@ export function AdminOperationsCenter() {
                       <select
                         className={SELECT_CLASS}
                         value={bulkApplyTeacher}
+                        disabled={busy}
                         onChange={(e) => setBulkApplyTeacher(e.target.value)}
                       >
                         <option value="">받는 선생님 선택…</option>
@@ -588,7 +630,7 @@ export function AdminOperationsCenter() {
                       type="button"
                       variant="secondary"
                       className="h-11 shrink-0 px-4"
-                      disabled={!bulkApplyTeacher}
+                      disabled={!bulkApplyTeacher || busy}
                       onClick={applyBulkTeacherToAllEnrollments}
                     >
                       전체 적용
@@ -600,9 +642,7 @@ export function AdminOperationsCenter() {
               <Button
                 className="h-11 w-full bg-violet-600 text-base font-semibold hover:bg-violet-700"
                 disabled={
-                  !bulkFrom ||
-                  bulkEnrollments.length === 0 ||
-                  assignedEnrollmentCount < bulkEnrollments.length ||
+                  !bulkReady ||
                   busy
                 }
                 onClick={runBulkTransfer}
@@ -647,7 +687,7 @@ export function AdminOperationsCenter() {
               )}
               {bulkEnrollments.map((row) => {
                 const assignedTo = bulkTransfers[row.enrollmentId];
-                const slots = assignedTo ? bulkSlotPreview[row.enrollmentId] : undefined;
+                const slots = assignedTo && !bulkCheckPending ? bulkSlotPreview[row.enrollmentId] : undefined;
                 return (
                   <div
                     key={row.enrollmentId}
@@ -660,7 +700,10 @@ export function AdminOperationsCenter() {
                           {row.planLabel} · {row.curriculum}
                         </p>
                       </div>
-                      {assignedTo && slots && (
+                      {assignedTo && (bulkCheckPending || bulkCheckError) && (
+                        <Badge variant="warning">{bulkCheckPending ? "가능 여부 확인 중…" : "확인 실패"}</Badge>
+                      )}
+                      {assignedTo && slots && !bulkCheckError && (
                         <Badge
                           variant={
                             slots.canAbsorbAll
@@ -672,10 +715,21 @@ export function AdminOperationsCenter() {
                         >
                           {slots.canAbsorbAll
                             ? "전체 이관 가능"
-                            : `이관 가능 ${slots.movableCount}/${slots.totalScheduled}회`}
+                            : `이관 불가 · 시간 가능 ${slots.movableCount}/${slots.totalScheduled}회`}
                         </Badge>
                       )}
                     </div>
+
+                    {assignedTo && bulkCheckError && <p role="alert" className="mt-2 text-xs text-red-600">{bulkCheckError}</p>}
+                    {slots && !slots.canAbsorbAll && (
+                      <ul className="mt-2 space-y-1 text-xs text-red-600">
+                        {slots.issues.slice(0, 5).map((issue, index) => (
+                          <li key={index}>{issue.scheduledAt ? `${formatDate(issue.scheduledAt)} ${formatTime(issue.scheduledAt)} — ` : ""}
+                            {transferIssueLabels[issue.reason] ?? "수업 정보를 다시 확인해 주세요."}</li>
+                        ))}
+                        {slots.issues.length > 5 && <li>외 {slots.issues.length - 5}건</li>}
+                      </ul>
+                    )}
 
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       <div className="rounded-lg bg-violet-50 px-3 py-2">
@@ -741,6 +795,7 @@ export function AdminOperationsCenter() {
                             !assignedTo && "border-amber-300 bg-amber-50/30"
                           )}
                           value={assignedTo ?? ""}
+                          disabled={busy}
                           onChange={(e) =>
                             setBulkTransfers((prev) => ({
                               ...prev,

@@ -20,16 +20,10 @@ import {
 } from "@/lib/lessons/repository";
 import {
   getEnrollmentsByStudent,
-  getActiveEnrollmentsByTeacher,
-  updateEnrollmentTeacher,
   getEnrollmentById,
 } from "@/lib/enrollment-store-sync";
 import { updateEnrollmentEndDateInDb } from "@/lib/enrollments/repository";
-import { getStudentDirectoryEntry } from "@/lib/students/student-directory-store-sync";
-import { getStudentDisplayName } from "@/lib/student-display-name";
-import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
 import {
-  formatEnrollmentSlotLabel,
   futureLessonsForEnrollment,
   getEnrollmentScheduleDays,
   isTeacherSlotFree,
@@ -37,7 +31,6 @@ import {
 import { getAllTeachers, getTeacherById } from "@/lib/teacher-profile-store-sync";
 import { applyTeacherNoShowPenaltyInDb, revertTeacherNoShowPenaltyInDb } from "@/lib/teacher-payroll-penalty-repository";
 import { getAllLessons, getLessonById } from "@/lib/teacher-lesson-store-sync";
-import { restoreOccupiedWeeklyAvailabilityInDb } from "@/lib/teacher-availability/repository";
 import { isUuid } from "@/lib/teachers/resolve-teacher-id";
 
 export interface AvailableTeacherOption {
@@ -91,106 +84,16 @@ export interface BulkReassignResult {
   skipped: { lessonId: string; reason: string }[];
 }
 
-export function getBulkEnrollmentTransferPreview(
-  fromTeacherId: string
-): BulkEnrollmentTransferPreview[] {
-  return getActiveEnrollmentsByTeacher(fromTeacherId).map((enrollment) => {
-    const student = getStudentDirectoryEntry(enrollment.studentId);
-    const studentName = student
-      ? getStudentDisplayName(student.student)
-      : enrollment.studentId;
-    const plan = getCachedPricingPlanById(enrollment.planId);
-    const upcoming = futureLessonsForEnrollment(enrollment.id, fromTeacherId);
-    const overdueOpenLessonCount = getAllLessons().filter((lesson) =>
-      lesson.enrollmentId === enrollment.id &&
-      lesson.teacherId === fromTeacherId &&
-      !lesson.isTrial &&
-      ["scheduled", "reschedule_pending"].includes(lesson.status) &&
-      new Date(lesson.scheduledAt).getTime() < Date.now()
-    ).length;
-    const unresolvedLessonCount = upcoming.length + overdueOpenLessonCount;
-    const enrollmentLessons = getAllLessons()
-      .filter((lesson) => lesson.enrollmentId === enrollment.id)
-      .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
-    const lessonStart = enrollmentLessons[0]
-      ? getDateKeyInTimezone(new Date(enrollmentLessons[0].scheduledAt), CANONICAL_TIMEZONE)
-      : undefined;
-    const lessonEnd = enrollmentLessons.at(-1)
-      ? getDateKeyInTimezone(
-          new Date(enrollmentLessons.at(-1)!.scheduledAt),
-          CANONICAL_TIMEZONE
-        )
-      : undefined;
-    // Legacy/E2E rows created without started_at and ended_at were both mapped
-    // to today's date. A multi-day lesson schedule is a stronger source for
-    // the transfer preview until those rows are reseeded.
-    const missingContractRange =
-      enrollment.startDate === enrollment.endDate &&
-      lessonStart &&
-      lessonEnd &&
-      lessonStart !== lessonEnd;
-
-    return {
-      enrollmentId: enrollment.id,
-      studentId: enrollment.studentId,
-      studentName,
-      planLabel: enrollment.planLabel,
-      planId: enrollment.planId,
-      curriculum: enrollment.curriculum,
-      scheduleDays: plan?.scheduleDays ?? [],
-      slotLabel: formatEnrollmentSlotLabel(enrollment),
-      sessionsRemaining: enrollment.sessionsRemaining,
-      sessionsTotal: enrollment.sessionsTotal,
-      contractStart: missingContractRange ? lessonStart : enrollment.startDate,
-      contractEnd: missingContractRange ? lessonEnd : enrollment.endDate,
-      status: enrollment.status,
-      upcomingLessonCount: upcoming.length,
-      overdueOpenLessonCount,
-      unresolvedLessonCount,
-      scheduleInSync: unresolvedLessonCount === enrollment.sessionsRemaining,
-      upcomingLessons: upcoming.map((l) => ({
-        id: l.id,
-        scheduledAt: l.scheduledAt,
-      })),
-    };
-  });
+/** Compatibility entry points use the same DB validator as the API. */
+export async function getBulkEnrollmentTransferPreview(fromTeacherId: string) {
+  const { listTransferEnrollments } = await import("./enrollment-transfer-repository");
+  return listTransferEnrollments(fromTeacherId);
 }
-
-/** @deprecated enrollment 단위 preview 사용 */
-export function getBulkReassignPreview(fromTeacherId: string) {
-  return getBulkEnrollmentTransferPreview(fromTeacherId);
-}
-
-export function previewEnrollmentTransferSlots(
-  enrollmentId: string,
-  fromTeacherId: string,
-  toTeacherId: string
-): { movableCount: number; totalScheduled: number; canAbsorbAll: boolean } {
-  const enrollment = getEnrollmentById(enrollmentId);
-  if (!enrollment) {
-    return { movableCount: 0, totalScheduled: 0, canAbsorbAll: false };
-  }
-  const scheduled = futureLessonsForEnrollment(enrollmentId, fromTeacherId);
-  let movableCount = 0;
-  const ignoreOwner = { studentId: enrollment.studentId };
-  for (const lesson of scheduled) {
-    if (
-      isTeacherSlotFree(
-        toTeacherId,
-        lesson.scheduledAt,
-        lesson.id,
-        lesson.durationMinutes,
-        ignoreOwner
-      )
-    ) {
-      movableCount += 1;
-    }
-  }
-  return {
-    movableCount,
-    totalScheduled: scheduled.length,
-    canAbsorbAll: movableCount === scheduled.length,
-  };
+export const getBulkReassignPreview = getBulkEnrollmentTransferPreview;
+export async function previewEnrollmentTransferSlots(enrollmentId: string, fromTeacherId: string, toTeacherId: string) {
+  const { transferEnrollments } = await import("./enrollment-transfer-repository");
+  const result = await transferEnrollments({ fromTeacherId, transfers: [{ enrollmentId, toTeacherId }] });
+  return result.slotsByEnrollment[enrollmentId];
 }
 
 function monthKeyFromIso(iso: string): string {
@@ -707,101 +610,11 @@ export async function bulkTransferEnrollmentsFromTeacher(input: {
   fromTeacherId: string;
   transfers: { enrollmentId: string; toTeacherId: string }[];
 }): Promise<BulkEnrollmentTransferResult> {
-  const fromTeacher = getTeacherById(input.fromTeacherId);
-  const fromTeacherName = fromTeacher?.displayName ?? input.fromTeacherId;
-  const allMoved: Lesson[] = [];
-  const transfers: BulkEnrollmentTransferItemResult[] = [];
-
-  for (const transfer of input.transfers) {
-    const enrollment = getEnrollmentById(transfer.enrollmentId);
-    const toTeacher = getTeacherById(transfer.toTeacherId);
-    const student = enrollment ? getStudentDirectoryEntry(enrollment.studentId) : undefined;
-    const studentName = student
-      ? getStudentDisplayName(student.student)
-      : enrollment?.studentId ?? "—";
-
-    if (!enrollment || enrollment.teacherId !== input.fromTeacherId) {
-      transfers.push({
-        enrollmentId: transfer.enrollmentId,
-        studentName,
-        toTeacherId: transfer.toTeacherId,
-        toTeacherName: toTeacher?.displayName ?? "—",
-        enrollmentUpdated: false,
-        lessonsMoved: 0,
-        lessonsSkipped: 0,
-        skipReasons: ["수강 정보 없음 또는 이관 대상 선생님 불일치"],
-      });
-      continue;
-    }
-
-    if (!toTeacher || toTeacher.status !== "active") {
-      transfers.push({
-        enrollmentId: transfer.enrollmentId,
-        studentName,
-        toTeacherId: transfer.toTeacherId,
-        toTeacherName: toTeacher?.displayName ?? "—",
-        enrollmentUpdated: false,
-        lessonsMoved: 0,
-        lessonsSkipped: 0,
-        skipReasons: ["받는 선생님 unavailable"],
-      });
-      continue;
-    }
-
-    const scheduled = futureLessonsForEnrollment(enrollment.id, input.fromTeacherId);
-    const skipReasons: string[] = [];
-    let lessonsMoved = 0;
-    let lessonsSkipped = 0;
-    const ignoreOwner = { studentId: enrollment.studentId };
-
-    for (const lesson of scheduled) {
-      if (
-        !isTeacherSlotFree(
-          toTeacher.id,
-          lesson.scheduledAt,
-          lesson.id,
-          lesson.durationMinutes,
-          ignoreOwner
-        )
-      ) {
-        lessonsSkipped += 1;
-        skipReasons.push(
-          `${lesson.scheduledAt.slice(0, 16)} — 받는 선생님 시간 불가 (기존 스케줄 유지)`
-        );
-        continue;
-      }
-
-      const moved = await replaceLessonInDb({
-        ...lesson,
-        originalTeacherId: lesson.originalTeacherId ?? input.fromTeacherId,
-        originalTeacherName: lesson.originalTeacherName ?? fromTeacherName,
-        teacherId: toTeacher.id,
-        teacherName: toTeacher.displayName,
-        payrollTeacherId: toTeacher.id,
-        payrollTeacherName: toTeacher.displayName,
-        status: "scheduled",
-        operationNote: "휴직·퇴직 수강 일괄 이관",
-      });
-      allMoved.push(moved);
-      lessonsMoved += 1;
-    }
-
-    updateEnrollmentTeacher(enrollment.id, toTeacher.id, toTeacher.displayName);
-    await restoreOccupiedWeeklyAvailabilityInDb(toTeacher.id);
-
-    transfers.push({
-      enrollmentId: enrollment.id,
-      studentName,
-      toTeacherId: toTeacher.id,
-      toTeacherName: toTeacher.displayName,
-      enrollmentUpdated: true,
-      lessonsMoved,
-      lessonsSkipped,
-      skipReasons,
-    });
-  }
-
-  return { transfers, lessonsMoved: allMoved };
+  const { transferEnrollments } = await import("./enrollment-transfer-repository");
+  const result = await transferEnrollments(input, true);
+  if (!result.ok) throw new Error("transfer_unavailable");
+  const ids = new Set(result.transfers.flatMap(t => t.lessonIds));
+  return { transfers: result.transfers, lessonsMoved: getAllLessons().filter(l => ids.has(l.id)) };
 }
 
 /** @deprecated bulkTransferEnrollmentsFromTeacher 사용 */
@@ -811,7 +624,7 @@ export async function bulkReassignTeacherLessons(input: {
   assignments?: { lessonId: string; toTeacherId: string }[];
 }): Promise<BulkReassignResult> {
   if (input.toTeacherId && !input.assignments?.length) {
-    const previews = getBulkEnrollmentTransferPreview(input.fromTeacherId);
+    const previews = await getBulkEnrollmentTransferPreview(input.fromTeacherId);
     const result = await bulkTransferEnrollmentsFromTeacher({
       fromTeacherId: input.fromTeacherId,
       transfers: previews.map((p) => ({
