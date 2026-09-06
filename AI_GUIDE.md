@@ -3,9 +3,9 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-09-06 (migration 044 운영 DB 적용 및 권한·트리거 검증 완료, 앱 배포 전)
+최종 검증일: 2026-09-06 (migration 044 운영 DB 적용·앱 배포 및 운영 HTTPS 검증 완료)
 기준 브랜치: `main`
-검증된 운영 기준 커밋: `6187a80` (`docs: record mobile-only PWA UX`)
+검증된 운영 기준 커밋: `dc7a084` (`feat: harden bulk enrollment transfers`)
 
 ## 1. 절대 혼동하면 안 되는 운영 정보
 
@@ -23,8 +23,8 @@
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
 | DB migration 최신 기준 | `044_atomic_enrollment_transfer.sql` — 2026-09-06 싱가포르 운영 DB 적용·함수·권한·중복수업 방지 트리거 검증 완료 |
-| 현재 운영 이미지 / 릴리스 | `pass-on-english:6187a80` / `/opt/pass-on-english/releases/6187a80` |
-| 남은 검증 | DB 043·VAPID·PWA 세션 앱 배포 완료. 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신 검증 필요 |
+| 현재 운영 이미지 / 릴리스 | `pass-on-english:dc7a084` / `/opt/pass-on-english/releases/dc7a084` |
+| 남은 검증 | DB 044·일괄 이관 앱 배포 및 HTTPS 검증 완료. 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관의 실기기·실데이터 확인 필요 |
 
 ### 금지된 연결
 
@@ -95,7 +95,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 - `042_harden_chat_rpc_privileges.sql`: Supabase가 신규 함수에 부여한 직접 `anon` 실행 권한을 제거하고 채팅 RPC를 인증 사용자와 service role로 제한한다.
 - 이미 적용된 migration 파일을 임의로 재작성하지 않는다. 후속 변경은 새 번호 migration으로 추가한다.
 - `043_chat_push_presence.sql`은 2026-09-03 운영 적용 완료. 채팅방 접속 lease와 저장된 메시지 기반 수신자 RPC를 추가한다. RLS·인덱스·역할별 권한·함수 소유자 등 12개 검사와 service-role 읽기 전용 함수 실행을 통과했다. 연계 앱 코드도 `35bb954`로 배포 완료했다.
-- `044_atomic_enrollment_transfer.sql`은 2026-09-06 운영 적용 완료. Availability·일정·계약·동시성 검증을 단일 RPC 트랜잭션으로 묶고, 수업 담당자 중복을 막는 DB trigger를 추가했다. `admin_transfer_enrollments`·`admin_transfer_batch` 존재, authenticated 실행 권한, anon 실행 거부, trigger 설치를 읽기 전용으로 확인했다. 앱 코드는 이 migration 적용 후 새 릴리스로 배포한다.
+- `044_atomic_enrollment_transfer.sql`은 2026-09-06 운영 적용 완료. Availability·일정·계약·동시성 검증을 단일 RPC 트랜잭션으로 묶고, 수업 담당자 중복을 막는 DB trigger를 추가했다. `admin_transfer_enrollments`·`admin_transfer_batch` 존재, authenticated 실행 권한, anon 실행 거부, trigger 설치를 읽기 전용으로 확인했다. 앱 코드는 `dc7a084` 릴리스로 배포 완료했다.
 - 같은 날 운영 DB에 `supabase_migrations.schema_migrations`가 없음을 확인했다. 043은 Management API를 통한 해당 SQL 파일 단독 트랜잭션 실행으로 적용했고, CLI 이력을 임의로 생성하거나 과거 이력을 복구하지 않았다. `db push`/전체 migration 재적용 금지: 실제 객체와 과거 적용 기록을 대조한 이력 정합화가 먼저 필요하다.
 - 로컬 `supabase/.temp`의 구 프로젝트 연결을 발견하여 실행을 중단한 후, 공식 CLI `link`로 싱가포르 project ref 및 pooler를 재설정·확인했다. 향후 CLI 실행 전 숨김/ignored 파일의 project-ref도 반드시 확인한다.
 - 운영 DB 적용 전 대상 project ref를 출력 가능한 비밀이 아닌 URL/ref 수준에서 확인하고, 데이터 보존형 SQL인지 검토한다.
@@ -116,7 +116,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 해당 릴리스 `.env.production`에 로컬 공개키·비밀키 두 항목만 등록했다. 키 쌍 정상 및 로컬/서버 파일 일치 확인.
 기존 `VAPID_SUBJECT`와 Supabase 설정은 보존했고 원본은 동일 디렉터리의 `.env.production.pre-vapid-*`로 백업했다(두 파일 모두 600).
 이후 사용자 승인으로 `35bb954` 새 릴리스에 환경파일을 복사하고 이미지 태그만 바꿔 새 이미지를 빌드·배포했다.
-현재 환경파일은 `/opt/pass-on-english/releases/6187a80/deploy/tencent-lighthouse/.env.production`이다.
+현재 환경파일은 `/opt/pass-on-english/releases/dc7a084/deploy/tencent-lighthouse/.env.production`이다.
 실행 컨테이너 키와 환경파일 일치, 키 쌍 정상, 실제 HTTPS 브라우저 코드의 공개키 포함 및 비밀키 비노출을 확인했다.
 
 필수 운영 변수:
@@ -203,6 +203,15 @@ https://passonenglish.com/api/health     → 200
 - app·cron·nginx가 모두 healthy/실행 중이며, 최근 cron 응답의 `failed` 집계는 0이고 앱·Nginx HTTP 오류 집계는 0이었다. 이전 `073cb07` 릴리스와 이미지는 롤백용으로 보존했다.
 - 운영 HTTPS에서 `/ko`, `/zh-CN`, `/ko/signup`, `/teacher`, `/admin`, `/api/health`, `/manifest.json`, `/sw.js`, 192·512 아이콘이 모두 HTTP 200이었다. manifest의 standalone·scope와 Service Worker의 notification click fallback을 확인했다.
 - PC 설치·Push UI 숨김과 모바일/태블릿 노출은 자동 테스트와 코드 기준으로 검증했으며, 실제 기기의 설치·권한 허용·재부팅 후 로그인 유지·양방향 Push 수신은 별도 실기기 확인이 남아 있다.
+
+2026-09-06 migration 044 및 수강 일괄 이관 배포 검증:
+
+- `dc7a084c0cdf445ad9da02865a4ec7a998a77767` 커밋 아카이브를 `/opt/pass-on-english/releases/dc7a084`에 배포하고 app·cron을 `pass-on-english:dc7a084`로 전환했다.
+- migration `044_atomic_enrollment_transfer.sql`은 싱가포르 운영 DB에 단독 적용했다. `admin_transfer_enrollments`·`admin_transfer_batch` 존재, authenticated 실행 권한, anon 실행 거부, `guard_lesson_teacher_overlap` trigger를 읽기 전용으로 확인했다.
+- 2GB 호스트의 CPU 1코어·RAM 1200MB·메모리+스왑 2GB 제한 BuildKit으로 빌드했다. 타입 검사와 84개 정적 페이지 생성을 포함한 production build가 통과했고 이미지 ID는 `sha256:d9bbee378b461064c76def7e608c8415e62ad73361e8b69a692fda4b4afc8d81`이다.
+- app·cron·nginx가 모두 healthy/실행 중이며, 컨테이너의 Supabase URL이 싱가포르 프로젝트임을 재확인했다. 최근 app 오류·nginx 5xx·cron 비정상 집계는 0이다. 이전 `6187a80` 이미지와 릴리스는 롤백용으로 보존했다.
+- 운영 HTTPS에서 `/ko`, `/zh-CN`, `/ko/signup`, `/teacher`, `/admin`, `/api/health`, `/manifest.json`, `/sw.js`, 192·512 아이콘이 모두 HTTP 200이었다. manifest의 `start_url=/?source=pwa`, `scope=/`, `display=standalone`, Service Worker의 `notificationclick`·`openWindow`를 확인했고 새 일괄 이관 API의 익명 요청은 401로 거부됐다.
+- 실제 수강 데이터 이관은 실행하지 않았다. 승인된 대상의 운영 화면 미리보기 및 실데이터 실행은 별도 운영 절차로 남아 있다.
 
 ## 7. 테스트 기준
 
