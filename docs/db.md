@@ -306,6 +306,8 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | sessions_total | int | |
 | sessions_completed | int | default 0 |
 | sessions_remaining | int | nullable — 잔여 회차 (관리자 가감) |
+| paid_sessions_total | int | nullable — 결제 확인 시 고정되는 환불 정책 분모; 보너스·보강 회차 제외 |
+| paid_sessions_source | text | 결제 스냅샷 또는 legacy 복원 근거 |
 | curriculum | text | nullable |
 | session_adjustments | jsonb | default `[]` — 관리자 회차 조정 이력 |
 | preferred_slot_time | text | nullable — HH:mm (KST), 주간 통일 시간 |
@@ -314,6 +316,8 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | started_at | timestamptz | nullable |
 | ended_at | timestamptz | nullable |
 | created_at | timestamptz | |
+
+`paid_sessions_total`은 결제 확인 시 스냅샷으로 고정한다. 기존 계약은 최초 회차 조정의 `previousTotal`, 없으면 요금제 기본 회차와의 일치 여부로 복원하며 근거가 불명확하면 관리자 환불 화면에서 1회 확인해야 한다.
 
 **인덱스**: (student_id), (teacher_id), (status)
 
@@ -412,6 +416,8 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | student_id | uuid FK | |
 | teacher_id | uuid FK | |
 | last_message_at | timestamptz | nullable |
+| closed_at | timestamptz | nullable — 수강 환불 확정 시 채팅 읽기 전용 전환 |
+| closed_reason | text | nullable — `enrollment_refund` 등 |
 | created_at | timestamptz | |
 
 ---
@@ -503,8 +509,8 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 |------|------|------|
 | id | uuid PK | |
 | transaction_date | date | 거래일 |
-| type | text | income \| expense |
-| category | text | student_payment_kr, teacher_payroll, … |
+| type | text | income \| expense \| refund |
+| category | text | student_payment_kr, student_refund_kr/cn, teacher_payroll, … |
 | description | text | |
 | currency | text | KRW, CNY, PHP |
 | amount | numeric | 원화/외화 원금 |
@@ -516,7 +522,12 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | teacher_name, student_name | text | nullable |
 | enrollment_id | uuid FK | 입금 확인 시 (UNIQUE per income) |
 | salary_statement_id | uuid FK | 급여 paid 시 (UNIQUE) |
+| refund_id | uuid FK → enrollment_refunds | 환불 거래 연결 (UNIQUE) |
 | created_at | timestamptz | |
+
+### 4.18b enrollment_refunds (migration 048)
+
+관리자 최종 확인 기준의 환불 감사 원장이다. 수강별 1건만 허용하며 정책 버전, 원 결제금액·통화, 결제 정규회차, 정책 산정 회차·비율·금액, 실제 환불금액, 조정 사유, 취소된 수업 수, 처리 관리자, 재무 거래와 계산 당시 snapshot을 보존한다. 일반 사용자의 직접 쓰기는 허용하지 않고 `admin_finalize_enrollment_refund` RPC만 사용한다.
 
 ---
 
@@ -640,7 +651,6 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | other_incentives | numeric | default 0 |
 | deductions | numeric | default 0 |
 | payment_date | date | nullable |
-| payout_account | jsonb | `{ type, label, accountNumber, accountName? }` |
 | is_live_estimate | boolean | default false — 당월 추정치 |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
@@ -894,8 +904,11 @@ supabase db push
 |--------|-----------|
 | `faq_items` | category_ko/zh, question/answer ko/zh, sort_order, published |
 | `dashboard_settings` | slogan (singleton row, id `…0002`) |
-| `teacher_applications` | full_name, date_of_birth, phone, bank_account, email, status, submitted_at |
+| `teacher_applications` | full_name, date_of_birth, phone, email, status, submitted_at |
 | `teachers.application_id` | FK → `teacher_applications` (signup step 2) |
+
+> migration 046에서 개인정보 최소화를 위해 `teacher_applications.bank_account`와
+> `teacher_salary_statements.payout_account`를 제거한다. 급여 금액·지급 상태·지급일·재무 연동은 유지한다.
 
 ### 8.5 migration 004 (`profiles.active_student_id`)
 

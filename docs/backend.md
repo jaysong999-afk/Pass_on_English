@@ -224,12 +224,16 @@
 | GET | `/api/enrollments/[id]` | — | `enrollments` | (미사용) `{ enrollment }` |
 | PATCH | `/api/enrollments/[id]` | admin 학생상세, 검토센터 | ↑ | `confirm_payment` \| `reject_payment` |
 | PATCH | `/api/enrollments/[id]/sessions` | `EnrollmentSessionEditor` | `enrollments`, `lessons`, `session_adjustments` JSONB | §6.3 |
+| GET | `/api/admin/enrollments/[id]/refund-preview` | 관리자 학생 상세 | 단건 집계 RPC | 환불 정책·진행 회차·미처리 수업·취소 예정 수업 |
+| POST | `/api/admin/enrollments/[id]/refund` | `AdminEnrollmentRefundDialog` | atomic RPC | 실제 송금 완료 확인 후 환불·수강취소 확정 |
 
 **결제 플로우**
 
 1. `POST /api/enrollments` → `status=pending_payment`, `payment_status=reported`
 2. `PATCH confirm_payment` → `active`, `scheduleLessonsForConfirmedEnrollment()` → `lessons` N건 생성
 3. 검토 센터 `payment_activation` / `activate` → 동일
+
+**환불 확정**: 학생/학부모는 별도 요청 UI 없이 관리자 상담으로 요청한다. 관리자는 학생 상세의 활성 수강 카드에서 미리보기를 열며, 이때만 해당 enrollment의 수업을 집계한다. `admin_finalize_enrollment_refund`는 최신 기록을 재검증하고 수강·잔여수업·보강요청·재무 환불·알림·수강 채팅 종료를 한 트랜잭션으로 확정한다. 과거 미처리 수업, 중복 실행, 미리보기 이후 회차 변경은 실패 처리한다. Push는 커밋 후 대상 사용자 구독만 조회하는 best-effort 작업이다.
 
 ### 5.4 학습 · 보강
 
@@ -265,6 +269,8 @@
 | POST | `/api/teacher/applications` | signup Step1 | 🗄️ | signUp + application |
 | GET/PATCH | `/api/chat/rooms` | chat list, bells | 🗄️ `chat_rooms` | `role`; PATCH: `action=read`\|`readAll`, `id` |
 | GET/POST | `/api/chat/messages` | `ChatThread` | 🗄️ `chat_messages` | GET: `roomId`; POST: body, senderRole |
+
+환불 완료된 수강 채팅은 `chat_rooms.closed_at`으로 읽기 전용이 된다. 과거 메시지 조회는 유지하고 DB insert trigger가 신규 메시지를 차단한다. 관리자 지원용 direct thread는 종료하지 않는다.
 
 **신규 수업 배정 알림**: 무료체험 lesson 생성 시 `trial:{lessonId}`, 정규 수강 첫 스케줄 생성 시 `enrollment:{enrollmentId}` 키로 teacher notification을 중복 없이 생성한다. payload에는 첫 lesson, 학생명, 수강목적, trial 여부를 포함한다. My Lessons는 unread `teacher_lesson_assignment`만 반환하며 확인 버튼은 기존 `PATCH /api/notifications?role=teacher`로 `read_at`을 기록한다.
 

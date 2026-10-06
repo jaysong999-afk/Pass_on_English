@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { ensureAdminMessagingBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { ensureAccountSession } from "@/lib/account-store";
 import { requireTeacherAuth } from "@/lib/auth/session";
 import {
@@ -27,8 +26,6 @@ async function resolveProfileId(
 }
 
 export async function GET(request: Request) {
-  await ensureAdminMessagingBootstrapped();
-
   const { searchParams } = new URL(request.url);
   const role = searchParams.get("role");
   if (role !== "student" && role !== "teacher") {
@@ -63,8 +60,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await ensureAdminMessagingBootstrapped();
-
   const body = (await request.json()) as {
     role?: "student" | "teacher";
     threadId?: string;
@@ -87,7 +82,6 @@ export async function POST(request: Request) {
   try {
     const message = await sendAdminDirectReplyFromRecipientInDb({
       threadId: body.threadId,
-      profileId,
       body: body.body,
     });
     return NextResponse.json({ message });
@@ -98,8 +92,6 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  await ensureAdminMessagingBootstrapped();
-
   const body = (await request.json()) as {
     role?: "student" | "teacher";
     threadId?: string;

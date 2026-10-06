@@ -21,6 +21,8 @@ interface ChatThreadProps {
   studentId?: string;
   teacherId?: string;
   placeholder?: string;
+  closedAt?: string;
+  closedMessage?: string;
 }
 
 function messageIsOwn(
@@ -40,10 +42,13 @@ export function ChatThread({
   studentId,
   teacherId,
   placeholder = "메시지를 입력하세요...",
+  closedAt,
+  closedMessage = "This conversation is read-only because the enrollment has ended.",
 }: ChatThreadProps) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
   const visible = usePageVisible();
   const currentRoom = useRef(roomId);
   currentRoom.current = roomId;
@@ -123,9 +128,10 @@ export function ChatThread({
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim() || sending) return;
+    if (!input.trim() || sending || closedAt) return;
 
     setSending(true);
+    setSendError("");
     pinToBottom();
     try {
       const res = await fetch("/api/chat/messages", {
@@ -141,6 +147,14 @@ export function ChatThread({
         }),
       });
       const data = await res.json();
+      if (res.status === 409 || String(data.error ?? "").includes("chat_room_closed")) {
+        setSendError(closedMessage);
+        return;
+      }
+      if (!res.ok) {
+        setSendError("메시지를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
       if (data.message) {
         setMessages((prev) => {
           const next = normalizeMessage({ ...data.message, isOwn: true });
@@ -148,7 +162,7 @@ export function ChatThread({
           return [...prev, next];
         });
       }
-      setInput("");
+        setInput("");
     } finally {
       setSending(false);
     }
@@ -213,7 +227,14 @@ export function ChatThread({
         })}
         </div>
       </div>
-      <form onSubmit={handleSend} className="flex items-center gap-2 border-t bg-gray-50/80 p-3">
+      {closedAt ? (
+        <div className="border-t bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-800">
+          {closedMessage}
+        </div>
+      ) : (
+      <form onSubmit={handleSend} className="border-t bg-gray-50/80 p-3">
+        {sendError && <p className="mb-2 text-xs text-red-600">{sendError}</p>}
+        <div className="flex items-center gap-2">
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -230,7 +251,9 @@ export function ChatThread({
         >
           <Send className="size-7" strokeWidth={2.5} />
         </Button>
+        </div>
       </form>
+      )}
     </div>
   );
 }

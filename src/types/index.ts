@@ -23,6 +23,7 @@ export type LessonCancelReason =
   | "student_absence_admin"
   | "holiday"
   | "admin_unpaid_cancel"
+  | "enrollment_refund"
   | "other";
 export type PaymentStatus = "pending" | "reported" | "confirmed" | "rejected";
 
@@ -195,7 +196,6 @@ export interface TeacherApplication {
   fullName: string;
   dateOfBirth: string;
   phone: string;
-  bankAccount: string;
   facebookMessengerId: string;
   address: string;
   email: string;
@@ -210,7 +210,6 @@ export interface TeacherSignupInput {
   fullName: string;
   dateOfBirth: string;
   phone: string;
-  bankAccount: string;
   facebookMessengerId: string;
   address: string;
   email: string;
@@ -464,6 +463,7 @@ export interface LessonRescheduleRequest {
 
 export interface ChatRoom {
   id: string;
+  enrollmentId?: string;
   teacherId?: string;
   teacherName: string;
   studentId?: string;
@@ -477,6 +477,9 @@ export interface ChatRoom {
   lastMessage: string;
   lastMessageAt: string;
   unread: number;
+  /** Refunded/cancelled enrollment chats remain readable but become read-only. */
+  closedAt?: string;
+  closedReason?: string;
 }
 
 export interface ChatMessage {
@@ -539,13 +542,6 @@ export interface SalaryLessonVerificationRow {
   countsForPayroll: boolean;
 }
 
-export interface TeacherPayoutAccount {
-  type: "bank" | "gcash" | "wise";
-  label: string;
-  accountNumber: string;
-  accountName?: string;
-}
-
 /** Monthly teacher salary statement (payroll slip) */
 export interface TeacherSalaryStatement {
   id: string;
@@ -567,13 +563,12 @@ export interface TeacherSalaryStatement {
   /** Admin verified hours and amounts after month end */
   adminConfirmedAt?: string;
   adminConfirmedBy?: string;
-  /** PHP deposited to teacher account */
+  /** PHP payout completed */
   phpPaidAt?: string;
   /** Final KRW transfer amount including fees */
   krwTransferAmount?: number;
   completedAt?: string;
   financeTransactionId?: string;
-  payoutAccount: TeacherPayoutAccount;
   /** Current month in-progress estimate */
   isLiveEstimate?: boolean;
 }
@@ -585,7 +580,7 @@ export interface FinanceSummary {
   month: string;
 }
 
-export type TransactionType = "income" | "expense";
+export type TransactionType = "income" | "expense" | "refund";
 export type TransactionSource = "auto" | "manual";
 export type TaxTreatment = "taxable" | "zero_rated" | "exempt" | "non_taxable";
 export type FinanceCurrency = "KRW" | "CNY" | "PHP";
@@ -593,6 +588,8 @@ export type FinanceCurrency = "KRW" | "CNY" | "PHP";
 export type TransactionCategory =
   | "student_payment_kr"
   | "student_payment_cn"
+  | "student_refund_kr"
+  | "student_refund_cn"
   | "teacher_payroll"
   | "server_infra"
   | "manual_income"
@@ -621,6 +618,8 @@ export interface FinanceTransaction {
   teacherId?: string;
   teacherName?: string;
   studentName?: string;
+  enrollmentId?: string;
+  refundId?: string;
 }
 
 export interface MonthlyPlSummary {

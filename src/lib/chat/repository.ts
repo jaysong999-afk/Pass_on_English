@@ -33,6 +33,8 @@ interface ChatRoomRow {
   teacher_id: string;
   last_message_at: string | null;
   created_at: string;
+  closed_at: string | null;
+  closed_reason: string | null;
 }
 
 interface ChatMessageRow {
@@ -47,6 +49,7 @@ interface ChatMessageRow {
 
 interface ChatInboxRow {
   id: string;
+  enrollment_id: string;
   teacher_id: string;
   teacher_name: string;
   student_id: string;
@@ -58,6 +61,8 @@ interface ChatInboxRow {
   last_message: string | null;
   last_message_at: string;
   unread: number | string;
+  closed_at: string | null;
+  closed_reason: string | null;
 }
 
 interface ChatThreadMessageRow extends ChatMessageRow {
@@ -74,7 +79,7 @@ interface ChatListContext {
 export type { ChatListContext };
 
 const ROOM_SELECT =
-  "id, enrollment_id, student_id, teacher_id, last_message_at, created_at";
+  "id, enrollment_id, student_id, teacher_id, last_message_at, created_at, closed_at, closed_reason";
 
 const MESSAGE_SELECT =
   "id, room_id, sender_id, sender_role, body, read_at, created_at";
@@ -98,6 +103,7 @@ export async function getChatInboxInDb(studentId?: string): Promise<ChatRoom[]> 
 
   return ((data ?? []) as ChatInboxRow[]).map((row) => ({
     id: row.id,
+    enrollmentId: row.enrollment_id,
     teacherId: row.teacher_id,
     teacherName: row.teacher_name,
     studentId: row.student_id,
@@ -109,6 +115,8 @@ export async function getChatInboxInDb(studentId?: string): Promise<ChatRoom[]> 
     lastMessage: row.last_message ?? "",
     lastMessageAt: row.last_message_at,
     unread: Number(row.unread) || 0,
+    closedAt: row.closed_at ?? undefined,
+    closedReason: row.closed_reason ?? undefined,
   }));
 }
 
@@ -228,6 +236,7 @@ async function buildChatRoomDto(
 
   return {
     id: row.id,
+    enrollmentId: row.enrollment_id,
     teacherId: row.teacher_id,
     teacherName,
     studentId: row.student_id,
@@ -244,6 +253,8 @@ async function buildChatRoomDto(
     lastMessage: latest?.body ?? "",
     lastMessageAt: row.last_message_at ?? row.created_at,
     unread: countUnread(roomMessages, viewerRole),
+    closedAt: row.closed_at ?? undefined,
+    closedReason: row.closed_reason ?? undefined,
   };
 }
 
@@ -368,9 +379,11 @@ export async function ensureTeacherChatRoomInDb(input: {
   const teacherId = resolveTeacherId(input.teacherId);
   if (!teacherId) throw new Error("teacher_not_found");
 
-  const existing = getChatRoomCache().find(
-    (r) => r.teacherId === teacherId && r.studentId === input.studentId
-  );
+  const existing = input.enrollmentId
+    ? getChatRoomCache().find((room) => room.enrollmentId === input.enrollmentId)
+    : getChatRoomCache().find(
+        (room) => room.teacherId === teacherId && room.studentId === input.studentId && !room.closedAt
+      );
   if (existing) {
     return { ...existing, displayName: input.displayName };
   }
@@ -549,21 +562,11 @@ export async function markChatRoomReadInDb(
   viewerRole: PortalRole
 ): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("chat_messages")
-    .update({ read_at: new Date().toISOString() })
-    .eq("room_id", roomId)
-    .neq("sender_role", viewerRole)
-    .is("read_at", null);
+  const { error } = await supabase.rpc("mark_chat_room_read", {
+    p_room_id: roomId,
+  });
   if (error) throw new Error(`chat_read_update_failed: ${error.message}`);
-
-  const meta = getChatMessageMeta(roomId).map((m) =>
-    m.senderRole !== viewerRole && !m.readAt ? { ...m, readAt: new Date().toISOString() } : m
-  );
-  setChatMessagesForRoom(roomId, getChatMessagesCache(roomId), meta);
-
-  const room = getChatRoomCache().find((r) => r.id === roomId);
-  if (room) patchChatRoomInCache({ ...room, unread: 0 });
+  void viewerRole; // Authorization and the viewer role are derived inside the RPC.
 }
 
 export async function reloadChatMessagesInDb(roomId: string): Promise<ChatMessage[]> {

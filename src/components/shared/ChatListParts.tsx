@@ -50,7 +50,10 @@ export function ChatConversationCard({ room, href, emptyMessage, locale }: {
           <PersonAvatar name={room.displayName} avatarUrl={room.avatarUrl} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
-              <p className="truncate font-semibold">{room.displayName}</p>
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="truncate font-semibold">{room.displayName}</p>
+                {room.closedAt && <Badge variant="outline" className="shrink-0 text-[10px]">종료</Badge>}
+              </div>
               <span className="shrink-0 text-xs text-gray-400">{formatTime(room.lastMessageAt, locale ?? "en-US")}</span>
             </div>
             <p className="truncate text-sm text-gray-500">{preview}</p>

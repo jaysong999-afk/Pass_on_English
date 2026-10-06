@@ -81,7 +81,6 @@ export default function AdminTeacherApplicationPage() {
           <Row label="이메일" value={application.email} />
           <Row label="생년월일" value={application.dateOfBirth} />
           <Row label="전화번호" value={application.phone} />
-          <Row label="계좌번호" value={application.bankAccount} />
           <Row label="Facebook Messenger ID" value={application.facebookMessengerId} />
           <Row label="주소" value={application.address} />
         </CardContent>

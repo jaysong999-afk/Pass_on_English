@@ -637,21 +637,11 @@ function SalaryDetailPanel({
           )}
         </section>
 
-        <div className="rounded-xl bg-gray-50 px-4 py-3 text-sm">
-          <p className="text-xs font-semibold uppercase text-gray-400">지급 계좌</p>
-          <p className="mt-1 font-medium">
-            {row.payoutAccount.label} · {row.payoutAccount.accountNumber}
-          </p>
-          {row.payoutAccount.accountName && (
-            <p className="text-gray-600">{row.payoutAccount.accountName}</p>
-          )}
-        </div>
-
         {row.status === "paid" && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
             <p className="text-sm font-semibold text-emerald-900">최종 종결 — 원화 송금액 입력</p>
             <p className="text-xs text-emerald-800">
-              선생님 계좌 PHP 입금 완료 후, 수수료를 포함한 실제 원화 송금액을 입력하세요. 종결 시
+              강사 급여 지급 완료 후, 수수료를 포함한 실제 원화 송금액을 입력하세요. 종결 시
               재무관리에 지출이 반영됩니다.
             </p>
             <div className="flex flex-wrap items-end gap-2">

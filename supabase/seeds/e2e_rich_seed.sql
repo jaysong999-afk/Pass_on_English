@@ -304,17 +304,17 @@ BEGIN
     locale = EXCLUDED.locale;
 
   INSERT INTO teacher_applications (
-    id, full_name, date_of_birth, phone, bank_account, facebook_messenger_id,
+    id, full_name, date_of_birth, phone, facebook_messenger_id,
     address, email, status, submitted_at, reviewed_at, reviewed_by
   ) VALUES
-    (v_app_james, 'James Rivera', '1992-04-11', '+63-917-100-2001', 'BDO 001-2345-678',
-     'james.rivera', 'Manila', 'e2e-teacher-james@example.org', 'approved',
+    (v_app_james, 'James Rivera', '1992-04-11', '+63-917-100-2001',
+     'james.rivera', 'Manila, Metro Manila', 'e2e-teacher-james@example.org', 'approved',
      now() - interval '40 days', now() - interval '38 days', v_admin),
-    (v_app_emily, 'Emily Chen', '1994-09-02', '+63-917-100-2002', 'BPI 009-8765-432',
-     'emily.chen', 'Cebu', 'e2e-teacher-emily@example.org', 'approved',
+    (v_app_emily, 'Emily Chen', '1994-09-02', '+63-917-100-2002',
+     'emily.chen', 'Cebu City, Cebu', 'e2e-teacher-emily@example.org', 'approved',
      now() - interval '30 days', now() - interval '28 days', v_admin),
-    (v_app_carlos, 'Carlos Mendoza', '1990-12-18', '+63-917-100-2003', '',
-     'carlos.mendoza', 'Quezon City', 'e2e-teacher-carlos@example.org', 'pending',
+    (v_app_carlos, 'Carlos Mendoza', '1990-12-18', '+63-917-100-2003',
+     'carlos.mendoza', 'Quezon City, Metro Manila', 'e2e-teacher-carlos@example.org', 'pending',
      now() - interval '2 days', NULL, NULL);
 
   INSERT INTO teachers (

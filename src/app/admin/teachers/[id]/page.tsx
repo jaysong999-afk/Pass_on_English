@@ -163,8 +163,6 @@ export default function AdminTeacherDetailPage() {
               label="이번 달 예상 급여"
               value={formatCurrency(detail.currentMonthEstimateTotal, "PHP")}
             />
-            <Row label="지급 계좌" value={detail.payoutAccount.label} />
-            <Row label="계좌번호" value={detail.payoutAccount.accountNumber} />
             <div className="flex gap-2 pt-2">
               <Button size="sm" variant="outline" asChild>
                 <Link href={`/admin/teacher-profiles/${teacher.id}`}>프로필 편집</Link>

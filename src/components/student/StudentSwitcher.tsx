@@ -26,7 +26,8 @@ export function StudentSwitcher({
     return null;
   }
 
-  const showSwitcher = account?.accountType === "guardian" || learners.length > 1;
+  const canAddLearner = account?.accountType === "guardian";
+  const showSwitcher = canAddLearner || learners.length > 1;
   const isBar = variant === "bar";
 
   if (!showSwitcher) {
@@ -66,13 +67,16 @@ export function StudentSwitcher({
           </option>
         ))}
       </select>
-      <Link
-        href={studentPath(locale, "learners/new")}
-        className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20"
-        title={t("addLearner")}
-      >
-        <Plus className="h-4 w-4" />
-      </Link>
+      {canAddLearner && (
+        <Link
+          href={studentPath(locale, "learners/new")}
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-white/60 bg-white px-3 text-sm font-semibold text-brand-700 shadow-sm transition-colors hover:bg-mint-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:translate-y-px"
+          aria-label={t("addLearner")}
+        >
+          <Plus aria-hidden="true" className="h-4 w-4" />
+          <span>{t("addLearner")}</span>
+        </Link>
+      )}
     </div>
   );
 }

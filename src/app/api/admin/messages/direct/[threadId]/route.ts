@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
-import { ensureAdminMessagingBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
-  getAdminDirectMessagesFromCache,
   markAdminDirectThreadReadInDb,
   reloadAdminDirectMessagesInDb,
   sendAdminDirectMessageInDb,
@@ -16,12 +14,8 @@ export async function GET(
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureAdminMessagingBootstrapped();
     const { threadId } = await params;
-    let messages = getAdminDirectMessagesFromCache(threadId);
-    if (messages.length === 0) {
-      messages = await reloadAdminDirectMessagesInDb(threadId);
-    }
+    const messages = await reloadAdminDirectMessagesInDb(threadId);
     return NextResponse.json({ messages });
   } catch (error) {
     console.error("[GET /api/admin/messages/direct/[threadId]]", error);
@@ -38,7 +32,6 @@ export async function POST(
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureAdminMessagingBootstrapped();
     const { threadId } = await params;
     const body = (await request.json()) as { body?: string };
     if (!body.body?.trim()) {
@@ -64,7 +57,6 @@ export async function PATCH(
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureAdminMessagingBootstrapped();
     const { threadId } = await params;
     await markAdminDirectThreadReadInDb(threadId);
     return NextResponse.json({ ok: true });

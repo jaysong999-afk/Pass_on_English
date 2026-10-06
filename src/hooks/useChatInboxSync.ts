@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { CHAT_INBOX_CHANGED } from "@/lib/chat-inbox-events";
 
 // One channel/timer per tab, shared by the list and responsive header bell.
-const listeners = new Set<() => void>();
+export type ChatInboxScope = "all" | "chat" | "admin-direct";
+
+const listeners = new Map<() => void, ChatInboxScope>();
 let stopSync: (() => void) | undefined;
 
 function startSync() {
@@ -14,11 +16,25 @@ function startSync() {
   let connected = false;
   let poll: ReturnType<typeof setInterval> | undefined;
   let scheduled: ReturnType<typeof setTimeout> | undefined;
-  const refresh = () => {
-    if (document.visibilityState !== "visible" || scheduled) return;
+  const pendingScopes = new Set<ChatInboxScope>();
+  const refresh = (scope: ChatInboxScope = "all") => {
+    if (document.visibilityState !== "visible") return;
+    pendingScopes.add(scope);
+    if (scheduled) return;
     scheduled = setTimeout(() => {
       scheduled = undefined;
-      if (document.visibilityState === "visible") listeners.forEach((listener) => listener());
+      if (document.visibilityState !== "visible") return;
+      const scopes = new Set(pendingScopes);
+      pendingScopes.clear();
+      listeners.forEach((listenerScope, listener) => {
+        if (
+          scopes.has("all") ||
+          listenerScope === "all" ||
+          scopes.has(listenerScope)
+        ) {
+          listener();
+        }
+      });
     }, 100);
   };
   const disconnect = () => {
@@ -26,6 +42,7 @@ function startSync() {
     clearInterval(poll);
     clearTimeout(scheduled);
     scheduled = undefined;
+    pendingScopes.clear();
     if (channel) {
       const previous = channel;
       channel = undefined;
@@ -36,8 +53,16 @@ function startSync() {
     if (document.visibilityState !== "visible") { disconnect(); return; }
     if (channel) return;
     const next = db.channel("chat-inbox-sync")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, refresh)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "admin_direct_messages" }, refresh);
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "chat_messages" },
+        () => refresh("chat")
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "admin_direct_messages" },
+        () => refresh("admin-direct")
+      );
     channel = next;
     next.subscribe((status) => {
       if (channel !== next) return;
@@ -47,29 +72,34 @@ function startSync() {
     poll = setInterval(() => { if (!connected) refresh(); }, 60000);
     refresh();
   };
-  window.addEventListener("focus", refresh);
-  window.addEventListener(CHAT_INBOX_CHANGED, refresh);
+  const refreshAll = () => refresh("all");
+  window.addEventListener("focus", refreshAll);
+  window.addEventListener(CHAT_INBOX_CHANGED, refreshAll);
   document.addEventListener("visibilitychange", visibility);
   visibility();
   return () => {
     disconnect();
-    window.removeEventListener("focus", refresh);
-    window.removeEventListener(CHAT_INBOX_CHANGED, refresh);
+    window.removeEventListener("focus", refreshAll);
+    window.removeEventListener(CHAT_INBOX_CHANGED, refreshAll);
     document.removeEventListener("visibilitychange", visibility);
   };
 }
 
-export function useChatInboxSync(onRefresh: () => void, enabled = true) {
+export function useChatInboxSync(
+  onRefresh: () => void,
+  enabled = true,
+  scope: ChatInboxScope = "all"
+) {
   const callback = useRef(onRefresh);
   callback.current = onRefresh;
   useEffect(() => {
     if (!enabled) return;
     const listener = () => callback.current();
-    listeners.add(listener);
+    listeners.set(listener, scope);
     if (!stopSync) stopSync = startSync();
     return () => {
       listeners.delete(listener);
       if (listeners.size === 0) { stopSync?.(); stopSync = undefined; }
     };
-  }, [enabled]);
+  }, [enabled, scope]);
 }

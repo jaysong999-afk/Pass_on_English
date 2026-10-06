@@ -162,7 +162,6 @@ export default function TeacherProfilePage() {
         <div className="space-y-2"><Label htmlFor="phone">Mobile number</Label><Input id="phone" type="tel" value={phone} maxLength={30} onChange={(e) => setPhone(e.target.value)} required /></div>
         <div className="space-y-2 sm:col-span-2"><Label htmlFor="address">Address</Label><Input id="address" value={address} maxLength={300} onChange={(e) => setAddress(e.target.value)} required /></div>
         <div className="space-y-2 sm:col-span-2"><Label htmlFor="messengerId">Facebook Messenger ID or link</Label><Input id="messengerId" value={messengerId} maxLength={200} onChange={(e) => setMessengerId(e.target.value)} required /></div>
-        <div className="sm:col-span-2"><ReadonlyField id="bankAccount" label="Registered payout account" value={initial.bankAccount} hint="For payment security, request payout-account changes through the administrator." /></div>
       </CardContent></Card>
 
     <Card><CardHeader className="border-b bg-muted/30"><div className="flex gap-3"><div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-700"><ShieldCheck className="h-5 w-5" /></div>

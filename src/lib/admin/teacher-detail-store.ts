@@ -14,7 +14,6 @@ import { getTeacherWeeklyAvailability } from "@/lib/teacher-availability-store-s
 import { getTeacherPenalties } from "@/lib/teacher-payroll-penalty-store-sync";
 import { getTeacherById } from "@/lib/teacher-profile-store-sync";
 import {
-  getPayoutAccount,
   getSalaryStatementsForTeacher,
   getSalaryStatement,
   statementTotal,
@@ -42,7 +41,6 @@ export interface AdminTeacherDetail {
   salaryStatements: TeacherSalaryStatement[];
   currentMonthEstimate: TeacherSalaryStatement | null;
   currentMonthEstimateTotal: number;
-  payoutAccount: ReturnType<typeof getPayoutAccount>;
   penalties: ReturnType<typeof getTeacherPenalties>;
   application: TeacherApplication | null;
 }
@@ -112,7 +110,6 @@ export function getAdminTeacherDetail(teacherId: string): AdminTeacherDetail | n
     salaryStatements: getSalaryStatementsForTeacher(teacherId),
     currentMonthEstimate,
     currentMonthEstimateTotal: currentMonthEstimate ? statementTotal(currentMonthEstimate) : 0,
-    payoutAccount: getPayoutAccount(teacherId),
     penalties: getTeacherPenalties(teacherId),
     application,
   };

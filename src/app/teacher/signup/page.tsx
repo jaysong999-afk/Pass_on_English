@@ -22,7 +22,6 @@ export default function TeacherSignupPage() {
   const [fullName, setFullName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [phone, setPhone] = useState("");
-  const [bankAccount, setBankAccount] = useState("");
   const [facebookMessengerId, setFacebookMessengerId] = useState("");
   const [address, setAddress] = useState("");
   const [email, setEmail] = useState("");
@@ -58,7 +57,6 @@ export default function TeacherSignupPage() {
         fullName: fullName.trim(),
         dateOfBirth,
         phone: phone.trim(),
-        bankAccount: bankAccount.trim(),
         facebookMessengerId: facebookMessengerId.trim(),
         address: address.trim(),
         email: email.trim(),
@@ -142,18 +140,6 @@ export default function TeacherSignupPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="bankAccount">Bank account number</Label>
-                <Input
-                  id="bankAccount"
-                  value={bankAccount}
-                  onChange={(e) => setBankAccount(e.target.value)}
-                  placeholder="For salary deposits"
-                  autoComplete="off"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="facebookMessengerId">Facebook Messenger ID</Label>
                 <Input
                   id="facebookMessengerId"
@@ -165,13 +151,18 @@ export default function TeacherSignupPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
+                <Label htmlFor="address" className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span>Address</span>
+                  <span className="text-xs font-normal text-gray-500">
+                    City / Province only (e.g., Cebu City, Cebu)
+                  </span>
+                </Label>
                 <Textarea
                   id="address"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  placeholder="City, province, country"
-                  rows={3}
+                  placeholder="Cebu City, Cebu"
+                  rows={2}
                   required
                 />
               </div>

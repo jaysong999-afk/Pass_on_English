@@ -503,9 +503,10 @@ export function EnrollmentDashboard({
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">{t("paymentReport")}</CardTitle>
+                <CardTitle className="text-base">{t("paymentStepsTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <p className="text-sm text-ink-muted">{t("paymentWithoutReport")}</p>
                 <div className="space-y-2">
                   <Label htmlFor="depositor">{t("depositor")}</Label>
                   <Input
@@ -539,7 +540,6 @@ export function EnrollmentDashboard({
                 >
                   {paymentSubmitting ? t("submittingPayment") : t("paymentReport")}
                 </Button>
-                <p className="text-center text-xs text-ink-muted">{t("paymentWithoutReport")}</p>
               </CardContent>
             </Card>
           </div>

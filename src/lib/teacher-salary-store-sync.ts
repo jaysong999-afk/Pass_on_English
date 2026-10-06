@@ -5,7 +5,6 @@ import {
   buildLiveEstimate,
   cloneStatement,
   getBonusPolicy,
-  getPayoutAccount,
   getVerificationLessons,
   isSalaryMonthEnded,
   statementTotal,
@@ -67,7 +66,6 @@ export function getSalaryStatementsForTeacher(teacherId: string): TeacherSalaryS
 export {
   buildLiveEstimate,
   getBonusPolicy,
-  getPayoutAccount,
   getVerificationLessons,
   isSalaryMonthEnded,
   statementTotal,

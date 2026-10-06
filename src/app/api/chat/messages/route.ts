@@ -102,6 +102,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ message });
   } catch (error) {
     const message = error instanceof Error ? error.message : "send_failed";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: message },
+      { status: message.includes("chat_room_closed") ? 409 : 400 }
+    );
   }
 }

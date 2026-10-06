@@ -40,3 +40,6 @@ next-env.d.ts
 # supabase
 supabase/.temp
 /migration-backups/
+
+# Codex temporary attachments
+/.codex-remote-attachments/

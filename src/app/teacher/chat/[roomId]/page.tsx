@@ -24,6 +24,8 @@ export default function TeacherChatRoomPage() {
         teacherId={teacherId}
         currentUserId={teacherId}
         placeholder="Type a message..."
+        closedAt={room?.closedAt}
+        closedMessage="This course has ended. You can read previous messages, but new messages are disabled. Please contact admin support if needed."
       />
     </div>
   );

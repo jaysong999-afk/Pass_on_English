@@ -225,7 +225,7 @@ export function FinanceDashboard() {
             <div className="p-6">
               <div className="mb-5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                  총 매출
+                  순매출 (환불 차감)
                 </p>
                 <p className="mt-1 text-3xl font-bold tabular-nums text-emerald-700">
                   {formatCurrency(summary.totalRevenueKrw, "KRW")}
@@ -389,6 +389,7 @@ export function FinanceDashboard() {
               <option value="all">유형: 전체</option>
               <option value="income">수입</option>
               <option value="expense">지출</option>
+              <option value="refund">환불</option>
             </select>
             <select
               className="h-11 rounded-xl border px-3 text-sm"
@@ -435,7 +436,7 @@ export function FinanceDashboard() {
                       <TableCell className="whitespace-nowrap text-sm">{t.date}</TableCell>
                       <TableCell>
                         <Badge variant={t.type === "income" ? "success" : "destructive"}>
-                          {t.type === "income" ? "수입" : "지출"}
+                          {t.type === "income" ? "수입" : t.type === "refund" ? "환불" : "지출"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">{CATEGORY_LABELS[t.category]}</TableCell>

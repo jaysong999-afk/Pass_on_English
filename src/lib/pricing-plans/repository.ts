@@ -15,6 +15,7 @@ export interface PricingPlanDescription {
   schedule_days?: string[];
   sort_order?: number;
   is_popular?: boolean;
+  archived_at?: string;
 }
 
 interface PricingPlanRow {
@@ -31,6 +32,10 @@ interface PricingPlanRow {
 
 function sortPlans(list: PricingPlan[]) {
   return [...list].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+}
+
+function isArchived(row: PricingPlanRow) {
+  return Boolean(row.description?.archived_at);
 }
 
 function rowToPlan(row: PricingPlanRow): PricingPlan {
@@ -82,6 +87,20 @@ function derivePlanType(scheduleDays: string[], sessionMinutes: number): string 
   return `${base}_${sessionMinutes}min`;
 }
 
+function deriveUniquePlanType(
+  scheduleDays: string[],
+  sessionMinutes: number,
+  existing: PricingPlanRow[]
+) {
+  const base = derivePlanType(scheduleDays, sessionMinutes);
+  const used = new Set(existing.map((row) => row.plan_type));
+  if (!used.has(base)) return base;
+
+  let suffix = 2;
+  while (used.has(`${base}_${suffix}`)) suffix += 1;
+  return `${base}_${suffix}`;
+}
+
 async function fetchPricingPlanRows(activeOnly = false): Promise<PricingPlanRow[]> {
   const supabase = await createClient();
   let query = supabase
@@ -102,13 +121,17 @@ async function fetchPricingPlanRows(activeOnly = false): Promise<PricingPlanRow[
   return (data ?? []) as PricingPlanRow[];
 }
 
-async function refreshPlanCache(activeOnly = false) {
+async function refreshPlanCache(activeOnly = false, includeArchived = false) {
   const rows = await fetchPricingPlanRows(activeOnly);
-  const plans = sortPlans(rows.map(rowToPlan));
+  const allPlans = sortPlans(rows.map(rowToPlan));
   if (!activeOnly) {
-    setPricingPlanCache(plans);
+    // Keep archived plans cached so historical enrollments can resolve their
+    // original plan without another database request.
+    setPricingPlanCache(allPlans);
   }
-  return plans;
+  return includeArchived
+    ? allPlans
+    : sortPlans(rows.filter((row) => !isArchived(row)).map(rowToPlan));
 }
 
 async function clearPopularFlagExcept(exceptId?: string) {
@@ -129,7 +152,7 @@ async function clearPopularFlagExcept(exceptId?: string) {
 
 /** Warm in-memory cache for legacy sync callers (scheduler, enrollment store). */
 export async function warmPricingPlanCache() {
-  return refreshPlanCache(false);
+  return refreshPlanCache(false, true);
 }
 
 export async function getAllPricingPlans() {
@@ -138,7 +161,7 @@ export async function getAllPricingPlans() {
 
 export async function getActivePricingPlans() {
   const rows = await fetchPricingPlanRows(true);
-  return sortPlans(rows.map(rowToPlan));
+  return sortPlans(rows.filter((row) => !isArchived(row)).map(rowToPlan));
 }
 
 export async function getPricingPlanById(id: string) {
@@ -207,7 +230,11 @@ export async function createPricingPlan(input: UpsertPricingPlanInput): Promise<
   const existing = await fetchPricingPlanRows();
   const fallbackSortOrder = existing.length + 1;
   const normalized = normalizeInput(input, fallbackSortOrder);
-  const planType = derivePlanType(input.scheduleDays, normalized.session_minutes);
+  const planType = deriveUniquePlanType(
+    input.scheduleDays,
+    normalized.session_minutes,
+    existing
+  );
 
   if (input.isPopular) {
     await clearPopularFlagExcept();
@@ -228,7 +255,7 @@ export async function createPricingPlan(input: UpsertPricingPlanInput): Promise<
     throw new Error(`pricing_plan_create_failed: ${error.message}`);
   }
 
-  await refreshPlanCache(false);
+  await refreshPlanCache(false, true);
   return rowToPlan(data as PricingPlanRow);
 }
 
@@ -275,42 +302,58 @@ export async function updatePricingPlan(
     throw new Error(`pricing_plan_update_failed: ${error.message}`);
   }
 
-  await refreshPlanCache(false);
+  await refreshPlanCache(false, true);
   return rowToPlan(data as PricingPlanRow);
 }
 
-export async function deletePricingPlan(id: string): Promise<boolean> {
+const BLOCKING_ENROLLMENT_STATUSES = [
+  "pending_payment",
+  "active",
+  "expiring_soon",
+] as const;
+
+export type DeletePricingPlanResult = "deleted" | "not_found" | "in_use";
+
+export async function deletePricingPlan(id: string): Promise<DeletePricingPlanResult> {
   const supabase = await createClient();
-  const { error, count } = await supabase
+  const [planResult, usageResult] = await Promise.all([
+    supabase
+      .from("pricing_plans")
+      .select("id, description")
+      .eq("id", id)
+      .maybeSingle(),
+    supabase
+      .from("enrollments")
+      .select("id", { count: "exact", head: true })
+      .eq("plan_id", id)
+      .in("status", [...BLOCKING_ENROLLMENT_STATUSES]),
+  ]);
+
+  if (planResult.error) {
+    throw new Error(`pricing_plan_fetch_failed: ${planResult.error.message}`);
+  }
+  if (usageResult.error) {
+    throw new Error(`pricing_plan_usage_check_failed: ${usageResult.error.message}`);
+  }
+
+  const plan = planResult.data as Pick<PricingPlanRow, "id" | "description"> | null;
+  if (!plan || plan.description?.archived_at) return "not_found";
+  if ((usageResult.count ?? 0) > 0) return "in_use";
+
+  const description: PricingPlanDescription = {
+    ...(plan.description ?? {}),
+    is_popular: false,
+    archived_at: new Date().toISOString(),
+  };
+  const { error } = await supabase
     .from("pricing_plans")
-    .delete({ count: "exact" })
+    .update({ is_active: false, description })
     .eq("id", id);
 
   if (error) {
     throw new Error(`pricing_plan_delete_failed: ${error.message}`);
   }
 
-  if ((count ?? 0) === 0) return false;
-
-  await refreshPlanCache(false);
-  return true;
-}
-
-export async function isPricingPlanInUse(planId: string): Promise<boolean> {
-  const supabase = await createClient();
-  const { count, error } = await supabase
-    .from("enrollments")
-    .select("id", { count: "exact", head: true })
-    .eq("plan_id", planId);
-
-  if (error) {
-    throw new Error(`pricing_plan_usage_check_failed: ${error.message}`);
-  }
-
-  return (count ?? 0) > 0;
-}
-
-/** @internal legacy helper — prefer async isPricingPlanInUse */
-export function isPricingPlanInUseIds(planId: string, enrollmentPlanIds: string[]): boolean {
-  return enrollmentPlanIds.includes(planId);
+  await refreshPlanCache(false, true);
+  return "deleted";
 }

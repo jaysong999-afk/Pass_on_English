@@ -24,6 +24,7 @@ import {
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { useChatInboxSync } from "@/hooks/useChatInboxSync";
 import { fetchChatInbox } from "@/lib/chat-inbox-client";
+import { fetchAdminDirectInbox } from "@/lib/admin-direct-inbox-client";
 
 export interface ChatBellCopy {
   title: string;
@@ -135,19 +136,10 @@ export function ChatNotificationBell({
     if (!canFetch || document.visibilityState !== "visible") return;
     try {
       if (role === "admin") {
-        const res = await fetch("/api/admin/messages/direct");
-        if (!res.ok) {
-          setAdminDirectThreads([]);
-          setTotalUnread(0);
-          return;
-        }
-        const data = (await res.json()) as {
-          threads?: DirectThreadPreview[];
-          totalUnread?: number;
-        };
+        const data = await fetchAdminDirectInbox();
         const next = applyActiveAdminDirectUnread(
-          data.threads ?? [],
-          data.totalUnread ?? 0
+          data.threads,
+          data.totalUnread
         );
         setAdminDirectThreads(next.threads);
         setRooms([]);
@@ -184,7 +176,11 @@ export function ChatNotificationBell({
     void load();
   }, [load]);
 
-  useChatInboxSync(load, canFetch && enableInboxSync);
+  useChatInboxSync(
+    load,
+    canFetch && enableInboxSync,
+    role === "admin" ? "admin-direct" : "all"
+  );
 
   useEffect(() => {
     const onActiveRoomChanged = () => void load();

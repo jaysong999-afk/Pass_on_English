@@ -19,7 +19,6 @@ export interface TeacherSelfSettings {
   phone: string;
   address: string;
   messengerId: string;
-  bankAccount: string;
 }
 
 export interface TeacherSelfSettingsUpdate {
@@ -246,7 +245,7 @@ export async function getTeacherSelfSettingsInDb(
   const applicationId = typedTeacherRow.application_id;
   const applicationQuery = admin
     .from("teacher_applications")
-    .select("full_name, date_of_birth, phone, address, facebook_messenger_id, bank_account");
+    .select("full_name, date_of_birth, phone, address, facebook_messenger_id");
   const { data: application, error: applicationError } = applicationId
     ? await applicationQuery.eq("id", applicationId).maybeSingle()
     : await applicationQuery.eq("teacher_id", teacherId).maybeSingle();
@@ -263,7 +262,6 @@ export async function getTeacherSelfSettingsInDb(
     phone: application?.phone?.trim() || "",
     address: application?.address?.trim() || "",
     messengerId: application?.facebook_messenger_id?.trim() || "",
-    bankAccount: application?.bank_account?.trim() || "",
   };
 }
 

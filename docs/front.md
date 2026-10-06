@@ -345,7 +345,7 @@
 |------|------|
 | 1 | 월 선택 + `SalaryStatusBadge` + 총액 + **보너스 정책** 카드 (**영문** 문구) |
 | 2 | Breakdown (완료 수업 수·시간·기본급·보너스·공제) — **수업별 목록 없음** |
-| 3 | Payout details (지급일·계좌) |
+| 3 | Payment schedule (지급일, 계좌정보 미보관) |
 
 상태: `estimated` (당월 live) → `processing` → `paid`
 
@@ -367,12 +367,12 @@
 - **선생님 현황**: 프로필, 진행 수업, 시급 설정
 - **선생님 프로필 관리** (`/admin/teacher-profiles`): displayName, bio, specialties, hourlyRatePhp CRUD
 - **요금제** (`/admin/pricing`): PricingPlan CRUD — Supabase `pricing_plans` (`sessionMinutes`, `scheduleDays`, i18n name)
-- **학생 상세** (`/admin/students/[id]`): 가입 메모·성별·플랫폼, 수업 로그의 교재·진도, **수업 횟수 관리** (`EnrollmentSessionEditor`)
+- **학생 상세** (`/admin/students/[id]`): 가입 메모·성별·플랫폼, 수업 로그의 교재·진도, **수업 횟수 관리** (`EnrollmentSessionEditor`), 활성 수강의 **환불·수강 취소** (`AdminEnrollmentRefundDialog`)
 - **검토 센터** (`/admin/reschedule`): 수업 변경은 상대방 승인 상태를 모니터링하고 장기 미응답·수업 임박 건만 `처리 필요`에 집계; 가입·입금은 관리자 처리 업무
 - **수업 운영 센터** (`/admin/operations`): `AdminOperationsCenter` — 아래 §5.4.1
 - **강사 급여** (`/admin/teacher-salary`): 월별 명세, live estimate → processing 확정, paid 처리
 - **FAQ** (`/admin/faq`): FAQ CRUD
-- **재무**: `/api/admin/finance/transactions` 기반 수입·지출·정산 집계와 차트
+- **재무**: `/api/admin/finance/transactions` 기반 수입·지출·환불·정산 집계와 차트. 환불은 일반 비용이 아닌 수강료 매출 차감으로 집계
 - **메시지 · CS 센터** (`/admin/messages`): `AdminMessagesHub` — §5.4.3
 
 #### 5.4.3 메시지 · CS 센터 (`AdminMessagesHub`)
@@ -388,6 +388,8 @@
 
 **채팅 모니터링**: `GET /api/chat/rooms?role=admin` · `ChatMonitorThread` · `/admin/chat/[roomId]` 참여  
 **관리자 1:1**: students/teachers API로 대상 선택 · DB thread/message 저장
+
+수강 환불이 확정된 학생↔선생님 대화방은 이력을 유지하되 입력창 대신 종료 안내를 표시한다. 관리자 지원 채팅은 계속 사용할 수 있다.
 
 **Quick Replies**: `/api/admin/messages/quick-replies`
 

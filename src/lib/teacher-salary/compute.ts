@@ -1,4 +1,4 @@
-import type { TeacherPayoutAccount, TeacherSalaryStatement, SalaryPayoutStatus } from "@/types";
+import type { TeacherSalaryStatement, SalaryPayoutStatus } from "@/types";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
 import { lessonCountsForPayroll } from "@/lib/admin/lesson-payroll-utils";
@@ -13,22 +13,6 @@ import {
 import { getAdjustmentTotals } from "@/lib/teacher-salary-adjustment-store-sync";
 import { getTeacherById, getAllTeachers, updateTeacherHourlyRatePhp } from "@/lib/teacher-profile-store-sync";
 import { getTeacherLessons } from "@/lib/teacher-lesson-store-sync";
-import { getTeacherApplicationCache } from "@/lib/teacher-applications/application-cache";
-
-export const PAYOUT_ACCOUNTS: Record<string, TeacherPayoutAccount> = {
-  "teacher-1": {
-    type: "bank",
-    label: "BDO Savings",
-    accountNumber: "**** 4821",
-    accountName: "Sarah Mitchell",
-  },
-  "teacher-2": {
-    type: "gcash",
-    label: "GCash",
-    accountNumber: "09XX XXX 5678",
-    accountName: "James Rivera",
-  },
-};
 
 export function monthKeyFromDate(date: Date): string {
   return getDateKeyInTimezone(date, CANONICAL_TIMEZONE).slice(0, 7);
@@ -133,27 +117,6 @@ export function computeAmounts(
   };
 }
 
-export function getPayoutAccount(teacherId: string): TeacherPayoutAccount {
-  const teacher = getTeacherById(teacherId);
-  const application = teacher?.applicationId
-    ? getTeacherApplicationCache().find((item) => item.id === teacher.applicationId)
-    : getTeacherApplicationCache().find((item) => item.teacherId === teacherId);
-  const bankAccount = application?.bankAccount.trim();
-  return (
-    PAYOUT_ACCOUNTS[teacherId] ?? (bankAccount ? {
-      type: "bank",
-      label: "Registered payout account",
-      accountNumber: bankAccount,
-      accountName: application?.fullName || teacher?.displayName || "Teacher",
-    } : {
-      type: "bank",
-      label: "Bank Account",
-      accountNumber: "—",
-      accountName: teacher?.displayName ?? "Teacher",
-    })
-  );
-}
-
 export function buildLiveEstimate(teacherId: string, month: string): TeacherSalaryStatement | null {
   const teacher = getTeacherById(teacherId);
   if (!teacher) return null;
@@ -175,7 +138,6 @@ export function buildLiveEstimate(teacherId: string, month: string): TeacherSala
     hourlyRate,
     ...amounts,
     paymentDate: undefined,
-    payoutAccount: getPayoutAccount(teacherId),
     isLiveEstimate: true,
   };
 }
@@ -288,5 +250,5 @@ export function appStatusToDb(
 }
 
 export function cloneStatement(s: TeacherSalaryStatement): TeacherSalaryStatement {
-  return { ...s, payoutAccount: { ...s.payoutAccount } };
+  return { ...s };
 }

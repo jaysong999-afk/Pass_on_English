@@ -8,6 +8,9 @@ export async function POST(request: Request) {
     if (!sessionLoaded) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
+    if (sessionLoaded.account.accountType !== "guardian") {
+      return NextResponse.json({ error: "guardian_account_required" }, { status: 403 });
+    }
 
     const body = await request.json();
 

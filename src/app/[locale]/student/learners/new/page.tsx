@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
 import { useStudentBasePath } from "@/lib/student-paths";
 
 export default function AddLearnerPage() {
@@ -16,12 +17,23 @@ export default function AddLearnerPage() {
   const tCommon = useTranslations("studentPortal.common");
   const base = useStudentBasePath();
   const router = useRouter();
+  const { account, loading } = useActiveLearner();
 
   const [fullName, setFullName] = useState("");
   const [englishName, setEnglishName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!loading && account?.accountType !== "guardian") {
+      router.replace(`${base}/settings`);
+    }
+  }, [account, base, loading, router]);
+
+  if (loading || account?.accountType !== "guardian") {
+    return <div className="py-16 text-center text-sm text-muted-foreground">{tCommon("loading")}</div>;
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

@@ -16,7 +16,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EnrollmentSessionEditor } from "@/components/admin/EnrollmentSessionEditor";
+import { AdminEnrollmentRefundDialog } from "@/components/admin/AdminEnrollmentRefundDialog";
 import type { AdminStudentDetail } from "@/lib/admin/student-detail-store";
+import type { FinalizedEnrollmentRefund } from "@/lib/refunds/types";
 import { formatCefrLevel, formatCoursePurposes } from "@/lib/student-survey-labels";
 import { formatSessionBalance, getSessionsUsed } from "@/lib/sessions";
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils";
@@ -25,7 +27,7 @@ import type { EnrollmentStatus, Lesson, PaymentStatus } from "@/types";
 
 const PAYMENT_LABELS: Record<PaymentStatus, string> = {
   confirmed: "확인됨",
-  reported: "입금 신고",
+  reported: "입금 확인 요청",
   pending: "대기",
   rejected: "거절",
 };
@@ -104,6 +106,23 @@ export default function AdminStudentDetailPage() {
       setActionLoading(false);
     }
   }
+
+  const handleRefundFinalized = useCallback((result: FinalizedEnrollmentRefund) => {
+    setDetail((current) => current ? {
+      ...current,
+      enrollments: current.enrollments.map((enrollment) =>
+        enrollment.id === result.enrollmentId
+          ? { ...enrollment, status: "cancelled", sessionsRemaining: 0, cancelReason: `refund:${result.refundId}` }
+          : enrollment
+      ),
+      lessons: current.lessons.map((lesson) =>
+        lesson.enrollmentId === result.enrollmentId &&
+        ["scheduled", "reschedule_pending", "pending_payment"].includes(lesson.status)
+          ? { ...lesson, status: "cancelled", cancelReason: "enrollment_refund", unpaidForTeacher: true }
+          : lesson
+      ),
+    } : current);
+  }, []);
 
   if (loading) {
     return <p className="text-sm text-gray-500">학생 정보 불러오는 중…</p>;
@@ -210,6 +229,13 @@ export default function AdminStudentDetailPage() {
                   {formatDate(e.startDate, "ko")} ~ {formatDate(e.endDate, "ko")} ·{" "}
                   {formatCurrency(e.amountKrw, "KRW")}
                 </p>
+                {(e.status === "active" || e.status === "expiring_soon") && e.paymentStatus === "confirmed" && (
+                  <AdminEnrollmentRefundDialog
+                    enrollmentId={e.id}
+                    planLabel={e.planLabel}
+                    onFinalized={handleRefundFinalized}
+                  />
+                )}
               </div>
             ))}
           </CardContent>

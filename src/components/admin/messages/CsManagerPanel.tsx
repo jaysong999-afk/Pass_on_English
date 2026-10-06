@@ -38,8 +38,11 @@ import {
 import { cn, formatTime } from "@/lib/utils";
 import { useStickToBottomScroll } from "@/hooks/useStickToBottomScroll";
 import { useAdminDirectRealtime } from "@/hooks/useAdminDirectRealtime";
+import { useChatInboxSync } from "@/hooks/useChatInboxSync";
 import { setActiveChatRoom } from "@/lib/chat-active-room";
 import { notifyChatInboxChanged } from "@/lib/chat-inbox-events";
+import { fetchAdminDirectInbox } from "@/lib/admin-direct-inbox-client";
+import { fetchChatInbox } from "@/lib/chat-inbox-client";
 import type { ChatRoom } from "@/types";
 
 type CsTab = "monitor" | "direct";
@@ -121,11 +124,12 @@ export function CsManagerPanel() {
   const loadDirectThreads = useCallback(async () => {
     setDirectLoading(true);
     try {
-      const res = await fetch("/api/admin/messages/direct");
-      const data = await res.json();
-      const threads = (data.threads ?? []) as DirectThreadPreview[];
+      const data = await fetchAdminDirectInbox();
+      const threads = data.threads;
       setDirectThreads(threads);
       setSelectedDirectId((current) => current || threads[0]?.id || "");
+    } catch {
+      setDirectThreads([]);
     } finally {
       setDirectLoading(false);
     }
@@ -138,6 +142,11 @@ export function CsManagerPanel() {
       ...prev,
       [threadId]: dedupeDirectMessages((data.messages ?? []) as DirectMessage[]),
     }));
+    setDirectThreads((threads) =>
+      threads.map((thread) =>
+        thread.id === threadId ? { ...thread, unread: 0 } : thread
+      )
+    );
     void fetch(`/api/admin/messages/direct/${threadId}`, { method: "PATCH" }).then(() =>
       notifyChatInboxChanged()
     );
@@ -174,11 +183,12 @@ export function CsManagerPanel() {
   const loadRooms = useCallback(async () => {
     setRoomsLoading(true);
     try {
-      const res = await fetch("/api/chat/rooms?role=admin");
-      const data = await res.json();
-      const list = (data.rooms ?? []) as ChatRoom[];
+      const data = await fetchChatInbox("/api/chat/rooms?role=admin");
+      const list = data.rooms;
       setRooms(list);
       setSelectedRoomId((current) => current || list[0]?.id || "");
+    } catch {
+      setRooms([]);
     } finally {
       setRoomsLoading(false);
     }
@@ -187,6 +197,9 @@ export function CsManagerPanel() {
   useEffect(() => {
     void loadRooms();
   }, [loadRooms]);
+
+  useChatInboxSync(loadDirectThreads, true, "admin-direct");
+  useChatInboxSync(loadRooms, true, "chat");
 
   const filteredRooms = useMemo(() => {
     const q = roomSearch.trim().toLowerCase();
@@ -233,6 +246,18 @@ export function CsManagerPanel() {
     }));
     if (message.senderRole !== "admin") {
       if (csTab === "direct" && message.threadId === selectedDirectId) {
+        setDirectThreads((threads) =>
+          threads.map((thread) =>
+            thread.id === message.threadId
+              ? {
+                  ...thread,
+                  lastMessage: message.body,
+                  lastMessageAt: message.createdAt,
+                  unread: 0,
+                }
+              : thread
+          )
+        );
         void fetch(`/api/admin/messages/direct/${selectedDirectId}`, { method: "PATCH" }).then(
           () => notifyChatInboxChanged()
         );

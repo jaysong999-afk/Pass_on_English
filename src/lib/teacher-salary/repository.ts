@@ -1,4 +1,4 @@
-import type { TeacherPayoutAccount, TeacherSalaryStatement, SalaryPayoutStatus } from "@/types";
+import type { TeacherSalaryStatement, SalaryPayoutStatus } from "@/types";
 import { createClient } from "@/lib/supabase/server";
 import { createPrivilegedClient } from "@/lib/supabase/admin";
 import { warmFinanceCache } from "@/lib/finance/repository";
@@ -13,7 +13,6 @@ import {
   cloneStatement,
   dbStatusToApp,
   appStatusToDb,
-  getPayoutAccount,
   isSalaryMonthEnded,
   monthKeyFromDate,
 } from "@/lib/teacher-salary/compute";
@@ -38,7 +37,6 @@ interface SalaryRow {
   other_incentives: number;
   deductions: number;
   payment_date: string | null;
-  payout_account: TeacherPayoutAccount | null;
   is_live_estimate: boolean;
   admin_confirmed_at: string | null;
   admin_confirmed_by: string | null;
@@ -65,7 +63,6 @@ const SALARY_SELECT = `
   other_incentives,
   deductions,
   payment_date,
-  payout_account,
   is_live_estimate,
   admin_confirmed_at,
   admin_confirmed_by,
@@ -79,10 +76,6 @@ const SALARY_SELECT = `
 `;
 
 function rowToStatement(row: SalaryRow, teacherName?: string): TeacherSalaryStatement {
-  const payout =
-    row.payout_account ??
-    getPayoutAccount(row.teacher_id);
-
   return {
     id: row.id,
     teacherId: row.teacher_id,
@@ -104,7 +97,6 @@ function rowToStatement(row: SalaryRow, teacherName?: string): TeacherSalaryStat
     krwTransferAmount: row.krw_transfer_amount == null ? undefined : Number(row.krw_transfer_amount),
     completedAt: row.completed_at ?? undefined,
     financeTransactionId: row.finance_transaction_id ?? undefined,
-    payoutAccount: payout,
     isLiveEstimate: row.is_live_estimate,
   };
 }
@@ -124,7 +116,6 @@ function statementToPayload(statement: TeacherSalaryStatement) {
     other_incentives: statement.otherIncentives,
     deductions: statement.deductions,
     payment_date: statement.paymentDate ?? null,
-    payout_account: statement.payoutAccount,
     is_live_estimate: mapped.is_live_estimate,
     admin_confirmed_at: statement.adminConfirmedAt ?? null,
     admin_confirmed_by: statement.adminConfirmedBy ?? null,

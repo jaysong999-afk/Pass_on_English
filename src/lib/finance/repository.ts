@@ -7,7 +7,7 @@ import type {
   TransactionCategory,
 } from "@/types";
 import { splitTaxInclusive, convertToKrw, FALLBACK_RATES, fetchExchangeRates } from "@/lib/finance/accounting";
-import { createBootstrapDbClient } from "@/lib/supabase/db-client";
+import { createBootstrapDbClient, createRequestDbClient } from "@/lib/supabase/db-client";
 import { createClient } from "@/lib/supabase/server";
 import {
   getFinanceTransactionCache,
@@ -18,7 +18,7 @@ import {
 interface FinanceTransactionRow {
   id: string;
   transaction_date: string;
-  type: "income" | "expense";
+  type: "income" | "expense" | "refund";
   category: string;
   description: string;
   currency: "KRW" | "CNY" | "PHP";
@@ -36,11 +36,12 @@ interface FinanceTransactionRow {
   student_name: string | null;
   enrollment_id: string | null;
   salary_statement_id: string | null;
+  refund_id: string | null;
   created_at: string;
 }
 
 const SELECT_COLUMNS =
-  "id, transaction_date, type, category, description, currency, amount, amount_krw, exchange_rate, exchange_rate_source, exchange_rate_at, supply_amount, vat_amount, tax_treatment, source, teacher_id, teacher_name, student_name, enrollment_id, salary_statement_id, created_at";
+  "id, transaction_date, type, category, description, currency, amount, amount_krw, exchange_rate, exchange_rate_source, exchange_rate_at, supply_amount, vat_amount, tax_treatment, source, teacher_id, teacher_name, student_name, enrollment_id, salary_statement_id, refund_id, created_at";
 
 function rowToTransaction(row: FinanceTransactionRow): FinanceTransaction {
   return {
@@ -62,12 +63,14 @@ function rowToTransaction(row: FinanceTransactionRow): FinanceTransaction {
     teacherId: row.teacher_id ?? undefined,
     teacherName: row.teacher_name ?? undefined,
     studentName: row.student_name ?? undefined,
+    enrollmentId: row.enrollment_id ?? undefined,
+    refundId: row.refund_id ?? undefined,
   };
 }
 
 function transactionToRow(
   tx: FinanceTransaction,
-  links?: { enrollmentId?: string; salaryStatementId?: string }
+  links?: { enrollmentId?: string; salaryStatementId?: string; refundId?: string }
 ) {
   return {
     transaction_date: tx.date,
@@ -89,6 +92,7 @@ function transactionToRow(
     student_name: tx.studentName ?? null,
     enrollment_id: links?.enrollmentId ?? null,
     salary_statement_id: links?.salaryStatementId ?? null,
+    refund_id: links?.refundId ?? null,
   };
 }
 
@@ -109,6 +113,24 @@ async function fetchFinanceRows(): Promise<FinanceTransactionRow[]> {
 export async function warmFinanceCache(): Promise<void> {
   const rows = await fetchFinanceRows();
   setFinanceTransactionCache(rows.map(rowToTransaction));
+}
+
+/** Refresh exactly one committed ledger row without reloading the full ledger. */
+export async function refreshFinanceTransactionByIdInDb(
+  transactionId: string,
+  authorizedDb?: import("@supabase/supabase-js").SupabaseClient
+): Promise<FinanceTransaction | null> {
+  const supabase = authorizedDb ?? await createRequestDbClient();
+  const { data, error } = await supabase
+    .from("finance_transactions")
+    .select(SELECT_COLUMNS)
+    .eq("id", transactionId)
+    .maybeSingle();
+  if (error) throw new Error(`finance_transaction_refresh_failed: ${error.message}`);
+  if (!data) return null;
+  const transaction = rowToTransaction(data as FinanceTransactionRow);
+  upsertFinanceTransactionInCache(transaction);
+  return transaction;
 }
 
 export function getPayrollFinanceTransactionsFromCache(): FinanceTransaction[] {
@@ -297,11 +319,14 @@ async function upsertMonthlyFinanceSnapshot(monthKey: string): Promise<void> {
   const txs = getFinanceTransactionCache().filter((t) => t.date.startsWith(monthKey));
   const income = txs.filter((t) => t.type === "income");
   const expense = txs.filter((t) => t.type === "expense");
+  const refunds = txs.filter((t) => t.type === "refund");
 
-  const revenueKrw = income.reduce((s, t) => s + t.amountKrw, 0);
+  const revenueKrw = income.reduce((s, t) => s + t.amountKrw, 0)
+    - refunds.reduce((s, t) => s + t.amountKrw, 0);
   const revenueCny = income
     .filter((t) => t.currency === "CNY")
-    .reduce((s, t) => s + t.amount, 0);
+    .reduce((s, t) => s + t.amount, 0)
+    - refunds.filter((t) => t.currency === "CNY").reduce((s, t) => s + t.amount, 0);
   const expensePhp = expense
     .filter((t) => t.currency === "PHP")
     .reduce((s, t) => s + t.amount, 0);

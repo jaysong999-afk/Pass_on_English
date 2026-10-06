@@ -6,7 +6,7 @@ export const QUICK_REPLY_TEMPLATES: QuickReplyTemplate[] = [
     label: "계좌이체 안내",
     category: "payment",
     body:
-      "안녕하세요, Pass on English입니다.\n\n입금 계좌: ○○은행 123-456-789012 (예금주: Pass on English)\n입금 후 학생 이름과 입금자명을 채팅으로 알려주시면 확인 후 수업이 활성화됩니다.\n\n감사합니다.",
+      "안녕하세요, Pass on English입니다.\n\n입금 계좌: 카카오뱅크 3333-27-8947436 (예금주: 송주은)\n입금 후 학생 이름과 입금자명을 채팅으로 알려주시면 확인 후 수업이 활성화됩니다.\n\n감사합니다.",
   },
   {
     id: "makeup-policy",

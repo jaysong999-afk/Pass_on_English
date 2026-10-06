@@ -15,18 +15,21 @@ const COPY = {
     zoom: "국제적으로 널리 사용하는 화상수업 플랫폼",
     voov: "중국에서도 안정적으로 접속 가능한 Tencent 화상수업 플랫폼",
     hint: "한 개 이상 선택하세요. 두 플랫폼을 모두 선택할 수 있습니다.",
+    chinaZoomNotice: "(중국에서 ZOOM 사용시 VPN 필요)",
   },
   en: {
     legend: "Available lesson platforms",
     zoom: "Widely used worldwide for reliable video lessons.",
     voov: "Tencent's video platform, accessible reliably in China.",
     hint: "Select one or both platforms.",
+    chinaZoomNotice: "(A VPN is required to use ZOOM in China.)",
   },
   "zh-CN": {
     legend: "可使用的上课平台",
     zoom: "全球广泛使用、连接稳定的视频上课平台",
     voov: "在中国也能稳定连接的腾讯视频上课平台",
     hint: "请至少选择一个平台，也可以同时选择两个平台。",
+    chinaZoomNotice: "（在中国使用 ZOOM 时需要 VPN）",
   },
 } as const;
 
@@ -50,5 +53,6 @@ export function VideoPlatformSelector({ value, onChange, language = "ko" }: {
       </button>;
     })}</div>
     <p className="text-xs text-gray-500">{copy.hint}</p>
+    <p className="text-xs font-medium text-amber-700">{copy.chinaZoomNotice}</p>
   </fieldset>;
 }

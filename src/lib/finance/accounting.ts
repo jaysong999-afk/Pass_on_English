@@ -21,6 +21,8 @@ export const FALLBACK_RATES: ExchangeRates = {
 export const CATEGORY_LABELS: Record<TransactionCategory, string> = {
   student_payment_kr: "한국 학생 수강료",
   student_payment_cn: "중국 학생 수강료",
+  student_refund_kr: "한국 학생 수강료 환불",
+  student_refund_cn: "중국 학생 수강료 환불",
   teacher_payroll: "선생님 인건비",
   server_infra: "서버·인프라",
   manual_income: "수기 수익",
@@ -121,13 +123,17 @@ export function computeMonthlySummary(
 
   const income = inMonth.filter((t) => t.type === "income");
   const expense = inMonth.filter((t) => t.type === "expense");
+  const refunds = inMonth.filter((t) => t.type === "refund");
 
-  const totalRevenueKrw = income.reduce((s, t) => s + t.amountKrw, 0);
+  const totalRevenueKrw = income.reduce((s, t) => s + t.amountKrw, 0)
+    - refunds.reduce((s, t) => s + t.amountKrw, 0);
   const totalExpenseKrw = expense.reduce((s, t) => s + t.amountKrw, 0);
 
   const outputVat = income
     .filter((t) => t.taxTreatment === "taxable")
-    .reduce((s, t) => s + t.vatAmount, 0);
+    .reduce((s, t) => s + t.vatAmount, 0)
+    - refunds.filter((t) => t.taxTreatment === "taxable")
+      .reduce((s, t) => s + t.vatAmount, 0);
 
   const inputVat = expense
     .filter((t) => t.taxTreatment === "taxable")
@@ -135,15 +141,20 @@ export function computeMonthlySummary(
 
   const revenueCnyThisMonth = income
     .filter((t) => t.currency === "CNY")
-    .reduce((s, t) => s + t.amount, 0);
+    .reduce((s, t) => s + t.amount, 0)
+    - refunds.filter((t) => t.currency === "CNY").reduce((s, t) => s + t.amount, 0);
 
   const revenueKrTaxableKrw = income
     .filter((t) => t.category === "student_payment_kr")
-    .reduce((s, t) => s + t.amountKrw, 0);
+    .reduce((s, t) => s + t.amountKrw, 0)
+    - refunds.filter((t) => t.category === "student_refund_kr")
+      .reduce((s, t) => s + t.amountKrw, 0);
 
   const revenueCnExemptKrw = income
     .filter((t) => t.category === "student_payment_cn")
-    .reduce((s, t) => s + t.amountKrw, 0);
+    .reduce((s, t) => s + t.amountKrw, 0)
+    - refunds.filter((t) => t.category === "student_refund_cn")
+      .reduce((s, t) => s + t.amountKrw, 0);
 
   const revenueOtherKrw = income
     .filter(
@@ -249,7 +260,7 @@ export function exportTransactionsCsv(transactions: FinanceTransaction[]) {
 
   const rows = transactions.map((t) => [
     t.date,
-    t.type === "income" ? "수입" : "지출",
+    t.type === "income" ? "수입" : t.type === "refund" ? "환불" : "지출",
     CATEGORY_LABELS[t.category],
     t.description,
     t.currency,

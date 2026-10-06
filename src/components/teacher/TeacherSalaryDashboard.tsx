@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Calendar, Info, Landmark, Wallet } from "lucide-react";
+import { Calendar, Info, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
@@ -200,28 +200,15 @@ export function TeacherSalaryDashboard() {
         </CardContent>
       </Card>
 
-      {/* Zone 3: Payout */}
+      {/* Zone 3: Payout schedule */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Landmark className="h-5 w-5 text-emerald-600" />
-            Payout Details
+            <Calendar className="h-5 w-5 text-emerald-600" />
+            Payment Schedule
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4 pb-4 text-sm">
-          <div className="rounded-xl border bg-gray-50/80 p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-              Payout Account
-            </p>
-            <p className="mt-1 font-semibold text-ink">{statement.payoutAccount.label}</p>
-            <p className="font-mono text-gray-700">{statement.payoutAccount.accountNumber}</p>
-            {statement.payoutAccount.accountName && (
-              <p className="mt-1 text-gray-500">{statement.payoutAccount.accountName}</p>
-            )}
-            <p className="mt-2 text-xs capitalize text-gray-400">
-              Type: {statement.payoutAccount.type}
-            </p>
-          </div>
+        <CardContent className="pb-4 text-sm">
           <div className="flex items-center gap-2 text-gray-600">
             <Calendar className="h-4 w-4 shrink-0 text-gray-400" />
             <span>

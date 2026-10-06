@@ -291,7 +291,6 @@ async function main() {
         full_name: "RLS Applicant Teacher",
         date_of_birth: "1992-03-01",
         phone: "+63 900 111 2222",
-        bank_account: "9999999999",
         facebook_messenger_id: "rls.test/messenger",
         address: "RLS Test City",
         email: testEmail,

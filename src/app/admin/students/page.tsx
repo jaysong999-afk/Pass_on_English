@@ -23,7 +23,7 @@ const paymentLabels: Record<
   { label: string; variant: "success" | "warning" | "secondary" | "destructive" }
 > = {
   confirmed: { label: "확인됨", variant: "success" },
-  reported: { label: "입금 신고", variant: "warning" },
+  reported: { label: "입금 확인 요청", variant: "warning" },
   pending: { label: "대기", variant: "secondary" },
   rejected: { label: "거절", variant: "destructive" },
 };

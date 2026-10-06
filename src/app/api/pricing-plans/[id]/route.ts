@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
-import { getAllEnrollments } from "@/lib/enrollment-store-sync";
 import { ensurePricingPlansBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import {
   deletePricingPlan,
   getPricingPlanById,
-  isPricingPlanInUse,
-  isPricingPlanInUseIds,
   updatePricingPlan,
   type UpsertPricingPlanInput,
 } from "@/lib/pricing-plans/repository";
@@ -79,28 +76,14 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    await ensurePricingPlansBootstrapped();
-    const plan = await getPricingPlanById(id);
-    if (!plan) {
+    const result = await deletePricingPlan(id);
+    if (result === "not_found") {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
-
-    const inUseInDb = await isPricingPlanInUse(id);
-    const enrollmentPlanIds = getAllEnrollments()
-      .map((e) => e.planId)
-      .filter(Boolean) as string[];
-    const inUseInMemory = isPricingPlanInUseIds(id, enrollmentPlanIds);
-
-    if (inUseInDb || inUseInMemory) {
+    if (result === "in_use") {
       return NextResponse.json({ error: "plan_in_use" }, { status: 409 });
     }
-
-    const deleted = await deletePricingPlan(id);
-    if (!deleted) {
-      return NextResponse.json({ error: "not_found" }, { status: 404 });
-    }
-
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, archived: true });
   } catch (err) {
     console.error("[pricing-plans/:id DELETE]", err);
     return NextResponse.json({ error: "delete_failed" }, { status: 500 });

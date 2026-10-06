@@ -149,7 +149,7 @@ export default function AdminPricingPage() {
       if (!res.ok) {
         setDeleteError(
           data.error === "plan_in_use"
-            ? "수강 중인 학생이 사용 중인 요금제는 삭제할 수 없습니다."
+            ? "진행 중인 수강 또는 결제 대기 신청이 있는 요금제는 삭제할 수 없습니다."
             : "삭제에 실패했습니다."
         );
         return;

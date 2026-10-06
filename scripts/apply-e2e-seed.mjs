@@ -340,9 +340,9 @@ async function applyWithServiceRole() {
 
   must(
     await db.from("teacher_applications").insert([
-      { id: IDS.appJames, full_name: "James Rivera", date_of_birth: "1992-04-11", phone: "+63-917-100-2001", bank_account: "BDO 001-2345-678", facebook_messenger_id: "james.rivera", address: "Manila", email: "e2e-teacher-james@example.org", status: "approved", reviewed_by: IDS.admin },
-      { id: IDS.appEmily, full_name: "Emily Chen", date_of_birth: "1994-09-02", phone: "+63-917-100-2002", bank_account: "BPI 009-8765-432", facebook_messenger_id: "emily.chen", address: "Cebu", email: "e2e-teacher-emily@example.org", status: "approved", reviewed_by: IDS.admin },
-      { id: IDS.appCarlos, full_name: "Carlos Mendoza", date_of_birth: "1990-12-18", phone: "+63-917-100-2003", bank_account: "", facebook_messenger_id: "carlos.mendoza", address: "Quezon City", email: "e2e-teacher-carlos@example.org", status: "pending" },
+      { id: IDS.appJames, full_name: "James Rivera", date_of_birth: "1992-04-11", phone: "+63-917-100-2001", facebook_messenger_id: "james.rivera", address: "Manila, Metro Manila", email: "e2e-teacher-james@example.org", status: "approved", reviewed_by: IDS.admin },
+      { id: IDS.appEmily, full_name: "Emily Chen", date_of_birth: "1994-09-02", phone: "+63-917-100-2002", facebook_messenger_id: "emily.chen", address: "Cebu City, Cebu", email: "e2e-teacher-emily@example.org", status: "approved", reviewed_by: IDS.admin },
+      { id: IDS.appCarlos, full_name: "Carlos Mendoza", date_of_birth: "1990-12-18", phone: "+63-917-100-2003", facebook_messenger_id: "carlos.mendoza", address: "Quezon City, Metro Manila", email: "e2e-teacher-carlos@example.org", status: "pending" },
     ]),
     "teacher_applications"
   );

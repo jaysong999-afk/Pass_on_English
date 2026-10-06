@@ -126,7 +126,6 @@ async function createTeacherApplicantForE2e(email, password, fields) {
       full_name: fields.fullName,
       date_of_birth: fields.dateOfBirth,
       phone: fields.phone,
-      bank_account: fields.bankAccount,
       facebook_messenger_id: fields.facebookMessengerId,
       address: fields.address,
       email,
@@ -720,9 +719,8 @@ async function main() {
     fullName: "E2E Signup Teacher",
     dateOfBirth: "1990-06-15",
     phone: "+63 912 000 0001",
-    bankAccount: "1234567890",
     facebookMessengerId: "messenger.test/e2e",
-    address: "Quezon City, Philippines",
+    address: "Quezon City, Metro Manila",
   };
 
   await test("POST /api/teacher/applications (signup step 1 + auth)", async () => {

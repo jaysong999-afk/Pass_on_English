@@ -80,9 +80,6 @@ export function salaryNeedsReview(statement: TeacherSalaryStatement): {
   if (penalty?.quarterlyBonusReset) {
     reasons.push("분기 보너스 리셋");
   }
-  if (statement.payoutAccount.accountNumber === "—") {
-    reasons.push("지급 계좌 미등록");
-  }
   if (penalty?.reason) {
     reasons.push(penalty.reason);
   }
@@ -98,7 +95,6 @@ function toRow(statement: TeacherSalaryStatement): AdminSalaryRow {
   const { needsReview, reasons } = salaryNeedsReview(statement);
   return {
     ...statement,
-    payoutAccount: { ...statement.payoutAccount },
     total: statementTotal(statement),
     bonusTotal,
     needsReview,

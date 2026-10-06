@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { Baby, CheckCircle2, ChevronRight, Eye, EyeOff, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
+import { Baby, CheckCircle2, ChevronRight, Eye, EyeOff, LockKeyhole, Plus, ShieldCheck, UserRound } from "lucide-react";
 import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import type { CountryCode, VideoPlatform } from "@/types";
 import { VideoPlatformSelector } from "@/components/shared/VideoPlatformSelector";
 import { PwaInstallHelp } from "@/components/shared/PwaInstallHelp";
+import { studentPath } from "@/lib/student-paths";
 
 type Notice = { type: "success" | "error"; message: string } | null;
 
@@ -166,12 +168,22 @@ export default function StudentSettingsPage() {
       </CardContent>
     </Card>
 
-    {account.accountType === "guardian" && learners.length > 0 && <Card className="overflow-hidden">
-      <CardHeader className="border-b bg-muted/30"><div className="flex items-start gap-3">
-        <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><Baby className="h-5 w-5" /></div>
-        <div><CardTitle>{t("childrenTitle")}</CardTitle><CardDescription className="mt-1">{t("childrenDescription")}</CardDescription></div>
+    {account.accountType === "guardian" && <Card className="overflow-hidden">
+      <CardHeader className="border-b bg-muted/30"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><Baby className="h-5 w-5" /></div>
+          <div><CardTitle>{t("childrenTitle")}</CardTitle><CardDescription className="mt-1">{t("childrenDescription")}</CardDescription></div>
+        </div>
+        <Button asChild variant="secondary" className="w-full shrink-0 sm:w-auto">
+          <Link href={studentPath(locale, "learners/new")}>
+            <Plus aria-hidden="true" className="h-4 w-4" />
+            {t("addChild")}
+          </Link>
+        </Button>
       </div></CardHeader>
-      <CardContent className="space-y-4 pt-6">{learners.map((learner, index) => <section key={learner.id} className="rounded-xl border p-4 sm:p-5">
+      <CardContent className="space-y-4 pt-6">
+        {learners.length === 0 && <p className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">{t("childrenEmpty")}</p>}
+        {learners.map((learner, index) => <section key={learner.id} className="rounded-xl border p-4 sm:p-5">
         <h3 className="mb-4 font-semibold">{t("childHeading", { number: index + 1, name: learner.fullName, englishName: learnerNames[learner.id] || learner.englishName })}</h3>
         <div className="grid gap-5 sm:grid-cols-2">
           <ReadonlyField id={`child-name-${learner.id}`} label={t("childName")} value={learner.fullName} />

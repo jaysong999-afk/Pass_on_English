@@ -12,7 +12,6 @@ interface TeacherApplicationRow {
   full_name: string;
   date_of_birth: string;
   phone: string;
-  bank_account: string;
   facebook_messenger_id: string;
   address: string;
   email: string;
@@ -29,7 +28,6 @@ function rowToApplication(row: TeacherApplicationRow): TeacherApplication {
     fullName: row.full_name,
     dateOfBirth: row.date_of_birth,
     phone: row.phone,
-    bankAccount: row.bank_account,
     facebookMessengerId: row.facebook_messenger_id,
     address: row.address,
     email: row.email,
@@ -45,7 +43,7 @@ async function fetchApplicationRows(): Promise<TeacherApplicationRow[]> {
   const { data, error } = await supabase
     .from("teacher_applications")
     .select(
-      "id, full_name, date_of_birth, phone, bank_account, facebook_messenger_id, address, email, status, submitted_at, reviewed_at, teacher_id, video_platforms"
+      "id, full_name, date_of_birth, phone, facebook_messenger_id, address, email, status, submitted_at, reviewed_at, teacher_id, video_platforms"
     )
     .order("submitted_at", { ascending: false });
 
@@ -85,7 +83,7 @@ export async function getTeacherApplicationByIdInDb(id: string) {
   const { data, error } = await supabase
     .from("teacher_applications")
     .select(
-      "id, full_name, date_of_birth, phone, bank_account, facebook_messenger_id, address, email, status, submitted_at, reviewed_at, teacher_id, video_platforms"
+      "id, full_name, date_of_birth, phone, facebook_messenger_id, address, email, status, submitted_at, reviewed_at, teacher_id, video_platforms"
     )
     .eq("id", id)
     .maybeSingle();
@@ -109,7 +107,7 @@ export async function getTeacherApplicationForApplicantInDb(
   const { data, error } = await supabase
     .from("teacher_applications")
     .select(
-      "id, full_name, date_of_birth, phone, bank_account, facebook_messenger_id, address, email, status, submitted_at, reviewed_at, teacher_id, video_platforms"
+      "id, full_name, date_of_birth, phone, facebook_messenger_id, address, email, status, submitted_at, reviewed_at, teacher_id, video_platforms"
     )
     .eq("id", applicationId)
     .maybeSingle();
@@ -141,7 +139,6 @@ export async function saveTeacherApplicationInDb(
       full_name: input.fullName.trim(),
       date_of_birth: input.dateOfBirth,
       phone: input.phone.trim(),
-      bank_account: input.bankAccount.trim(),
       facebook_messenger_id: input.facebookMessengerId.trim(),
       address: input.address.trim(),
       email: input.email.trim(),
@@ -149,7 +146,7 @@ export async function saveTeacherApplicationInDb(
       video_platforms: input.videoPlatforms,
     })
     .select(
-      "id, full_name, date_of_birth, phone, bank_account, facebook_messenger_id, address, email, status, submitted_at, reviewed_at, teacher_id, video_platforms"
+      "id, full_name, date_of_birth, phone, facebook_messenger_id, address, email, status, submitted_at, reviewed_at, teacher_id, video_platforms"
     )
     .single();
 
@@ -177,7 +174,7 @@ export async function updateTeacherApplicationStatusInDb(
     })
     .eq("id", id)
     .select(
-      "id, full_name, date_of_birth, phone, bank_account, facebook_messenger_id, address, email, status, submitted_at, reviewed_at, teacher_id, video_platforms"
+      "id, full_name, date_of_birth, phone, facebook_messenger_id, address, email, status, submitted_at, reviewed_at, teacher_id, video_platforms"
     )
     .single();
 

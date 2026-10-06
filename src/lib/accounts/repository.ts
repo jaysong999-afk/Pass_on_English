@@ -380,7 +380,10 @@ export async function addLearnerInDb(input: AddLearnerInput): Promise<Learner> {
   }
 
   const session = await loadAccountSession();
-  const country = session?.account.country ?? "KR";
+  if (!session || session.account.accountType !== "guardian") {
+    throw new Error("guardian_account_required");
+  }
+  const country = session.account.country;
 
   const { data: student, error: studentError } = await supabase
     .from("students")

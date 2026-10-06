@@ -16,7 +16,6 @@ function parseSignupInput(body: unknown): TeacherSignupInput | null {
   const fullName = String(raw.fullName ?? "").trim();
   const dateOfBirth = String(raw.dateOfBirth ?? "").trim();
   const phone = String(raw.phone ?? "").trim();
-  const bankAccount = String(raw.bankAccount ?? "").trim();
   const facebookMessengerId = String(raw.facebookMessengerId ?? "").trim();
   const address = String(raw.address ?? "").trim();
   const email = String(raw.email ?? "").trim();
@@ -28,7 +27,6 @@ function parseSignupInput(body: unknown): TeacherSignupInput | null {
     !email ||
     !dateOfBirth ||
     !phone ||
-    !bankAccount ||
     !facebookMessengerId ||
     !address ||
     !password
@@ -41,7 +39,6 @@ function parseSignupInput(body: unknown): TeacherSignupInput | null {
     fullName,
     dateOfBirth,
     phone,
-    bankAccount,
     facebookMessengerId,
     address,
     email,

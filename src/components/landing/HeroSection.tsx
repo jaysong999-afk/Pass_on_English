@@ -21,15 +21,16 @@ export function HeroSection({ locale }: { locale: string }) {
             </span>
 
             <h1 className="landing-display mt-6 max-w-[650px] text-[2.25rem] sm:text-5xl lg:text-[3.5rem]">
-              {t("titleLine1")}{" "}
-              <span className="bg-gradient-to-r from-brand-700 to-brand-500 bg-clip-text text-transparent">
+              <span className="block text-[1.75rem] leading-[1.25] sm:text-[2rem] lg:text-[2.25rem] xl:whitespace-nowrap xl:text-[2.5rem]">
+                {t("titleLine1")}
+              </span>
+              <span className="block bg-gradient-to-r from-brand-700 to-brand-500 bg-clip-text text-transparent">
                 {t("titleHighlight")}
               </span>
-              <br />
-              {t("titleLine2")}
+              <span className="block">{t("titleLine2")}</span>
             </h1>
 
-            <p className="landing-prose mt-6 max-w-lg">{t("subtitle")}</p>
+          <p className="landing-prose mt-6 max-w-lg whitespace-pre-line">{t("subtitle")}</p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Button

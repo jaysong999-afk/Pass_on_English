@@ -15,23 +15,16 @@ import {
 } from "@/lib/admin/messages/types";
 import { FALLBACK_SYSTEM_NOTIFICATION_RULES } from "@/lib/admin/messages/constants";
 import {
-  appendAdminDirectMessageToCache,
   getAdminCampaignCache,
-  getAdminDirectMessagesCache,
-  getAdminDirectThreadCache,
   getSystemNotificationRulesCache,
-  patchAdminDirectThreadInCache,
   patchAdminCampaignInCache,
   patchSystemNotificationRulesInCache,
   prependAdminCampaignToCache,
   setAdminMessagingCache,
 } from "@/lib/admin/messages/admin-messages-cache";
-import { fetchStudentDisplayNameInDb, fetchStudentAvatarUrlInDb } from "@/lib/accounts/repository";
-import { getTeacherFromCache } from "@/lib/teachers/teacher-profile-cache";
 import { resolveTeacherId } from "@/lib/teachers/resolve-teacher-id";
 import { createBootstrapDbClient, createRequestDbClient, createServiceDbClient } from "@/lib/supabase/db-client";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPushToUsersInDb } from "@/lib/push/send-service";
 import { sendNotificationWithOptionalPushInDb } from "@/lib/notifications/repository";
 import {
@@ -60,6 +53,23 @@ interface DirectMessageRow {
   created_at: string;
 }
 
+interface AdminDirectInboxRow {
+  id: string;
+  target_type: "student" | "teacher";
+  target_id: string;
+  display_name: string;
+  subtitle: string;
+  avatar_url: string | null;
+  last_message: string;
+  last_message_at: string;
+  unread: number | string;
+}
+
+interface SentDirectMessageRow extends DirectMessageRow {
+  target_profile_id: string;
+  target_type: "student" | "teacher";
+}
+
 interface BroadcastRow {
   id: string;
   title: string;
@@ -83,52 +93,51 @@ interface RuleRow {
   channels: string[];
 }
 
-async function fetchProfileEmail(profileId: string): Promise<string | undefined> {
-  try {
-    const admin = createAdminClient();
-    const { data } = await admin.auth.admin.getUserById(profileId);
-    return data.user?.email ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 async function buildThreadPreview(row: DirectThreadRow): Promise<DirectThreadPreview> {
   let displayName = "User";
-  let subtitle = "";
+  let subtitle = row.target_type === "teacher" ? "선생님" : "학부모";
   let targetId = row.profile_id;
-  let avatarUrl: string | undefined;
-  let unread = 0;
 
   const supabase = await createClient();
-  const { count } = await supabase
-    .from("admin_direct_messages")
-    .select("id", { count: "exact", head: true })
-    .eq("thread_id", row.id)
-    .neq("sender_role", "admin")
-    .is("read_at", null);
-  unread = count ?? 0;
+  const [{ count }, { data: profile }] = await Promise.all([
+    supabase
+      .from("admin_direct_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("thread_id", row.id)
+      .neq("sender_role", "admin")
+      .is("read_at", null),
+    supabase
+      .from("profiles")
+      .select("full_name, avatar_url")
+      .eq("id", row.profile_id)
+      .maybeSingle(),
+  ]);
+  const avatarUrl = profile?.avatar_url?.trim() || undefined;
 
   if (row.target_type === "student" && row.student_id) {
     targetId = row.student_id;
-    displayName = await fetchStudentDisplayNameInDb(row.student_id, "Student");
-    avatarUrl = await fetchStudentAvatarUrlInDb(row.student_id);
-    const email = await fetchProfileEmail(row.profile_id);
-    subtitle = email ? `학부모 · ${email}` : "학부모";
     const { data: student } = await supabase
       .from("students")
-      .select("full_name")
+      .select("full_name, english_name")
       .eq("id", row.student_id)
       .maybeSingle();
-    if (student?.full_name && student.full_name !== displayName) {
-      subtitle = email ? `${student.full_name} · ${email}` : student.full_name;
+    displayName =
+      student?.english_name?.trim() ||
+      student?.full_name?.trim() ||
+      profile?.full_name?.trim() ||
+      "Student";
+    if (student?.full_name?.trim() && student.full_name.trim() !== displayName) {
+      subtitle = student.full_name.trim();
     }
   } else if (row.target_type === "teacher" && row.teacher_id) {
     targetId = row.teacher_id;
-    const teacher = getTeacherFromCache(row.teacher_id);
-    displayName = teacher?.displayName ?? "Teacher";
-    avatarUrl = teacher?.avatarUrl;
-    subtitle = "선생님";
+    const { data: teacher } = await supabase
+      .from("teachers")
+      .select("display_name")
+      .eq("id", row.teacher_id)
+      .maybeSingle();
+    displayName =
+      teacher?.display_name?.trim() || profile?.full_name?.trim() || "Teacher";
   }
 
   return {
@@ -140,7 +149,7 @@ async function buildThreadPreview(row: DirectThreadRow): Promise<DirectThreadPre
     avatarUrl,
     lastMessage: row.last_message_preview || "(새 대화)",
     lastMessageAt: row.last_message_at ?? row.created_at,
-    unread,
+    unread: count ?? 0,
   };
 }
 
@@ -194,11 +203,7 @@ function buildSegmentLabel(
 export async function warmAdminMessagingCache(): Promise<void> {
   const supabase = createBootstrapDbClient();
 
-  const [threadRes, campaignRes, ruleRes] = await Promise.all([
-    supabase.from("admin_direct_threads").select("*").order("last_message_at", {
-      ascending: false,
-      nullsFirst: false,
-    }),
+  const [campaignRes, ruleRes] = await Promise.all([
     supabase
       .from("admin_broadcasts")
       .select(
@@ -206,39 +211,17 @@ export async function warmAdminMessagingCache(): Promise<void> {
       )
       .order("sent_at", { ascending: false })
       .limit(50),
-    supabase.from("system_notification_rules").select("*").order("rule_key"),
+    supabase
+      .from("system_notification_rules")
+      .select("rule_key, label, description, enabled, channels")
+      .order("rule_key"),
   ]);
 
-  if (threadRes.error) {
-    throw new Error(`admin_direct_threads_fetch_failed: ${threadRes.error.message}`);
-  }
   if (campaignRes.error) {
     throw new Error(`admin_broadcasts_fetch_failed: ${campaignRes.error.message}`);
   }
   if (ruleRes.error) {
     throw new Error(`system_notification_rules_fetch_failed: ${ruleRes.error.message}`);
-  }
-
-  const threadRows = (threadRes.data ?? []) as DirectThreadRow[];
-  const threads = await Promise.all(threadRows.map(buildThreadPreview));
-
-  const messagesByThread: Record<string, DirectMessage[]> = {};
-  if (threadRows.length > 0) {
-    const threadIds = threadRows.map((r) => r.id);
-    const { data: messageRows, error: msgError } = await supabase
-      .from("admin_direct_messages")
-      .select("*")
-      .in("thread_id", threadIds)
-      .order("created_at", { ascending: true });
-    if (msgError) {
-      throw new Error(`admin_direct_messages_fetch_failed: ${msgError.message}`);
-    }
-    for (const row of (messageRows ?? []) as DirectMessageRow[]) {
-      messagesByThread[row.thread_id] = [
-        ...(messagesByThread[row.thread_id] ?? []),
-        rowToDirectMessage(row),
-      ];
-    }
   }
 
   const campaigns = ((campaignRes.data ?? []) as BroadcastRow[]).map(rowToCampaign);
@@ -248,28 +231,9 @@ export async function warmAdminMessagingCache(): Promise<void> {
       : FALLBACK_SYSTEM_NOTIFICATION_RULES;
 
   setAdminMessagingCache({
-    threads,
-    messagesByThread,
     campaigns,
     rules,
   });
-}
-
-export function getAdminDirectThreadsFromCache(): DirectThreadPreview[] {
-  return getAdminDirectThreadCache();
-}
-
-export function getAdminDirectInboxSummaryFromCache(): {
-  threads: DirectThreadPreview[];
-  totalUnread: number;
-} {
-  const threads = getAdminDirectThreadCache();
-  const totalUnread = threads.reduce((sum, thread) => sum + thread.unread, 0);
-  return { threads, totalUnread };
-}
-
-export function getAdminDirectMessagesFromCache(threadId: string): DirectMessage[] {
-  return getAdminDirectMessagesCache(threadId);
 }
 
 export function getPushCampaignsFromCache(): PushCampaignRow[] {
@@ -433,14 +397,14 @@ export async function ensureAdminDirectThreadInDb(input: {
 
   const { data: existing } = await supabase
     .from("admin_direct_threads")
-    .select("*")
+    .select(
+      "id, target_type, student_id, teacher_id, profile_id, last_message_at, last_message_preview, created_at"
+    )
     .eq("profile_id", profileId)
     .maybeSingle();
 
   if (existing) {
-    const preview = await buildThreadPreview(existing as DirectThreadRow);
-    patchAdminDirectThreadInCache(preview);
-    return preview;
+    return buildThreadPreview(existing as DirectThreadRow);
   }
 
   const { data: inserted, error: insertError } = await supabase
@@ -452,16 +416,38 @@ export async function ensureAdminDirectThreadInDb(input: {
       profile_id: profileId,
       last_message_preview: "(새 대화)",
     })
-    .select("*")
+    .select(
+      "id, target_type, student_id, teacher_id, profile_id, last_message_at, last_message_preview, created_at"
+    )
     .single();
 
   if (insertError || !inserted) {
     throw new Error(`admin_direct_thread_create_failed: ${insertError?.message}`);
   }
 
-  const preview = await buildThreadPreview(inserted as DirectThreadRow);
-  patchAdminDirectThreadInCache(preview);
-  return preview;
+  return buildThreadPreview(inserted as DirectThreadRow);
+}
+
+async function persistAdminDirectMessageInDb(input: {
+  threadId: string;
+  body: string;
+}, supabase?: SupabaseClient): Promise<SentDirectMessageRow> {
+  const db = supabase ?? await createRequestDbClient();
+  const trimmed = input.body.trim();
+  if (!trimmed) throw new Error("message_body_required");
+
+  const { data, error } = await db
+    .rpc("send_admin_direct_message", {
+      p_thread_id: input.threadId,
+      p_body: trimmed,
+    })
+    .single();
+
+  if (error || !data) {
+    throw new Error(`admin_direct_message_send_failed: ${error?.message}`);
+  }
+
+  return data as SentDirectMessageRow;
 }
 
 export async function sendAdminDirectMessageInDb(input: {
@@ -469,62 +455,30 @@ export async function sendAdminDirectMessageInDb(input: {
   body: string;
 }): Promise<DirectMessage> {
   const supabase = await createRequestDbClient();
-  const senderId = await resolveAdminProfileIdInDb();
-  const trimmed = input.body.trim();
-  if (!trimmed) throw new Error("message_body_required");
+  const row = await persistAdminDirectMessageInDb(input, supabase);
 
-  const { data: thread, error: threadError } = await supabase
-    .from("admin_direct_threads")
-    .select("*")
-    .eq("id", input.threadId)
-    .single();
-  if (threadError || !thread) throw new Error("thread_not_found");
-
-  const { data: row, error } = await supabase
-    .from("admin_direct_messages")
-    .insert({
-      thread_id: input.threadId,
-      sender_role: "admin",
-      sender_id: senderId,
-      body: trimmed,
-    })
-    .select("*")
-    .single();
-
-  if (error || !row) {
-    throw new Error(`admin_direct_message_send_failed: ${error?.message}`);
+  try {
+    await sendNotificationWithOptionalPushInDb({
+      userId: row.target_profile_id,
+      type: "admin_direct",
+      title: "Pass on English",
+      body: row.body.slice(0, 500),
+      payload: { threadId: input.threadId, kind: "admin_direct" },
+      push: true,
+      url: row.target_type === "teacher"
+        ? "/teacher/chat/support"
+        : "/student/chat/support",
+    }, supabase);
+  } catch (error) {
+    // The chat write is already committed. Do not invite a duplicate retry just
+    // because the secondary notification delivery failed.
+    console.error(
+      "[admin-direct] notification delivery failed",
+      error instanceof Error ? error.message : "unknown"
+    );
   }
 
-  const now = new Date().toISOString();
-  await supabase
-    .from("admin_direct_threads")
-    .update({
-      last_message_at: now,
-      last_message_preview: trimmed.slice(0, 200),
-    })
-    .eq("id", input.threadId);
-
-  await sendNotificationWithOptionalPushInDb({
-    userId: (thread as DirectThreadRow).profile_id,
-    type: "admin_direct",
-    title: "Pass on English",
-    body: trimmed.slice(0, 500),
-    payload: { threadId: input.threadId, kind: "admin_direct" },
-    push: true,
-    url: (thread as DirectThreadRow).target_type === "teacher"
-      ? "/teacher/chat/support"
-      : "/student/chat/support",
-  }, supabase);
-
-  const message = rowToDirectMessage(row as DirectMessageRow);
-  appendAdminDirectMessageToCache(message);
-  const preview = await buildThreadPreview({
-    ...(thread as DirectThreadRow),
-    last_message_at: now,
-    last_message_preview: trimmed.slice(0, 200),
-  });
-  patchAdminDirectThreadInCache(preview);
-  return message;
+  return rowToDirectMessage(row);
 }
 
 export async function markAdminDirectThreadReadInDb(threadId: string): Promise<void> {
@@ -537,10 +491,6 @@ export async function markAdminDirectThreadReadInDb(threadId: string): Promise<v
     .is("read_at", null);
   if (error) {
     throw new Error(`admin_direct_mark_read_failed: ${error.message}`);
-  }
-  const cached = getAdminDirectThreadCache().find((t) => t.id === threadId);
-  if (cached) {
-    patchAdminDirectThreadInCache({ ...cached, unread: 0 });
   }
 }
 
@@ -1027,7 +977,7 @@ export async function updateSystemNotificationRulesInDb(
 
   const { data, error } = await supabase
     .from("system_notification_rules")
-    .select("*")
+    .select("rule_key, label, description, enabled, channels")
     .order("rule_key");
   if (error) {
     throw new Error(`system_notification_rules_fetch_failed: ${error.message}`);
@@ -1045,15 +995,42 @@ export async function reloadAdminDirectMessagesInDb(
   threadId: string
 ): Promise<DirectMessage[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("admin_direct_messages")
-    .select("*")
-    .eq("thread_id", threadId)
-    .order("created_at", { ascending: true });
+  const { data, error } = await supabase.rpc(
+    "get_admin_direct_thread_messages",
+    { p_thread_id: threadId }
+  );
   if (error) {
     throw new Error(`admin_direct_messages_fetch_failed: ${error.message}`);
   }
   return ((data ?? []) as DirectMessageRow[]).map(rowToDirectMessage);
+}
+
+export async function getAdminDirectInboxInDb(): Promise<{
+  threads: DirectThreadPreview[];
+  totalUnread: number;
+}> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_admin_direct_inbox");
+  if (error) {
+    throw new Error(`admin_direct_inbox_fetch_failed: ${error.message}`);
+  }
+
+  const threads = ((data ?? []) as AdminDirectInboxRow[]).map((row) => ({
+    id: row.id,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    displayName: row.display_name,
+    subtitle: row.subtitle,
+    avatarUrl: row.avatar_url?.trim() || undefined,
+    lastMessage: row.last_message,
+    lastMessageAt: row.last_message_at,
+    unread: Number(row.unread) || 0,
+  }));
+
+  return {
+    threads,
+    totalUnread: threads.reduce((sum, thread) => sum + thread.unread, 0),
+  };
 }
 
 async function buildRecipientThreadPreview(
@@ -1095,7 +1072,9 @@ export async function getAdminDirectThreadForProfileInDb(
   const supabase = await createClient();
   const { data: threadRow } = await supabase
     .from("admin_direct_threads")
-    .select("*")
+    .select(
+      "id, target_type, student_id, teacher_id, profile_id, last_message_at, last_message_preview, created_at"
+    )
     .eq("profile_id", profileId)
     .maybeSingle();
 
@@ -1108,48 +1087,10 @@ export async function getAdminDirectThreadForProfileInDb(
 
 export async function sendAdminDirectReplyFromRecipientInDb(input: {
   threadId: string;
-  profileId: string;
   body: string;
 }): Promise<DirectMessage> {
-  const supabase = await createClient();
-  const trimmed = input.body.trim();
-  if (!trimmed) throw new Error("message_body_required");
-
-  const { data: thread, error: threadError } = await supabase
-    .from("admin_direct_threads")
-    .select("*")
-    .eq("id", input.threadId)
-    .eq("profile_id", input.profileId)
-    .single();
-  if (threadError || !thread) throw new Error("thread_not_found");
-
-  const senderRole = (thread as DirectThreadRow).target_type;
-
-  const { data: row, error } = await supabase
-    .from("admin_direct_messages")
-    .insert({
-      thread_id: input.threadId,
-      sender_role: senderRole,
-      sender_id: input.profileId,
-      body: trimmed,
-    })
-    .select("*")
-    .single();
-
-  if (error || !row) {
-    throw new Error(`admin_direct_message_send_failed: ${error?.message}`);
-  }
-
-  const now = new Date().toISOString();
-  await supabase
-    .from("admin_direct_threads")
-    .update({
-      last_message_at: now,
-      last_message_preview: trimmed.slice(0, 200),
-    })
-    .eq("id", input.threadId);
-
-  return rowToDirectMessage(row as DirectMessageRow);
+  const row = await persistAdminDirectMessageInDb(input);
+  return rowToDirectMessage(row);
 }
 
 export async function markAdminDirectThreadReadForRecipientInDb(

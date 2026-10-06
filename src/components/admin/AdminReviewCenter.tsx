@@ -98,7 +98,7 @@ export function AdminReviewCenter() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-gray-500">
-            학생·선생님 요청과 신규 가입, 입금 신고를 한곳에서 검토합니다.
+            학생·선생님 요청과 신규 가입, 입금 확인 요청을 한곳에서 검토합니다.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -438,7 +438,7 @@ export function AdminReviewCenter() {
                 ? "재수강 미신청"
                 : awaitingDeposit
                   ? "입금 대기"
-                  : "입금 신고";
+                  : "입금 확인 요청";
               return (
                 <div
                   key={enrollment.id}
@@ -480,7 +480,7 @@ export function AdminReviewCenter() {
                     <div>
                       <span className="font-medium">입금자:</span>{" "}
                       {enrollment.depositorName ?? (
-                        <span className="text-gray-400">아직 입금 신고 전</span>
+                        <span className="text-gray-400">아직 입금 확인 요청 전</span>
                       )}
                     </div>
                     {enrollment.accountHolderName && (
