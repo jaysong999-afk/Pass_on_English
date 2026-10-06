@@ -3,9 +3,9 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-10-06 (migration 045~048 운영 DB 적용 완료·앱 릴리스 준비 중)
+최종 검증일: 2026-10-06 (migration 045~048 및 앱 `33fc09e` 운영 배포·HTTPS 검증 완료)
 기준 브랜치: `main`
-검증된 운영 기준 커밋: `dc7a084` (`feat: harden bulk enrollment transfers`)
+검증된 운영 기준 커밋: `33fc09e` (`feat: add refund workflow and portal safeguards`)
 
 ## 1. 절대 혼동하면 안 되는 운영 정보
 
@@ -23,8 +23,8 @@
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
 | DB migration 최신 기준 | `048_atomic_enrollment_refunds.sql` — 2026-10-06 싱가포르 운영 DB에 `045`→`048` 순서로 단독 적용·객체·RLS·권한 검증 완료 |
-| 현재 운영 이미지 / 릴리스 | `pass-on-english:dc7a084` / `/opt/pass-on-english/releases/dc7a084` |
-| 남은 검증 | migration 045~048 연계 앱 배포와 운영 HTTPS 검증 필요. 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관·환불의 실기기·실데이터 확인 필요 |
+| 현재 운영 이미지 / 릴리스 | `pass-on-english:33fc09e` / `/opt/pass-on-english/releases/33fc09e` |
+| 남은 검증 | 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관·환불의 실기기·실데이터 확인 필요 |
 
 ### 금지된 연결
 
@@ -117,7 +117,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 해당 릴리스 `.env.production`에 로컬 공개키·비밀키 두 항목만 등록했다. 키 쌍 정상 및 로컬/서버 파일 일치 확인.
 기존 `VAPID_SUBJECT`와 Supabase 설정은 보존했고 원본은 동일 디렉터리의 `.env.production.pre-vapid-*`로 백업했다(두 파일 모두 600).
 이후 사용자 승인으로 `35bb954` 새 릴리스에 환경파일을 복사하고 이미지 태그만 바꿔 새 이미지를 빌드·배포했다.
-현재 환경파일은 `/opt/pass-on-english/releases/dc7a084/deploy/tencent-lighthouse/.env.production`이다.
+현재 환경파일은 `/opt/pass-on-english/releases/33fc09e/deploy/tencent-lighthouse/.env.production`이다.
 실행 컨테이너 키와 환경파일 일치, 키 쌍 정상, 실제 HTTPS 브라우저 코드의 공개키 포함 및 비밀키 비노출을 확인했다.
 
 필수 운영 변수:
@@ -213,6 +213,16 @@ https://passonenglish.com/api/health     → 200
 - app·cron·nginx가 모두 healthy/실행 중이며, 컨테이너의 Supabase URL이 싱가포르 프로젝트임을 재확인했다. 최근 app 오류·nginx 5xx·cron 비정상 집계는 0이다. 이전 `6187a80` 이미지와 릴리스는 롤백용으로 보존했다.
 - 운영 HTTPS에서 `/ko`, `/zh-CN`, `/ko/signup`, `/teacher`, `/admin`, `/api/health`, `/manifest.json`, `/sw.js`, 192·512 아이콘이 모두 HTTP 200이었다. manifest의 `start_url=/?source=pwa`, `scope=/`, `display=standalone`, Service Worker의 `notificationclick`·`openWindow`를 확인했고 새 일괄 이관 API의 익명 요청은 401로 거부됐다.
 - 실제 수강 데이터 이관은 실행하지 않았다. 승인된 대상의 운영 화면 미리보기 및 실데이터 실행은 별도 운영 절차로 남아 있다.
+
+2026-10-06 migration 045~048 및 누적 포털 개선 배포 검증:
+
+- migration `045`~`048`을 싱가포르 운영 DB에 순서대로 단독 적용하고 채팅 read cursor/RPC, 강사 계좌 컬럼 제거, 환불 FAQ, 환불 원자 처리 테이블·RLS·권한을 확인했다. 기존 확정 수강의 환불 기준 회차 backfill 누락은 0건이었다.
+- 커밋 `33fc09e`를 `origin/main`에 푸시하고 아카이브를 `/opt/pass-on-english/releases/33fc09e`에 배포했다. 이미지 `pass-on-english:33fc09e` ID는 `sha256:f535e291ccf460f5430680e05e813a8800450b615c4c3f8751604fdd9b86d06b`다.
+- 2GB 호스트에서 CPU 1코어·RAM 1200MB·메모리+스왑 2GB 제한 BuildKit으로 production build와 정적 페이지 84개 생성을 통과했다. 빌드 중 기존 앱이 메모리 압박으로 1회 자동 재시작했으나 즉시 healthy로 복구됐고, 전환 전 빌더와 후보 컨테이너를 중지해 메모리를 회수했다.
+- 후보 이미지를 `127.0.0.1:3300`에서 격리 검증한 후 app health를 먼저 확인하고 cron·nginx를 전환했다. app은 `33fc09e`, healthy, restart 0이며 Supabase URL은 싱가포르 프로젝트다. Nginx 설정 검사를 통과했고 cron 두 작업은 4회 연속 `failed: 0`, 배포 후 nginx 5xx는 0건이었다.
+- 외부 HTTPS에서 `/ko`, `/zh-CN`, `/ko/signup`, `/teacher`, `/admin`, `/api/health`, manifest, Service Worker, WeChat Pay·Alipay QR 자산이 모두 200이었다. 환불·관리자 메시지·채팅·Push 구독 API의 익명 요청은 401로 거부됐고, 새 한·중 랜딩 문구와 PWA notification click 경로를 확인했다.
+- 이전 `dc7a084` 이미지와 릴리스는 롤백용으로 보존했다. 실제 환불 확정은 실행하지 않았으며 승인된 테스트 수강에서 미리보기 후 별도 운영 확인이 필요하다.
+- `npm audit --omit=dev`는 moderate 1 / high 4 / critical 1을 보고했다. 배포 기능과 분리해 호환성 검토 후 의존성을 갱신해야 하며 이번 릴리스에서 `--force` 업데이트는 하지 않았다.
 
 ## 7. 테스트 기준
 
