@@ -997,4 +997,4 @@ supabase db push
 - `chat_messages(room_id, created_at DESC, id DESC)`와 `admin_direct_messages(thread_id, created_at DESC, id DESC)` 복합 인덱스로 페이지 조회 범위를 제한
 - 함수 내부에서 기존 채팅 접근 권한 함수를 재사용하고 cursor 쌍과 최대 조회량을 검증하여 전체 기록 조회를 방지
 - `PUBLIC`·`anon` 실행 권한을 제거하고 `authenticated`·`service_role`만 실행하도록 제한
-- 운영 검증에서 RPC 2개와 인덱스 2개 존재, `SECURITY DEFINER`, `STABLE`, `postgres` 소유, 역할별 실행 권한을 확인했다. 연계 앱은 아직 운영 미배포다.
+- 운영 검증에서 RPC 2개와 인덱스 2개 존재, `SECURITY DEFINER`, `STABLE`, `postgres` 소유, 역할별 실행 권한을 확인했다. 연계 앱은 `5618074`로 운영 배포했다.
