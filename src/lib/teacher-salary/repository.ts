@@ -15,6 +15,9 @@ import {
   appStatusToDb,
   isSalaryMonthEnded,
   monthKeyFromDate,
+  fixedQuarterlyHours,
+  getQuarterlyBonusEarningMonths,
+  isFixedQuarterlyBonusPayoutMonth,
 } from "@/lib/teacher-salary/compute";
 import {
   getAllSalaryStatements,
@@ -282,7 +285,33 @@ export async function confirmSalaryStatementInDb(
     adminConfirmedBy,
   };
 
-  return upsertStatementInDb(confirmed);
+  const saved = await upsertStatementInDb(confirmed);
+
+  if (isFixedQuarterlyBonusPayoutMonth(month)) {
+    const earningMonths = getQuarterlyBonusEarningMonths(month);
+    const firstMonthNumber = Number(earningMonths[0]?.slice(5, 7));
+    const quarter = Math.floor((firstMonthNumber - 1) / 3) + 1;
+    const supabase = createPrivilegedClient();
+    const { error } = await supabase.from("quarterly_bonus_records").upsert(
+      {
+        teacher_id: teacherId,
+        quarter_key: `${earningMonths[0]?.slice(0, 4)}-Q${quarter}`,
+        earning_start_month: earningMonths[0],
+        earning_end_month: earningMonths[2],
+        payout_month: month,
+        total_hours: fixedQuarterlyHours(teacherId, month),
+        bonus_php: saved.quarterlyBonus,
+        eligible: saved.quarterlyBonus > 0,
+        disqualification_reason:
+          saved.quarterlyBonus > 0 ? null : "분기 재직·월별 수업·노쇼 조건 미충족",
+        computed_at: new Date().toISOString(),
+      },
+      { onConflict: "teacher_id,payout_month" }
+    );
+    if (error) throw new Error(`quarterly_bonus_record_upsert_failed: ${error.message}`);
+  }
+
+  return saved;
 }
 
 export async function markSalaryProcessingInDb(id: string): Promise<TeacherSalaryStatement | null> {

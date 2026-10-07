@@ -1,5 +1,5 @@
-import { AdminTeacherSalaryOverview } from "@/components/admin/AdminTeacherSalaryOverview";
+import { AdminTeacherSalaryHub } from "@/components/admin/AdminTeacherSalaryHub";
 
 export default function AdminTeacherSalaryPage() {
-  return <AdminTeacherSalaryOverview />;
+  return <AdminTeacherSalaryHub />;
 }

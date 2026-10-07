@@ -10,7 +10,7 @@ import {
 } from "@/components/shared/SalaryStatusBadge";
 import { statementTotal } from "@/lib/teacher-salary-store-sync";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { TeacherSalaryStatement } from "@/types";
+import type { TeacherPayrollPenaltyEvent, TeacherSalaryStatement } from "@/types";
 import { apiRequest } from "@/lib/api/client";
 
 interface BonusPolicy {
@@ -22,6 +22,7 @@ interface SalaryResponse {
   statement?: TeacherSalaryStatement;
   availableMonths?: string[];
   bonusPolicy?: BonusPolicy;
+  penaltyEvents?: TeacherPayrollPenaltyEvent[];
 }
 
 export function TeacherSalaryDashboard() {
@@ -29,6 +30,7 @@ export function TeacherSalaryDashboard() {
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [statement, setStatement] = useState<TeacherSalaryStatement | null>(null);
   const [bonusPolicy, setBonusPolicy] = useState<BonusPolicy | null>(null);
+  const [penaltyEvents, setPenaltyEvents] = useState<TeacherPayrollPenaltyEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
@@ -41,6 +43,7 @@ export function TeacherSalaryDashboard() {
       );
       setStatement(data.statement ?? null);
       setBonusPolicy(data.bonusPolicy ?? null);
+      setPenaltyEvents(data.penaltyEvents ?? []);
       setAvailableMonths(data.availableMonths ?? []);
     } catch {
       setLoadError(true);
@@ -193,6 +196,31 @@ export function TeacherSalaryDashboard() {
             value={-statement.deductions}
             negative
           />
+          {penaltyEvents.length > 0 && (
+            <div className="mt-3 space-y-2 rounded-xl border border-red-100 bg-red-50/60 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-red-800">
+                No-show deduction details
+              </p>
+              {penaltyEvents.map((event) => (
+                <div key={event.id} className="flex items-start justify-between gap-3 text-xs">
+                  <div>
+                    <p className="font-medium text-gray-800">
+                      {formatDate(event.occurredAt, "en")} · {event.durationMinutes} min
+                    </p>
+                    <p className="text-gray-500">
+                      {event.reason}{event.status === "reversed" ? " · Reversed" : ""}
+                    </p>
+                  </div>
+                  <div className="text-right tabular-nums">
+                    <p className="text-gray-500">Unpaid ₱{event.unpaidAmountPhp.toLocaleString()}</p>
+                    <p className={event.status === "active" ? "font-semibold text-red-700" : "text-gray-400 line-through"}>
+                      Deduction ₱{event.deductionAmountPhp.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="mt-3 flex items-center justify-between border-t pt-3 font-bold">
             <span>Net Total</span>
             <span className="tabular-nums text-emerald-700">{formatCurrency(total, "PHP")}</span>

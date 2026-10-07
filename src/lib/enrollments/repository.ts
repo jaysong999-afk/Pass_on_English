@@ -1277,6 +1277,22 @@ export async function adjustEnrollmentSessionsInDb(
   return cloneEnrollment(enrollment);
 }
 
+/** Refresh one enrollment after an atomic database workflow without reloading the full table. */
+export async function refreshEnrollmentByIdInDb(id: string): Promise<StudentEnrollment | null> {
+  const current = getEnrollmentById(id);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select(ENROLLMENT_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`enrollment_refresh_failed: ${error.message}`);
+  if (!data) return null;
+  const enrollment = rowToEnrollment(data as unknown as EnrollmentRow, current?.planLabel);
+  patchEnrollmentInCache(enrollment);
+  return cloneEnrollment(enrollment);
+}
+
 export function adjustEnrollmentSessions(
   enrollmentId: string,
   input: AdjustSessionsInput

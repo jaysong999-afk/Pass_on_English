@@ -9,6 +9,7 @@ import {
 import { getTeacherLessons } from "@/lib/teacher-lesson-store-sync";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
+import { reverseTeacherPayrollPenaltyEventInDb } from "@/lib/teacher-payroll-penalty-event-repository";
 
 interface TeacherPayrollPenaltyRow {
   id: string;
@@ -87,8 +88,12 @@ export async function applyTeacherNoShowPenaltyInDb(
 export async function revertTeacherNoShowPenaltyInDb(
   teacherId: string,
   month: string,
-  reasonMatch?: string
+  reasonMatch?: string,
+  lessonId?: string
 ): Promise<boolean> {
+  if (lessonId) {
+    await reverseTeacherPayrollPenaltyEventInDb(lessonId);
+  }
   const stillHasNoShow = getTeacherLessons(teacherId).some((lesson) =>
     lesson.teacherNoShow &&
     getDateKeyInTimezone(new Date(lesson.scheduledAt), CANONICAL_TIMEZONE).slice(0, 7) === month

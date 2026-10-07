@@ -11,17 +11,24 @@ import {
   getSalaryBonusPolicy,
 } from "@/lib/teacher-salary-policy-store-sync";
 import { getAdjustmentTotals } from "@/lib/teacher-salary-adjustment-store-sync";
+import { getActiveNoShowDeductionTotal } from "@/lib/teacher-payroll-penalty-event-store-sync";
 import { getTeacherById, getAllTeachers, updateTeacherHourlyRatePhp } from "@/lib/teacher-profile-store-sync";
 import { getTeacherLessons } from "@/lib/teacher-lesson-store-sync";
+import {
+  FIXED_QUARTER_FIRST_PAYOUT_MONTH,
+  addSalaryMonths,
+  getQuarterlyBonusEarningMonths,
+  isFixedQuarterlyBonusPayoutMonth,
+} from "@/lib/teacher-salary/quarter-policy";
+
+export { getQuarterlyBonusEarningMonths, isFixedQuarterlyBonusPayoutMonth };
 
 export function monthKeyFromDate(date: Date): string {
   return getDateKeyInTimezone(date, CANONICAL_TIMEZONE).slice(0, 7);
 }
 
 export function addMonths(month: string, delta: number): string {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return addSalaryMonths(month, delta);
 }
 
 export function isSalaryMonthEnded(month: string): boolean {
@@ -37,7 +44,7 @@ export function lessonsInMonth(teacherId: string, month: string) {
   });
 }
 
-function rollingQuarterlyHours(teacherId: string, month: string): number {
+function legacyRollingQuarterlyHours(teacherId: string, month: string): number {
   const policy = getSalaryBonusPolicy();
   let total = 0;
   for (let i = 0; i < policy.quarterlyPeriodMonths; i++) {
@@ -48,21 +55,52 @@ function rollingQuarterlyHours(teacherId: string, month: string): number {
   return Math.round(total * 10) / 10;
 }
 
+export function fixedQuarterlyHours(teacherId: string, payoutMonth: string): number {
+  const total = getQuarterlyBonusEarningMonths(payoutMonth).reduce(
+    (sum, earningMonth) =>
+      sum +
+      lessonsInMonth(teacherId, earningMonth).reduce(
+        (monthTotal, lesson) => monthTotal + lesson.durationMinutes / 60,
+        0
+      ),
+    0
+  );
+  return Math.round(total * 10) / 10;
+}
+
 export function isQuarterlyBonusEligible(teacherId: string, month: string): boolean {
   const policy = getSalaryBonusPolicy();
   const teacher = getTeacherById(teacherId);
-  if (!teacher?.createdAt || !isSalaryMonthEnded(month)) return false;
+  const employmentStartedAt = teacher?.employmentStartedAt ?? teacher?.createdAt;
+  if (!employmentStartedAt) return false;
+
+  if (month >= FIXED_QUARTER_FIRST_PAYOUT_MONTH) {
+    const earningMonths = getQuarterlyBonusEarningMonths(month);
+    if (earningMonths.length !== 3) return false;
+    if (!isSalaryMonthEnded(earningMonths[2])) return false;
+
+    const joinedDate = getDateKeyInTimezone(new Date(employmentStartedAt), CANONICAL_TIMEZONE);
+    if (joinedDate > `${earningMonths[0]}-01`) return false;
+
+    for (const earningMonth of earningMonths) {
+      if (lessonsInMonth(teacherId, earningMonth).length === 0) return false;
+      if (isQuarterlyBonusReset(teacherId, earningMonth)) return false;
+    }
+    return fixedQuarterlyHours(teacherId, month) > 0;
+  }
+
+  if (!isSalaryMonthEnded(month)) return false;
 
   const firstMonth = addMonths(month, -(policy.quarterlyPeriodMonths - 1));
   const firstMonthStart = `${firstMonth}-01`;
-  const joinedDate = getDateKeyInTimezone(new Date(teacher.createdAt), CANONICAL_TIMEZONE);
+  const joinedDate = getDateKeyInTimezone(new Date(employmentStartedAt), CANONICAL_TIMEZONE);
   if (joinedDate > firstMonthStart) return false;
 
   for (let i = 0; i < policy.quarterlyPeriodMonths; i++) {
     if (isQuarterlyBonusReset(teacherId, addMonths(month, -i))) return false;
   }
 
-  return rollingQuarterlyHours(teacherId, month) > 0;
+  return legacyRollingQuarterlyHours(teacherId, month) > 0;
 }
 
 /**
@@ -75,13 +113,14 @@ export function isPerfectAttendanceBonusEligible(
   month: string
 ): boolean {
   const teacher = getTeacherById(teacherId);
-  if (!teacher?.createdAt) return false;
+  const employmentStartedAt = teacher?.employmentStartedAt ?? teacher?.createdAt;
+  if (!employmentStartedAt) return false;
 
   const qualifyingMonth = addMonths(month, -1);
   if (!isSalaryMonthEnded(qualifyingMonth)) return false;
 
   const joinedDate = getDateKeyInTimezone(
-    new Date(teacher.createdAt),
+    new Date(employmentStartedAt),
     CANONICAL_TIMEZONE
   );
   if (joinedDate > `${qualifyingMonth}-01`) return false;
@@ -101,19 +140,24 @@ export function computeAmounts(
 ) {
   const policy = getSalaryBonusPolicy();
   const { bonusTotal, penaltyTotal } = getAdjustmentTotals(teacherId, month);
+  const noShowPenaltyTotal = getActiveNoShowDeductionTotal(teacherId, month);
   const baseSalary = Math.round(totalHours * hourlyRate);
   const perfectAttendanceBonus = isPerfectAttendanceBonusEligible(teacherId, month)
     ? Math.round(totalHours * policy.perfectAttendancePerHourPhp)
     : 0;
   const quarterlyBonus = isQuarterlyBonusEligible(teacherId, month)
-    ? calcQuarterlyBonusFromHours(rollingQuarterlyHours(teacherId, month))
+    ? calcQuarterlyBonusFromHours(
+        isFixedQuarterlyBonusPayoutMonth(month)
+          ? fixedQuarterlyHours(teacherId, month)
+          : legacyRollingQuarterlyHours(teacherId, month)
+      )
     : 0;
   return {
     baseSalary,
     perfectAttendanceBonus,
     quarterlyBonus,
     otherIncentives: bonusTotal,
-    deductions: penaltyTotal,
+    deductions: penaltyTotal + noShowPenaltyTotal,
   };
 }
 
@@ -153,7 +197,7 @@ export function getBonusPolicy() {
     .join(" | ");
   return {
     perfectAttendance: `Perfect attendance bonus: ₱${policy.perfectAttendancePerHourPhp}/hr from the month after completing one full month with no unapproved absences or schedule changes`,
-    quarterly: `After ${policy.quarterlyPeriodMonths} full months with no attendance reset · rolling total: ${tiers}`,
+    quarterly: `Fixed-quarter perfect attendance bonus paid with Jan/Apr/Jul/Oct payroll · ${tiers}`,
     config: policy,
   };
 }

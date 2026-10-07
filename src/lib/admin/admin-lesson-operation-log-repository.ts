@@ -154,6 +154,24 @@ export async function getAdminLessonOperationLogByIdInDb(id: string) {
   return { ...entry, undoPayload: entry.undoPayload ? { ...entry.undoPayload } : undefined };
 }
 
+export async function refreshAdminLessonOperationLogByIdInDb(id: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("admin_lesson_operation_logs")
+    .select(
+      "id, at, teacher_id, lesson_id, student_name, scheduled_at, week_start_key, action, summary, note, admin_name, undone_at, undoable, undo_payload"
+    )
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`admin_lesson_operation_log_refresh_failed: ${error.message}`);
+  if (!data) return undefined;
+  const entry = rowToEntry(data as AdminLessonOperationLogRow);
+  const exists = getAdminLessonOperationLogCache().some((log) => log.id === id);
+  if (exists) patchAdminLessonOperationLogCache(entry);
+  else prependAdminLessonOperationLogCache(entry);
+  return { ...entry, undoPayload: entry.undoPayload ? { ...entry.undoPayload } : undefined };
+}
+
 export async function markAdminLessonOperationUndoneInDb(id: string) {
   const supabase = await createClient();
   const undoneAt = new Date().toISOString();

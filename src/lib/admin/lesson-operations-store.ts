@@ -32,6 +32,10 @@ import { getAllTeachers, getTeacherById } from "@/lib/teacher-profile-store-sync
 import { applyTeacherNoShowPenaltyInDb, revertTeacherNoShowPenaltyInDb } from "@/lib/teacher-payroll-penalty-repository";
 import { getAllLessons, getLessonById } from "@/lib/teacher-lesson-store-sync";
 import { isUuid } from "@/lib/teachers/resolve-teacher-id";
+import {
+  applyTeacherNoShowAtomicallyInDb,
+  reverseTeacherNoShowAtomicallyInDb,
+} from "@/lib/teacher-compensation/repository";
 
 export interface AvailableTeacherOption {
   teacherId: string;
@@ -201,8 +205,8 @@ export async function assignSubstituteTeacher(
 
 export async function markTeacherNoShow(
   lessonId: string,
-  options?: { makeupScheduledAt?: string; note?: string }
-): Promise<{ original: Lesson; makeup: Lesson }> {
+  options?: { makeupScheduledAt?: string; note?: string; adminName?: string }
+): Promise<{ original: Lesson; makeup: Lesson; deductionAmountPhp?: number }> {
   const lesson = getLessonById(lessonId);
   if (!lesson) throw new Error("lesson_not_found");
   if (!["scheduled", "reschedule_pending"].includes(lesson.status)) {
@@ -213,6 +217,46 @@ export async function markTeacherNoShow(
   const month = monthKeyFromIso(lesson.scheduledAt);
   const noShowTeacherId = lesson.originalTeacherId ?? lesson.teacherId;
   const noShowTeacherName = lesson.originalTeacherName ?? lesson.teacherName;
+
+  // Persisted lessons use one database transaction for the missed lesson,
+  // compensation lesson, enrollment balance, audit log and payroll penalty.
+  if (isUuid(lesson.id)) {
+    const enrollment = lesson.enrollmentId
+      ? getEnrollmentById(lesson.enrollmentId)
+      : activeEnrollmentForStudent(lesson.studentId);
+    const futureForEnrollment = enrollment
+      ? futureLessonsForEnrollment(enrollment.id, lesson.teacherId)
+          .filter((candidate) =>
+            candidate.status === "scheduled" || candidate.status === "reschedule_pending"
+          )
+          .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
+      : [];
+    const lastScheduledAt = futureForEnrollment.at(-1)?.scheduledAt ?? lesson.scheduledAt;
+    const lastDateKey = getDateKeyInTimezone(new Date(lastScheduledAt), CANONICAL_TIMEZONE);
+    const scheduleDays = enrollment ? getEnrollmentScheduleDays(enrollment) : [];
+    const nextDateKey = nextScheduledDateOnOrAfter(addDaysToDateKey(lastDateKey, 1), scheduleDays);
+    const lastTime = new Intl.DateTimeFormat("en-GB", {
+      timeZone: CANONICAL_TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date(lastScheduledAt));
+    const defaultMakeupAt = `${nextDateKey}T${lastTime}:00+09:00`;
+    const requestedMakeupAt = options?.makeupScheduledAt;
+    const makeupAt =
+      requestedMakeupAt &&
+      new Date(requestedMakeupAt).getTime() > new Date(lastScheduledAt).getTime()
+        ? requestedMakeupAt
+        : defaultMakeupAt;
+
+    return applyTeacherNoShowAtomicallyInDb({
+      lessonId: lesson.id,
+      makeupScheduledAt: makeupAt,
+      weekStartKey: weekStartKeyFromScheduledAt(lesson.scheduledAt),
+      note: options?.note,
+      adminName: options?.adminName,
+    });
+  }
 
   const cancelled = await replaceLessonInDb({
     ...lesson,
@@ -438,6 +482,8 @@ export async function adminRescheduleLesson(
 }
 
 export async function undoAdminLessonOperation(logId: string): Promise<void> {
+  if (await reverseTeacherNoShowAtomicallyInDb(logId)) return;
+
   const log = await getAdminLessonOperationLogByIdInDb(logId);
   if (!log) throw new Error("log_not_found");
   if (log.undoneAt) throw new Error("already_undone");
@@ -563,7 +609,8 @@ export async function undoAdminLessonOperation(logId: string): Promise<void> {
       await revertTeacherNoShowPenaltyInDb(
         payload.penaltyTeacherId,
         payload.penaltyMonth,
-        "선생님 노쇼"
+        "선생님 노쇼",
+        originalLesson.id
       );
     }
   } else if (payload.type === "cancel_unpaid") {

@@ -43,6 +43,8 @@ interface TeacherRow {
   hourly_rate_php: number | null;
   application_id: string | null;
   created_at: string;
+  employment_started_at: string | null;
+  employment_started_at_verified: boolean;
   video_platforms: import("@/types").VideoPlatform[] | null;
   profiles: { avatar_url: string | null; full_name: string | null } | { avatar_url: string | null; full_name: string | null }[] | null;
 }
@@ -79,6 +81,8 @@ function rowToTeacher(row: TeacherRow): Teacher {
     availableDays: [],
     hourlyRatePhp: Number(row.hourly_rate_php ?? 150),
     createdAt: row.created_at,
+    employmentStartedAt: row.employment_started_at ?? undefined,
+    employmentStartedAtVerified: row.employment_started_at_verified,
     applicationId: row.application_id ?? undefined,
     profileCompleted:
       bio.length > 0 && displayName.length > 0 && specialties.length > 0,
@@ -92,7 +96,7 @@ async function fetchTeacherRows(): Promise<TeacherRow[]> {
   const { data, error } = await supabase
     .from("teachers")
     .select(
-      "id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, video_platforms, profiles(avatar_url, full_name)"
+      "id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, employment_started_at, employment_started_at_verified, video_platforms, profiles(avatar_url, full_name)"
     );
 
   if (error) {
@@ -155,7 +159,7 @@ export async function updateTeacherProfileInDb(
     .update(payload)
     .eq("id", id)
     .select(
-      "id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, video_platforms, profiles(avatar_url, full_name)"
+      "id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, employment_started_at, employment_started_at_verified, video_platforms, profiles(avatar_url, full_name)"
     )
     .maybeSingle();
 
@@ -190,7 +194,7 @@ export async function updateTeacherStatusInDb(
     .update({ status })
     .eq("id", id)
     .select(
-      "id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, video_platforms, profiles(avatar_url, full_name)"
+      "id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, employment_started_at, employment_started_at_verified, video_platforms, profiles(avatar_url, full_name)"
     )
     .maybeSingle();
 
@@ -214,7 +218,7 @@ export async function updateTeacherHourlyRatePhpInDb(
     .update({ hourly_rate_php: hourlyRatePhp })
     .eq("id", id)
     .select(
-      "id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, video_platforms, profiles(avatar_url, full_name)"
+      "id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, employment_started_at, employment_started_at_verified, video_platforms, profiles(avatar_url, full_name)"
     )
     .maybeSingle();
 
@@ -235,7 +239,7 @@ export async function getTeacherSelfSettingsInDb(
   const admin = createPrivilegedClient();
   const { data: teacherRow, error: teacherError } = await admin
     .from("teachers")
-    .select("id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, video_platforms, profiles(avatar_url, full_name)")
+    .select("id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, employment_started_at, employment_started_at_verified, video_platforms, profiles(avatar_url, full_name)")
     .eq("id", teacherId)
     .maybeSingle();
   if (teacherError) throw new Error(`teacher_settings_fetch_failed: ${teacherError.message}`);
@@ -343,7 +347,7 @@ export async function createTeacherProfileFromApplicationInDb(
     .from("teachers")
     .upsert(payload)
     .select(
-      "id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, video_platforms, profiles(avatar_url, full_name)"
+      "id, display_name, bio, specialties, experience_years, status, hourly_rate_php, application_id, created_at, employment_started_at, employment_started_at_verified, video_platforms, profiles(avatar_url, full_name)"
     )
     .single();
 

@@ -564,7 +564,7 @@ function SalaryDetailPanel({
             <TableBody>
               <LineItem label="기본급" amount={row.baseSalary} />
               <LineItem label="만근 보너스 (1개월)" amount={row.perfectAttendanceBonus} />
-              <LineItem label="누적 만근 보너스" amount={row.quarterlyBonus} />
+              <LineItem label="분기 만근 보너스" amount={row.quarterlyBonus} />
               <LineItem label="기타 보너스" amount={row.otherIncentives} />
               <LineItem label="공제" amount={-row.deductions} negative={row.deductions > 0} />
               <TableRow className="bg-gray-50 font-semibold">
@@ -770,7 +770,7 @@ function BonusPolicyDialog({
         <DialogHeader>
           <DialogTitle>보너스 정책 설정</DialogTitle>
           <DialogDescription>
-            1개월 만근 보너스와 3개월 누적 만근 보너스 조건을 설정합니다.
+            월 만근 보너스와 1·4·7·10월에 지급되는 고정 분기 만근 보너스를 설정합니다.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -793,15 +793,8 @@ function BonusPolicyDialog({
               }
             />
           </div>
-          <div className="space-y-1">
-            <Label>누적 기간 (개월)</Label>
-            <Input
-              type="number"
-              value={draft.quarterlyPeriodMonths}
-              onChange={(e) =>
-                setDraft({ ...draft, quarterlyPeriodMonths: Number(e.target.value) })
-              }
-            />
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-900">
+            평가 기간은 1～3월, 4～6월, 7～9월, 10～12월로 고정되며 보너스는 각각 4월, 7월, 10월, 다음 해 1월 급여에 지급됩니다.
           </div>
           {draft.quarterlyTiers.map((tier, i) => (
             <div key={i} className="grid grid-cols-3 gap-2">

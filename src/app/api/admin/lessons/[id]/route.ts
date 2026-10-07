@@ -74,6 +74,7 @@ export async function PATCH(
         const result = await markTeacherNoShow(id, {
           makeupScheduledAt: body.makeupScheduledAt,
           note: body.note,
+          adminName: guard.profile.fullName?.trim() || guard.email,
         });
         return NextResponse.json(result);
       }

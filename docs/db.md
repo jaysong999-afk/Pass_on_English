@@ -978,3 +978,14 @@ supabase db push
 - Supabase daily backup (7~30일)
 - `finance_snapshots`, `quarterly_bonus_records` — soft delete 없음, 감사 추적 유지
 - GDPR/개인정보: students 탈퇴 시 anonymize profiles, retain financial records hashed ID
+
+### Migration 051 — 강사 보상 관리 (2026-10-07 운영 적용 완료)
+
+- `teachers.employment_started_at`, `employment_started_at_verified`: 급여 심사용 재직 시작일과 관리자 확인 여부
+- `teacher_compensation_reviews`: 12회 단위 시급 심사와 승인·유지·보류 이력
+- `teacher_hourly_rate_history`: 적용 월을 포함한 시급 변경 원장. 확정 급여 명세는 재계산하지 않음
+- `teacher_payroll_penalty_events`: 수업별 노쇼, 당시 시급, 수업 미지급액, 추가 공제액, 취소 이력을 보존하며 `lesson_id`로 중복 방지
+- `quarterly_bonus_records`: 평가 시작·종료 월, 지급 월, 적격 여부와 탈락 사유 추가
+- `admin_teacher_compensation_overview`: 활성 강사의 평가용 집계를 페이지 단위 JSON으로 반환
+- `admin_apply_teacher_no_show` / `admin_reverse_teacher_no_show`: 수업·보강·회차·로그·패널티를 하나의 트랜잭션으로 처리
+- 신규 객체는 관리자 변경, 강사 본인 패널티·시급 이력 조회만 허용하며 `anon`과 `PUBLIC` 함수 실행 권한을 제거

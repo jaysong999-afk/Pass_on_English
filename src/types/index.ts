@@ -171,6 +171,10 @@ export interface Teacher {
   hourlyRatePhp: number;
   /** Teacher profile creation date, used for tenure-based payroll eligibility. */
   createdAt?: string;
+  /** Employment start date used for compensation tenure and review cycles. */
+  employmentStartedAt?: string;
+  /** True after an administrator has verified the backfilled start date. */
+  employmentStartedAtVerified?: boolean;
   /** Linked signup application (pending teachers) */
   applicationId?: string;
   /** Public profile filled (signup step 2 or admin) */
@@ -430,6 +434,71 @@ export interface TeacherPayrollPenalty {
   perfectAttendanceForfeited: boolean;
   quarterlyBonusReset: boolean;
   reason?: string;
+  createdAt: string;
+}
+
+export type TeacherCompensationReviewStatus =
+  | "pending"
+  | "deferred"
+  | "approved"
+  | "no_change";
+
+export interface TeacherCompensationOverviewRow {
+  teacherId: string;
+  teacherName: string;
+  teacherStatus: Teacher["status"];
+  employmentStartedAt: string;
+  employmentStartedAtVerified: boolean;
+  tenureMonths: number;
+  hourlyRatePhp: number;
+  completedPayoutCount: number;
+  recentCompletedClasses: number;
+  recentTotalHours: number;
+  recentPerfectMonths: number;
+  quarterlyBonusCount: number;
+  lifetimeNoShowCount: number;
+  recentNoShowCount: number;
+  totalPenaltyPhp: number;
+  eligibleCycle: number;
+  reviewDue: boolean;
+  payoutsUntilReview: number;
+  latestReviewStatus?: TeacherCompensationReviewStatus;
+  deferredUntil?: string;
+}
+
+export interface TeacherCompensationOverviewSummary {
+  teacherCount: number;
+  reviewDueCount: number;
+  recentPenaltyTeacherCount: number;
+  quarterlyBonusAchieverCount: number;
+}
+
+export interface TeacherPayrollPenaltyEvent {
+  id: string;
+  teacherId: string;
+  lessonId: string;
+  operationLogId?: string;
+  salaryMonth: string;
+  occurredAt: string;
+  durationMinutes: number;
+  hourlyRateSnapshotPhp: number;
+  unpaidAmountPhp: number;
+  deductionAmountPhp: number;
+  reason: string;
+  status: "active" | "reversed";
+  createdAt: string;
+  reversedAt?: string;
+  reversalReason?: string;
+}
+
+export interface TeacherHourlyRateHistoryEntry {
+  id: string;
+  teacherId: string;
+  previousHourlyRatePhp: number;
+  hourlyRatePhp: number;
+  effectiveMonth: string;
+  source: "annual_review" | "manual_adjustment" | "bulk_adjustment";
+  reason: string;
   createdAt: string;
 }
 

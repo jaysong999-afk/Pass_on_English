@@ -290,7 +290,8 @@ export function AdminLessonActionsPanel({
                 <ul className="list-disc space-y-1 pl-5 text-xs">
                   <li>학생에게 수업 1회가 보상됩니다.</li>
                   <li>해당 수업은 선생님 무급 처리됩니다.</li>
-                  <li>해당 월 만근·분기 보너스가 리셋됩니다.</li>
+                  <li>당시 시급 기준 해당 수업료와 동일한 금액이 추가 공제됩니다.</li>
+                  <li>해당 월 만근과 현재 평가 분기의 보너스 자격이 상실됩니다.</li>
                   <li>스케줄 캘린더에서 해당 셀이 회색으로 표시됩니다.</li>
                 </ul>
               </div>

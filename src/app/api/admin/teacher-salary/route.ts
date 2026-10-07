@@ -29,10 +29,37 @@ import {
 import {
   ensureAdminSalaryBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
+import {
+  applyDueTeacherHourlyRatesInDb,
+  bulkScheduleTeacherHourlyRateInDb,
+  getTeacherCompensationDetailInDb,
+  getTeacherCompensationOverviewInDb,
+  saveTeacherCompensationReviewInDb,
+  scheduleTeacherHourlyRateInDb,
+  updateTeacherEmploymentStartInDb,
+} from "@/lib/teacher-compensation/repository";
 
 export async function GET(request: Request) {
   const guard = await guardAdminApi();
   if (isAdminGuardResponse(guard)) return guard;
+
+  const { searchParams } = new URL(request.url);
+  const view = searchParams.get("view");
+  const teacherId = searchParams.get("teacherId");
+
+  if (view === "evaluation") {
+    await applyDueTeacherHourlyRatesInDb();
+    const overview = await getTeacherCompensationOverviewInDb(
+      Number(searchParams.get("limit") ?? 100),
+      Number(searchParams.get("offset") ?? 0)
+    );
+    return NextResponse.json(overview);
+  }
+
+  if (view === "compensation-detail" && teacherId) {
+    const detail = await getTeacherCompensationDetailInDb(teacherId);
+    return NextResponse.json(detail);
+  }
 
   try {
     await ensureAdminSalaryBootstrapped();
@@ -40,9 +67,7 @@ export async function GET(request: Request) {
     console.error("[admin/teacher-salary GET] warm cache", error);
   }
 
-  const { searchParams } = new URL(request.url);
   const month = searchParams.get("month") ?? currentSalaryMonth();
-  const teacherId = searchParams.get("teacherId");
   const format = searchParams.get("format");
 
   if (format === "csv") {
@@ -80,10 +105,32 @@ export async function PATCH(request: Request) {
   if (isAdminGuardResponse(guard)) return guard;
 
   try {
-    await ensureAdminSalaryBootstrapped();
-
     const body = await request.json();
     const action = body.action as string;
+
+    if (action === "save_compensation_review") {
+      const review = await saveTeacherCompensationReviewInDb({
+        teacherId: body.teacherId,
+        cycleNumber: Number(body.cycleNumber),
+        status: body.status,
+        newHourlyRatePhp:
+          body.newHourlyRatePhp == null ? undefined : Number(body.newHourlyRatePhp),
+        effectiveMonth: body.effectiveMonth,
+        deferredUntil: body.deferredUntil,
+        reviewNote: body.reviewNote,
+      });
+      return NextResponse.json({ review });
+    }
+
+    if (action === "update_employment_start") {
+      if (!body.teacherId || !body.employmentStartedAt) {
+        return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+      }
+      await updateTeacherEmploymentStartInDb(body.teacherId, body.employmentStartedAt);
+      return NextResponse.json({ ok: true });
+    }
+
+    await ensureAdminSalaryBootstrapped();
 
     if (action === "update_status") {
       const { id, status, paymentDate } = body;
@@ -176,10 +223,15 @@ export async function PATCH(request: Request) {
       if (!teacherId || hourlyRatePhp == null) {
         return NextResponse.json({ error: "invalid_body" }, { status: 400 });
       }
-      const { updateTeacherHourlyRatePhpInDb } = await import("@/lib/teachers/repository");
-      const teacher = await updateTeacherHourlyRatePhpInDb(teacherId, Number(hourlyRatePhp));
-      if (!teacher) return NextResponse.json({ error: "not_found" }, { status: 404 });
-      return NextResponse.json({ teacher });
+      await scheduleTeacherHourlyRateInDb({
+        teacherId,
+        hourlyRatePhp: Number(hourlyRatePhp),
+        effectiveMonth: currentSalaryMonth(),
+        reason: "관리자 개별 시급 수정",
+      });
+      const { warmTeacherProfileCache } = await import("@/lib/teachers/repository");
+      await warmTeacherProfileCache();
+      return NextResponse.json({ ok: true });
     }
 
     if (action === "preview_bulk_hourly_rate") {
@@ -201,12 +253,14 @@ export async function PATCH(request: Request) {
       if (preview.hasDifferingRates && !force) {
         return NextResponse.json({ error: "differing_rates", preview }, { status: 409 });
       }
-      const { updateTeacherHourlyRatePhpInDb } = await import("@/lib/teachers/repository");
-      await Promise.all(
-        preview.targetIds.map((teacherId) =>
-          updateTeacherHourlyRatePhpInDb(teacherId, Number(hourlyRatePhp))
-        )
-      );
+      await bulkScheduleTeacherHourlyRateInDb({
+        teacherIds: preview.targetIds,
+        hourlyRatePhp: Number(hourlyRatePhp),
+        effectiveMonth: currentSalaryMonth(),
+        reason: "관리자 일괄 시급 수정",
+      });
+      const { warmTeacherProfileCache } = await import("@/lib/teachers/repository");
+      await warmTeacherProfileCache();
       return NextResponse.json({ ok: true, preview });
     }
 

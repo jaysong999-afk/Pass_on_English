@@ -10,6 +10,7 @@ import {
   ensureSalaryBootstrapped,
   ensureTeacherSalaryBootstrapped,
 } from "@/lib/lesson-scheduler-bootstrap";
+import { getPenaltyEventsForTeacherMonth } from "@/lib/teacher-payroll-penalty-event-store-sync";
 
 export async function GET(request: Request) {
   try {
@@ -32,6 +33,7 @@ export async function GET(request: Request) {
       }
       return NextResponse.json({
         statement,
+        penaltyEvents: getPenaltyEventsForTeacherMonth(teacherId, month),
         bonusPolicy: getBonusPolicy(),
         availableMonths: getSalaryMonthsForTeacher(teacherId),
       });

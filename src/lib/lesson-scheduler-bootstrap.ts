@@ -18,6 +18,7 @@ import { warmTeacherApplicationCache } from "@/lib/teacher-applications/reposito
 import { warmAdminReviewLogCache } from "@/lib/admin/admin-review-log-repository";
 import { warmAdminLessonOperationLogCache } from "@/lib/admin/admin-lesson-operation-log-repository";
 import { warmTeacherPayrollPenaltyCache } from "@/lib/teacher-payroll-penalty-repository";
+import { warmTeacherPayrollPenaltyEventCache } from "@/lib/teacher-payroll-penalty-event-repository";
 import { warmSalaryBonusPolicyCache } from "@/lib/teacher-salary-policy-repository";
 import { warmTeacherSalaryAdjustmentCache } from "@/lib/teacher-salary-adjustment-repository";
 import { warmTeacherStudentContextCache } from "@/lib/teacher-student-context-repository";
@@ -86,6 +87,7 @@ export async function ensureReadModelsBootstrapped(): Promise<void> {
     ensureReadModel("admin review logs", () => warmAdminReviewLogCache()),
     ensureReadModel("admin lesson operation logs", warmAdminLessonOperationLogCache),
     ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
+    ensureReadModel("teacher payroll penalty events", warmTeacherPayrollPenaltyEventCache),
     ensureReadModel("salary bonus policy", warmSalaryBonusPolicyCache),
     ensureReadModel("salary adjustments", warmTeacherSalaryAdjustmentCache),
     ensureReadModel("teacher student context", warmTeacherStudentContextCache),
@@ -164,6 +166,7 @@ export async function ensureAdminTeachersBootstrapped(): Promise<void> {
     ensureReadModel("student directory", warmStudentDirectoryCache),
     ensureReadModel("teacher applications", warmTeacherApplicationCache),
     ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
+    ensureReadModel("teacher payroll penalty events", warmTeacherPayrollPenaltyEventCache),
   ]);
 }
 
@@ -173,6 +176,7 @@ export async function ensureAdminSalaryBootstrapped(): Promise<void> {
     ensureLessonsBootstrapped(),
     ensureTeacherProfilesBootstrapped(),
     ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
+    ensureReadModel("teacher payroll penalty events", warmTeacherPayrollPenaltyEventCache),
     ensureReadModel("salary bonus policy", warmSalaryBonusPolicyCache),
     ensureReadModel("salary adjustments", warmTeacherSalaryAdjustmentCache),
   ]);
@@ -188,6 +192,7 @@ export async function ensureLessonOperationsBootstrapped(): Promise<void> {
     ensureReadModel("student directory", warmStudentDirectoryCache),
     ensureReadModel("admin lesson operation logs", warmAdminLessonOperationLogCache),
     ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
+    ensureReadModel("teacher payroll penalty events", warmTeacherPayrollPenaltyEventCache),
   ]);
 }
 

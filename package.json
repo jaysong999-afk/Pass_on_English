@@ -43,6 +43,7 @@
     "test:teacher-settings": "node scripts/test-teacher-settings.mjs",
     "test:teacher-data-minimization": "node scripts/test-teacher-data-minimization.mjs",
     "test:teacher-new-lessons": "node scripts/test-teacher-new-lesson-notices.mjs",
+    "test:teacher-compensation": "node --no-warnings --experimental-strip-types scripts/test-teacher-compensation-policy.mjs",
     "test:student-announcements": "node scripts/test-student-announcements.mjs",
     "test:student-settings": "node scripts/test-student-settings.mjs",
     "seed:e2e": "node scripts/apply-e2e-seed.mjs",

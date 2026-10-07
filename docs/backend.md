@@ -600,6 +600,7 @@ CRON_SECRET=
 | `AdminOperationsCenter`, `useAdminLessonModal` | admin/lessons*, bulk-reassign, operation-logs |
 | `AdminReviewCenter`, teacher application detail | admin/reviews, teacher/applications?id= |
 | `AdminTeacherSalaryOverview` | admin/teacher-salary (CSV, bulk rate) |
+| `TeacherCompensationEvaluation` | admin/teacher-salary?view=evaluation / compensation-detail — 평가 집계·심사·패널티·시급 이력 지연 조회 |
 | `AdminFaqManager`, `StudentFaqPage` | admin/faq*, faq |
 | `AdminDashboardSlogan` | admin/dashboard-settings |
 | teacher-profiles pages | teachers/profile* |
