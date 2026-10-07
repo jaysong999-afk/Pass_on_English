@@ -3,7 +3,7 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-10-06 (migration 045~048 및 앱 `33fc09e` 운영 배포·HTTPS 검증 완료)
+최종 검증일: 2026-10-07 (migration 049~050 운영 DB 적용·권한 검증 완료, 연계 앱은 아직 미배포)
 기준 브랜치: `main`
 검증된 운영 기준 커밋: `33fc09e` (`feat: add refund workflow and portal safeguards`)
 
@@ -22,7 +22,7 @@
 | 폐기 대상 Supabase project ref | `yldtimpsgumheiahcwwi` |
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
-| DB migration 최신 기준 | `048_atomic_enrollment_refunds.sql` — 2026-10-06 싱가포르 운영 DB에 `045`→`048` 순서로 단독 적용·객체·RLS·권한 검증 완료 |
+| DB migration 최신 기준 | `050_harden_student_announcement_privileges.sql` — 2026-10-07 싱가포르 운영 DB에 `049`→`050` 순서로 단독 적용·객체·RLS·권한 검증 완료 |
 | 현재 운영 이미지 / 릴리스 | `pass-on-english:33fc09e` / `/opt/pass-on-english/releases/33fc09e` |
 | 남은 검증 | 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관·환불의 실기기·실데이터 확인 필요 |
 
@@ -88,7 +88,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 ### Migration
 
 - migration 디렉터리: `supabase/migrations/`
-- 현재 운영 기준: 기존 `001`~`042` 적용 기준에 `043`을 2026-09-03, `044`를 2026-09-06, `045`~`048`을 2026-10-06 싱가포르 운영 DB에 각각 단독 적용. `024`는 운영 migration이 아니라 `supabase/seeds/`로 분리됐다.
+- 현재 운영 기준: 기존 `001`~`042` 적용 기준에 `043`을 2026-09-03, `044`를 2026-09-06, `045`~`048`을 2026-10-06, `049`~`050`을 2026-10-07 싱가포르 운영 DB에 각각 단독 적용. `024`는 운영 migration이 아니라 `supabase/seeds/`로 분리됐다.
 - `039_repair_auth_refresh_token_sequence.sql`: 이전 후 refresh token PK/sequence 충돌 복구.
 - `040_restore_auth_profile_provisioning.sql`: `auth.users` → `public.profiles` 트리거 복구와 누락 프로필 backfill.
 - `041_targeted_chat_inbox.sql`: 사용자 범위 채팅 inbox/thread 집계, 채팅 인덱스와 enrollment/admin 대화방 lifecycle trigger.
@@ -97,6 +97,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 - `043_chat_push_presence.sql`은 2026-09-03 운영 적용 완료. 채팅방 접속 lease와 저장된 메시지 기반 수신자 RPC를 추가한다. RLS·인덱스·역할별 권한·함수 소유자 등 12개 검사와 service-role 읽기 전용 함수 실행을 통과했다. 연계 앱 코드도 `35bb954`로 배포 완료했다.
 - `044_atomic_enrollment_transfer.sql`은 2026-09-06 운영 적용 완료. Availability·일정·계약·동시성 검증을 단일 RPC 트랜잭션으로 묶고, 수업 담당자 중복을 막는 DB trigger를 추가했다. `admin_transfer_enrollments`·`admin_transfer_batch` 존재, authenticated 실행 권한, anon 실행 거부, trigger 설치를 읽기 전용으로 확인했다. 앱 코드는 `dc7a084` 릴리스로 배포 완료했다.
 - `045_chat_delivery_consistency.sql`~`048_atomic_enrollment_refunds.sql`은 2026-10-06 운영 DB에 순서대로 단독 적용했다. 채팅 읽음 cursor·관리자 direct RPC, 강사 계좌 컬럼 제거, 환불 FAQ, 관리자 환불 원자 처리 객체를 확인했다. 환불 테이블 RLS와 authenticated/anon RPC 권한, 민감 컬럼 제거, 기존 확정 수강의 환불 기준 회차 backfill 누락 0건을 읽기 전용으로 검증했다.
+- `049_student_announcements.sql`과 `050_harden_student_announcement_privileges.sql`은 2026-10-07 운영 DB에 순서대로 단독 적용했다. 학생 포털 공지 테이블·기간/우선순위 인덱스·감사 trigger·관리자/학생 RLS 정책을 확인했고 Realtime publication에는 추가하지 않았다. 후속 migration 050으로 `authenticated`의 기본 DELETE 권한을 제거하고 SELECT·INSERT·UPDATE만 허용했으며, `anon` 접근 거부와 service role 권한을 읽기 전용으로 검증했다. 연계 앱 코드는 아직 운영에 배포하지 않았다.
 - 같은 날 운영 DB에 `supabase_migrations.schema_migrations`가 없음을 확인했다. 043은 Management API를 통한 해당 SQL 파일 단독 트랜잭션 실행으로 적용했고, CLI 이력을 임의로 생성하거나 과거 이력을 복구하지 않았다. `db push`/전체 migration 재적용 금지: 실제 객체와 과거 적용 기록을 대조한 이력 정합화가 먼저 필요하다.
 - 로컬 `supabase/.temp`의 구 프로젝트 연결을 발견하여 실행을 중단한 후, 공식 CLI `link`로 싱가포르 project ref 및 pooler를 재설정·확인했다. 향후 CLI 실행 전 숨김/ignored 파일의 project-ref도 반드시 확인한다.
 - 운영 DB 적용 전 대상 project ref를 출력 가능한 비밀이 아닌 URL/ref 수준에서 확인하고, 데이터 보존형 SQL인지 검토한다.
@@ -223,6 +224,13 @@ https://passonenglish.com/api/health     → 200
 - 외부 HTTPS에서 `/ko`, `/zh-CN`, `/ko/signup`, `/teacher`, `/admin`, `/api/health`, manifest, Service Worker, WeChat Pay·Alipay QR 자산이 모두 200이었다. 환불·관리자 메시지·채팅·Push 구독 API의 익명 요청은 401로 거부됐고, 새 한·중 랜딩 문구와 PWA notification click 경로를 확인했다.
 - 이전 `dc7a084` 이미지와 릴리스는 롤백용으로 보존했다. 실제 환불 확정은 실행하지 않았으며 승인된 테스트 수강에서 미리보기 후 별도 운영 확인이 필요하다.
 - `npm audit --omit=dev`는 moderate 1 / high 4 / critical 1을 보고했다. 배포 기능과 분리해 호환성 검토 후 의존성을 갱신해야 하며 이번 릴리스에서 `--force` 업데이트는 하지 않았다.
+
+2026-10-07 migration 049~050 학생 포털 공지 기반 적용 검증:
+
+- 적용 전 로컬 환경 URL과 CLI project ref가 모두 싱가포르 운영 프로젝트 `mvngtkoqjejvwygikvhi`인지 확인하고, migration 이력 테이블이 없는 운영 특성에 따라 `db push` 없이 두 SQL 파일만 번호 순서대로 실행했다.
+- 공지 테이블의 RLS 활성화, 관리자 작성·조회·수정 정책, 학생의 게시 기간 내 공지 조회 정책, 감사 trigger, 조회 인덱스 2개를 확인했다. 공지는 저빈도 갱신 데이터이므로 Supabase Realtime publication에는 추가하지 않았다.
+- 049 적용 직후 발견한 PostgreSQL 기본 권한의 `authenticated` DELETE 허용은 기존 파일을 고치지 않고 050 후속 migration으로 제거했다. 최종 상태는 `anon` 무권한, `authenticated` SELECT·INSERT·UPDATE만 허용, service role 관리 권한 유지다.
+- 앱 코드와 의존성 보강은 로컬 production build·경계 테스트를 통과했지만 아직 운영에 배포하지 않았다. 현재 운영 이미지는 계속 `33fc09e`다.
 
 ## 7. 테스트 기준
 

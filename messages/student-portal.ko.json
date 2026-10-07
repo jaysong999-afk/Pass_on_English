@@ -18,6 +18,26 @@
       "mobileNav": "학생 포털 메뉴",
       "logout": "로그아웃"
     },
+    "announcements": {
+      "title": "공지사항",
+      "subtitle": "휴강 일정과 수업 이용에 필요한 안내를 확인하세요.",
+      "importantNotice": "중요 공지",
+      "bellLabel": "공지사항 {count}건 보기",
+      "viewAll": "전체 보기",
+      "viewDetails": "자세히 보기",
+      "moreCount": "외 {count}건",
+      "expand": "내용 펼치기",
+      "collapse": "내용 접기",
+      "loading": "공지사항을 불러오는 중…",
+      "empty": "현재 안내 중인 공지사항이 없습니다.",
+      "loadError": "공지사항을 불러오지 못했습니다.",
+      "retry": "다시 시도",
+      "priority": {
+        "normal": "안내",
+        "important": "중요",
+        "urgent": "긴급"
+      }
+    },
     "settings": {
       "title": "내 정보 관리",
       "loading": "내 정보를 불러오는 중…",

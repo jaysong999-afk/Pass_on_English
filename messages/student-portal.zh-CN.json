@@ -18,6 +18,26 @@
       "mobileNav": "学生门户菜单",
       "logout": "退出登录"
     },
+    "announcements": {
+      "title": "通知公告",
+      "subtitle": "请查看停课安排及课程使用相关的重要说明。",
+      "importantNotice": "重要通知",
+      "bellLabel": "查看 {count} 条通知",
+      "viewAll": "查看全部",
+      "viewDetails": "查看详情",
+      "moreCount": "另有 {count} 条",
+      "expand": "展开内容",
+      "collapse": "收起内容",
+      "loading": "正在加载通知…",
+      "empty": "目前没有正在显示的通知。",
+      "loadError": "无法加载通知。",
+      "retry": "重试",
+      "priority": {
+        "normal": "通知",
+        "important": "重要",
+        "urgent": "紧急"
+      }
+    },
     "settings": {
       "title": "个人信息管理",
       "loading": "正在加载个人信息…",

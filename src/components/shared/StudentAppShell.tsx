@@ -18,6 +18,10 @@ import { useActiveLearner, useActiveLearnerDisplayName } from "@/contexts/Active
 import { LocaleSwitcher } from "@/components/shared/LocaleSwitcher";
 import { LogoutButton } from "@/components/shared/LogoutButton";
 import { StudentSwitcher } from "@/components/student/StudentSwitcher";
+import {
+  StudentAnnouncementBell,
+  StudentAnnouncementStrip,
+} from "@/components/student/StudentAnnouncements";
 import { studentBasePath } from "@/lib/student-paths";
 import type { Locale } from "@/lib/i18n/config";
 import { PortalNavigation, type PortalNavItem } from "@/components/shared/PortalNavigation";
@@ -89,6 +93,7 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
         label={tShell("logout")}
         className="hidden text-white/90 hover:bg-white/10 hover:text-white sm:inline-flex"
       />
+      <StudentAnnouncementBell />
       <ChatNotificationBell
         role="student"
         mediaQuery="(min-width: 768px)"
@@ -138,6 +143,7 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
                 compact
                 className="bg-white/10 p-0.5 [&_button]:text-white/90 [&_button.bg-white]:text-brand-700"
               />
+              <StudentAnnouncementBell />
               <ChatNotificationBell
                 role="student"
                 mediaQuery="(max-width: 767px)"
@@ -169,6 +175,7 @@ export function StudentAppShell({ children }: { children: React.ReactNode }) {
         />
 
         <main className="min-w-0 flex-1 pb-24 md:pb-6">
+          <StudentAnnouncementStrip />
           {account && <PwaInstallBanner portal locale={locale} />}
           <PushSubscribeProvider role="student" userId={account?.id} locale={locale} />
           {children}

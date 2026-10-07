@@ -18,6 +18,7 @@ import { getStudentTimezone } from "@/lib/availability/timezone";
 import type { Locale } from "@/lib/i18n/config";
 import { formatDate, formatLessonTimeRange } from "@/lib/utils";
 import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
+import { StudentAnnouncementCard } from "@/components/student/StudentAnnouncements";
 import type { Lesson, LessonRescheduleRequest, StudentEnrollment } from "@/types";
 
 export function MyLessonsHub() {
@@ -99,6 +100,8 @@ export function MyLessonsHub() {
         <h2 className="text-xl font-bold text-ink md:text-2xl">{t("title")}</h2>
         <p className="mt-1 text-sm text-ink-muted">{t("subtitle")}</p>
       </div>
+
+      <StudentAnnouncementCard />
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-600 to-brand-700 p-4 text-white shadow-md">

@@ -43,6 +43,7 @@
     "test:teacher-settings": "node scripts/test-teacher-settings.mjs",
     "test:teacher-data-minimization": "node scripts/test-teacher-data-minimization.mjs",
     "test:teacher-new-lessons": "node scripts/test-teacher-new-lesson-notices.mjs",
+    "test:student-announcements": "node scripts/test-student-announcements.mjs",
     "test:student-settings": "node scripts/test-student-settings.mjs",
     "seed:e2e": "node scripts/apply-e2e-seed.mjs",
     "apply:rls": "node scripts/apply-rls.mjs",
@@ -53,7 +54,6 @@
     "migrate:avatar-storage": "node --env-file=.env.local scripts/migrate-avatar-data-urls.mjs"
   },
   "dependencies": {
-    "sharp": "^0.34.5",
     "@radix-ui/react-avatar": "^1.1.3",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-slot": "^1.1.2",
@@ -63,11 +63,12 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.479.0",
-    "next": "^15.2.1",
-    "next-intl": "^3.26.5",
+    "next": "15.5.27",
+    "next-intl": "4.14.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^2.15.1",
+    "sharp": "0.35.5",
     "tailwind-merge": "^3.0.2",
     "web-push": "^3.6.7"
   },
@@ -79,7 +80,7 @@
     "@types/react-dom": "^19.0.4",
     "@types/web-push": "^3.6.4",
     "eslint": "^9.22.0",
-    "eslint-config-next": "^15.2.1",
+    "eslint-config-next": "15.5.27",
     "pg": "^8.23.0",
     "tailwindcss": "^4.0.12",
     "typescript": "^5.8.2"

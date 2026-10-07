@@ -1,21 +1,22 @@
 "use client";
 
 import { Suspense } from "react";
-import { Headphones, Megaphone, Radio } from "lucide-react";
+import { Headphones, Megaphone, Radio, ScrollText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BroadcastPanel } from "@/components/admin/messages/BroadcastPanel";
 import { CsManagerPanel } from "@/components/admin/messages/CsManagerPanel";
 import { PushNotificationsPanel } from "@/components/admin/messages/PushNotificationsPanel";
+import { StudentAnnouncementsPanel } from "@/components/admin/messages/StudentAnnouncementsPanel";
 
 export function AdminMessagesHub() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50/80 to-white px-5 py-4">
         <div>
-          <h1 className="text-lg font-bold text-ink">메시지 · CS 센터</h1>
+          <h1 className="text-lg font-bold text-ink">공지 · 메시지 센터</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-            1:1 CS, 채팅 모니터링, 단체 발송, Web Push를 한곳에서 관리합니다.
+            학생 공지, 1:1 CS, 단체 발송, Web Push를 한곳에서 관리합니다.
           </p>
         </div>
         <Badge variant="secondary" className="shrink-0">
@@ -23,8 +24,12 @@ export function AdminMessagesHub() {
         </Badge>
       </div>
 
-      <Tabs defaultValue="cs">
+      <Tabs defaultValue="notices">
         <TabsList className="h-auto flex-wrap gap-1 p-1">
+          <TabsTrigger value="notices" className="gap-1.5 px-4 py-2">
+            <ScrollText className="h-4 w-4" />
+            학생 공지
+          </TabsTrigger>
           <TabsTrigger value="cs" className="gap-1.5 px-4 py-2">
             <Headphones className="h-4 w-4" />
             CS · 1:1
@@ -38,6 +43,10 @@ export function AdminMessagesHub() {
             Push · 알림
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="notices">
+          <StudentAnnouncementsPanel />
+        </TabsContent>
 
         <TabsContent value="cs">
           <Suspense

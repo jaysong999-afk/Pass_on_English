@@ -69,6 +69,17 @@ sudo APP_IMAGE_TAG=24b2111 docker compose --env-file .env.production up -d --no-
 [PostCSS](https://github.com/advisories/GHSA-qx2v-qp2m-jg93),
 [sharp/libvips](https://github.com/advisories/GHSA-f88m-g3jw-g9cj).
 
+2026-10-06 재감사에서 새 Next.js·sharp 보안 공지가 반영되어 기존 운영 잠금 파일은
+critical 1/high 4/moderate 1로 집계됐다. 로컬 작업본은 `next 15.5.27`,
+`eslint-config-next 15.5.27`, `sharp 0.35.5`, `next-intl 4.14.9`로 고정하고
+전이 의존성 `nanoid 3.3.20`, `source-map-js 1.2.2`로 갱신했다.
+`npm audit --omit=dev`는 critical 0/high 1/moderate 1로 감소했으며 남은 두 항목은
+Next.js 15.5.27이 내부에서 정확히 요구하는 `postcss 8.4.31` 한 계보의 중복 집계다.
+이 앱은 외부 CSS를 런타임에 PostCSS로 처리하지 않고 production standalone에도
+PostCSS가 포함되지 않으므로, 검증되지 않은 npm override나 Next 16 강제 변경은 적용하지 않았다.
+Next 15 지원선에서 내부 PostCSS가 갱신되면 우선 반영하고, 그 전에는 신뢰된 저장소 CSS만
+빌드 입력으로 사용한다. 이 의존성 변경은 아직 운영 배포되지 않았다.
+
 ## 모바일 PWA 설치 UX 운영 배포 기록 (2026-09-05)
 
 - 코드 커밋 `762a2c4`와 문서 반영 커밋 `6187a80ac01c3ba3a6abf09f04cf6e0e67f8c223`을 포함한 아카이브를 `/opt/pass-on-english/releases/6187a80`에 배포했다.

@@ -1,4 +1,5 @@
 export const AVATAR_ACCEPT = "image/jpeg,image/png,image/webp";
+const AVATAR_ALLOWED_TYPES = new Set(AVATAR_ACCEPT.split(","));
 export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 export const AVATAR_OUTPUT_SIZE = 512;
 export const AVATAR_VIEWPORT_SIZE = 280;
@@ -13,7 +14,7 @@ export interface AvatarCropTransform {
 }
 
 export function validateAvatarFile(file: File): string | null {
-  if (!file.type.startsWith("image/")) {
+  if (!AVATAR_ALLOWED_TYPES.has(file.type)) {
     return "Please choose a JPEG, PNG, or WebP image.";
   }
   if (file.size > AVATAR_MAX_BYTES) {
