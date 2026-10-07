@@ -18,12 +18,12 @@ export function getAdminSupportHref(role: import("@/lib/chat/repository").Portal
     case "teacher":
       return "/teacher/chat/support";
     case "admin":
-      return "/admin/messages";
+      return "/admin/messages?tab=cs&view=direct";
   }
 }
 
 export function getAdminDirectThreadHref(threadId: string) {
-  return `/admin/messages?thread=${encodeURIComponent(threadId)}`;
+  return `/admin/messages?tab=cs&view=direct&thread=${encodeURIComponent(threadId)}`;
 }
 
 export function getChatListHref(role: import("@/lib/chat/repository").PortalRole, locale = "ko") {
@@ -33,6 +33,6 @@ export function getChatListHref(role: import("@/lib/chat/repository").PortalRole
     case "teacher":
       return "/teacher/chat";
     case "admin":
-      return "/admin/messages";
+      return "/admin/messages?tab=cs&view=direct";
   }
 }

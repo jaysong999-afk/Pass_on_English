@@ -1,10 +1,8 @@
 "use client";
 
-import { useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { ChatThread } from "@/components/shared/ChatThread";
-import { notifyChatInboxChanged } from "@/lib/chat-inbox-events";
 import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
 import { useChatRoom } from "@/hooks/useChatRoom";
 
@@ -14,8 +12,7 @@ export default function StudentChatRoomPage() {
   const locale = useLocale();
   const roomId = params.roomId as string;
   const { account, activeLearnerId } = useActiveLearner();
-  const onRead = useCallback(() => notifyChatInboxChanged(), []);
-  const room = useChatRoom({ roomId, role: "student", enabled: Boolean(activeLearnerId), readEnabled: true, studentId: activeLearnerId ?? undefined, onRead });
+  const room = useChatRoom({ roomId, role: "student", enabled: Boolean(activeLearnerId), studentId: activeLearnerId ?? undefined });
 
   return (
     <div className="space-y-4">
@@ -30,6 +27,7 @@ export default function StudentChatRoomPage() {
         studentId={activeLearnerId ?? undefined}
         currentUserId={account?.id}
         placeholder={t("messagePlaceholder")}
+        locale={locale}
         closedAt={room?.closedAt}
         closedMessage={locale === "zh-CN"
           ? "课程已结束。您仍可查看之前的消息，如需帮助请联系管理员客服。"

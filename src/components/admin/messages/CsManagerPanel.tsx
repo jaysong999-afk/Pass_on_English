@@ -1,17 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Eye,
   MessageSquarePlus,
   MessagesSquare,
   Search,
-  Send,
   UserRound,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/shared/PersonAvatar";
+import { ChatComposer } from "@/components/shared/ChatComposer";
+import { ChatDateDivider, formatChatTime, shouldShowChatDate } from "@/components/shared/ChatTimeline";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +24,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChatMonitorThread } from "@/components/admin/messages/ChatMonitorThread";
 import type { QuickReplyTemplate } from "@/lib/admin/messages/types";
@@ -44,8 +44,15 @@ import { notifyChatInboxChanged } from "@/lib/chat-inbox-events";
 import { fetchAdminDirectInbox } from "@/lib/admin-direct-inbox-client";
 import { fetchChatInbox } from "@/lib/chat-inbox-client";
 import type { ChatRoom } from "@/types";
+import {
+  addChatCursor,
+  mergeChatMessagePages,
+  type ChatMessageCursor,
+  type ChatMessagePageInfo,
+} from "@/lib/chat/message-page";
 
 type CsTab = "monitor" | "direct";
+const EMPTY_PAGE: ChatMessagePageInfo = { hasMore: false, nextCursor: null };
 
 interface NewDirectTarget {
   id: string;
@@ -98,8 +105,12 @@ function QuickRepliesBar({
 
 export function CsManagerPanel() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [quickReplyTemplates, setQuickReplyTemplates] = useState<QuickReplyTemplate[]>([]);
-  const [csTab, setCsTab] = useState<CsTab>("monitor");
+  const [csTab, setCsTab] = useState<CsTab>(() =>
+    searchParams.get("view") === "direct" || searchParams.has("thread") ? "direct" : "monitor"
+  );
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [roomsLoading, setRoomsLoading] = useState(true);
   const [roomSearch, setRoomSearch] = useState("");
@@ -107,9 +118,11 @@ export function CsManagerPanel() {
 
   const [directThreads, setDirectThreads] = useState<DirectThreadPreview[]>([]);
   const [directMessages, setDirectMessages] = useState<Record<string, DirectMessage[]>>({});
+  const [directPages, setDirectPages] = useState<Record<string, ChatMessagePageInfo>>({});
   const [selectedDirectId, setSelectedDirectId] = useState<string | null>(null);
   const [directLoading, setDirectLoading] = useState(true);
   const [directSending, setDirectSending] = useState(false);
+  const [directOlderLoading, setDirectOlderLoading] = useState(false);
   const [directInput, setDirectInput] = useState("");
   const [directSearch, setDirectSearch] = useState("");
 
@@ -120,6 +133,17 @@ export function CsManagerPanel() {
   const [targetsLoading, setTargetsLoading] = useState(false);
 
   const [toast, setToast] = useState("");
+  const directPrependScrollHeight = useRef<number | null>(null);
+  const directMessageRequest = useRef<string | null>(null);
+
+  const updateCsLocation = useCallback((view: CsTab, threadId?: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "cs");
+    params.set("view", view);
+    if (view === "direct" && threadId) params.set("thread", threadId);
+    else params.delete("thread");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
 
   const loadDirectThreads = useCallback(async () => {
     setDirectLoading(true);
@@ -127,7 +151,11 @@ export function CsManagerPanel() {
       const data = await fetchAdminDirectInbox();
       const threads = data.threads;
       setDirectThreads(threads);
-      setSelectedDirectId((current) => current || threads[0]?.id || "");
+      setSelectedDirectId((current) =>
+        current && threads.some((thread) => thread.id === current)
+          ? current
+          : threads[0]?.id ?? null
+      );
     } catch {
       setDirectThreads([]);
     } finally {
@@ -135,21 +163,43 @@ export function CsManagerPanel() {
     }
   }, []);
 
-  const loadDirectMessages = useCallback(async (threadId: string) => {
-    const res = await fetch(`/api/admin/messages/direct/${threadId}`);
-    const data = await res.json();
-    setDirectMessages((prev) => ({
-      ...prev,
-      [threadId]: dedupeDirectMessages((data.messages ?? []) as DirectMessage[]),
-    }));
-    setDirectThreads((threads) =>
-      threads.map((thread) =>
-        thread.id === threadId ? { ...thread, unread: 0 } : thread
-      )
-    );
-    void fetch(`/api/admin/messages/direct/${threadId}`, { method: "PATCH" }).then(() =>
-      notifyChatInboxChanged()
-    );
+  const loadDirectMessages = useCallback(async (
+    threadId: string,
+    cursor: ChatMessageCursor | null = null
+  ) => {
+    const requestKey = `${threadId}:${cursor?.id ?? "latest"}`;
+    if (directMessageRequest.current?.startsWith(`${threadId}:`)) return;
+    directMessageRequest.current = requestKey;
+    if (cursor) {
+      setDirectOlderLoading(true);
+    }
+    try {
+      const res = await fetch(addChatCursor(`/api/admin/messages/direct/${threadId}`, cursor));
+      if (!res.ok) return;
+      const data = await res.json();
+      const loaded = dedupeDirectMessages((data.messages ?? []) as DirectMessage[]);
+      setDirectMessages((previous) => ({
+        ...previous,
+        [threadId]: mergeChatMessagePages(previous[threadId] ?? [], loaded),
+      }));
+      setDirectPages((previous) => cursor || !previous[threadId]
+        ? { ...previous, [threadId]: data.page ?? EMPTY_PAGE }
+        : previous
+      );
+      if (!cursor) {
+        setDirectThreads((threads) =>
+          threads.map((thread) =>
+            thread.id === threadId ? { ...thread, unread: 0 } : thread
+          )
+        );
+        void fetch(`/api/admin/messages/direct/${threadId}`, { method: "PATCH" }).then(() =>
+          notifyChatInboxChanged()
+        );
+      }
+    } finally {
+      if (directMessageRequest.current === requestKey) directMessageRequest.current = null;
+      if (cursor) setDirectOlderLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -157,7 +207,9 @@ export function CsManagerPanel() {
     if (threadId) {
       setSelectedDirectId(threadId);
       setCsTab("direct");
+      return;
     }
+    setCsTab(searchParams.get("view") === "direct" ? "direct" : "monitor");
   }, [searchParams]);
 
   useEffect(() => {
@@ -169,16 +221,19 @@ export function CsManagerPanel() {
   }, [csTab, selectedDirectId]);
 
   useEffect(() => {
-    void loadDirectThreads();
     void fetch("/api/admin/messages/quick-replies")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => setQuickReplyTemplates(data?.templates ?? []))
       .catch(() => setQuickReplyTemplates([]));
-  }, [loadDirectThreads]);
+  }, []);
 
   useEffect(() => {
-    if (selectedDirectId) void loadDirectMessages(selectedDirectId);
-  }, [selectedDirectId, loadDirectMessages]);
+    if (csTab === "direct") void loadDirectThreads();
+  }, [csTab, loadDirectThreads]);
+
+  useEffect(() => {
+    if (csTab === "direct" && selectedDirectId) void loadDirectMessages(selectedDirectId);
+  }, [csTab, selectedDirectId, loadDirectMessages]);
 
   const loadRooms = useCallback(async () => {
     setRoomsLoading(true);
@@ -195,11 +250,11 @@ export function CsManagerPanel() {
   }, []);
 
   useEffect(() => {
-    void loadRooms();
-  }, [loadRooms]);
+    if (csTab === "monitor") void loadRooms();
+  }, [csTab, loadRooms]);
 
-  useChatInboxSync(loadDirectThreads, true, "admin-direct");
-  useChatInboxSync(loadRooms, true, "chat");
+  useChatInboxSync(loadDirectThreads, csTab === "direct", "admin-direct");
+  useChatInboxSync(loadRooms, csTab === "monitor", "chat");
 
   const filteredRooms = useMemo(() => {
     const q = roomSearch.trim().toLowerCase();
@@ -228,6 +283,9 @@ export function CsManagerPanel() {
     if (!selectedDirectId) return [];
     return dedupeDirectMessages(directMessages[selectedDirectId] ?? []);
   }, [selectedDirectId, directMessages]);
+  const activeDirectPage = selectedDirectId
+    ? directPages[selectedDirectId] ?? EMPTY_PAGE
+    : EMPTY_PAGE;
 
   const {
     scrollRef: directScrollRef,
@@ -238,7 +296,34 @@ export function CsManagerPanel() {
     itemCount: activeDirectMessages.length,
   });
 
-  useAdminDirectRealtime(selectedDirectId ?? undefined, (message) => {
+  useLayoutEffect(() => {
+    const previousHeight = directPrependScrollHeight.current;
+    const element = directScrollRef.current;
+    if (previousHeight === null || !element) return;
+    element.scrollTop += element.scrollHeight - previousHeight;
+    directPrependScrollHeight.current = null;
+  }, [activeDirectMessages.length, directScrollRef]);
+
+  function handleDirectMessageScroll() {
+    handleDirectScroll();
+    const element = directScrollRef.current;
+    if (
+      element &&
+      element.scrollTop < 72 &&
+      selectedDirectId &&
+      activeDirectPage.nextCursor &&
+      !directOlderLoading
+    ) {
+      loadOlderDirectMessages(selectedDirectId, activeDirectPage.nextCursor);
+    }
+  }
+
+  function loadOlderDirectMessages(threadId: string, cursor: ChatMessageCursor) {
+    directPrependScrollHeight.current = directScrollRef.current?.scrollHeight ?? null;
+    void loadDirectMessages(threadId, cursor);
+  }
+
+  useAdminDirectRealtime(csTab === "direct" ? selectedDirectId ?? undefined : undefined, (message) => {
     if (!selectedDirectId) return;
     setDirectMessages((prev) => ({
       ...prev,
@@ -340,6 +425,7 @@ export function CsManagerPanel() {
     if (existing) {
       setSelectedDirectId(existing.id);
       setCsTab("direct");
+      updateCsLocation("direct", existing.id);
       setNewDirectOpen(false);
       return;
     }
@@ -361,14 +447,15 @@ export function CsManagerPanel() {
     const thread = data.thread as DirectThreadPreview;
     setDirectThreads((prev) => [thread, ...prev.filter((t) => t.id !== thread.id)]);
     setDirectMessages((prev) => ({ ...prev, [thread.id]: [] }));
+    setDirectPages((prev) => ({ ...prev, [thread.id]: EMPTY_PAGE }));
     setSelectedDirectId(thread.id);
     setCsTab("direct");
+    updateCsLocation("direct", thread.id);
     setNewDirectOpen(false);
     showToast(`${target.displayName}님과 1:1 대화를 열었습니다.`);
   }
 
-  async function sendDirectMessage(e: React.FormEvent) {
-    e.preventDefault();
+  async function sendDirectMessage() {
     if (!selectedDirectId || !directInput.trim() || directSending) return;
 
     setDirectSending(true);
@@ -416,7 +503,14 @@ export function CsManagerPanel() {
         </div>
       )}
 
-      <Tabs value={csTab} onValueChange={(v) => setCsTab(v as CsTab)}>
+      <Tabs
+        value={csTab}
+        onValueChange={(value) => {
+          const next = value as CsTab;
+          setCsTab(next);
+          updateCsLocation(next, next === "direct" ? selectedDirectId : null);
+        }}
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <TabsList>
             <TabsTrigger value="monitor" className="gap-1.5">
@@ -552,7 +646,10 @@ export function CsManagerPanel() {
                   <button
                     key={thread.id}
                     type="button"
-                    onClick={() => setSelectedDirectId(thread.id)}
+                    onClick={() => {
+                      setSelectedDirectId(thread.id);
+                      updateCsLocation("direct", thread.id);
+                    }}
                     className={cn(
                       "flex w-full gap-3 border-b px-3 py-3 text-left transition hover:bg-gray-50",
                       selectedDirectId === thread.id && "bg-violet-50"
@@ -597,63 +694,59 @@ export function CsManagerPanel() {
                   </div>
                   <div
                     ref={directScrollRef}
-                    onScroll={handleDirectScroll}
+                    onScroll={handleDirectMessageScroll}
                     className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
                   >
+                    {activeDirectPage.hasMore && (
+                      <div className="text-center">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={directOlderLoading}
+                          onClick={() => activeDirectPage.nextCursor && selectedDirectId && loadOlderDirectMessages(selectedDirectId, activeDirectPage.nextCursor)}
+                        >
+                          {directOlderLoading ? "불러오는 중..." : "이전 메시지 보기"}
+                        </Button>
+                      </div>
+                    )}
                     {activeDirectMessages.length === 0 ? (
                       <p className="text-center text-sm text-gray-500">
                         대화를 시작해 보세요.
                       </p>
                     ) : (
-                      activeDirectMessages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className={cn(
-                            "flex",
-                            msg.senderRole === "admin" ? "justify-end" : "justify-start"
+                      activeDirectMessages.map((msg, index) => (
+                        <Fragment key={msg.id}>
+                          {shouldShowChatDate(activeDirectMessages, index) && (
+                            <ChatDateDivider value={msg.createdAt} locale="ko-KR" />
                           )}
-                        >
-                          <div
-                            className={cn(
-                              "max-w-[78%] rounded-2xl px-4 py-2.5 text-sm",
-                              msg.senderRole === "admin"
-                                ? "rounded-br-md bg-violet-600 text-white"
-                                : "rounded-bl-md border bg-gray-50"
-                            )}
-                          >
-                            {msg.body}
-                            <p className="mt-1 text-[10px] opacity-60">
-                              {new Date(msg.createdAt).toLocaleTimeString("ko-KR", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </p>
+                          <div className={cn("flex", msg.senderRole === "admin" ? "justify-end" : "justify-start")}>
+                            <div
+                              className={cn(
+                                "max-w-[78%] rounded-2xl px-4 py-2.5 text-sm",
+                                msg.senderRole === "admin"
+                                  ? "rounded-br-md bg-violet-600 text-white"
+                                  : "rounded-bl-md border bg-gray-50"
+                              )}
+                            >
+                              <p className="whitespace-pre-wrap break-words">{msg.body}</p>
+                              <p className="mt-1 text-[10px] opacity-60">
+                                {formatChatTime(msg.createdAt, "ko-KR")}
+                              </p>
+                            </div>
                           </div>
-                        </div>
+                        </Fragment>
                       ))
                     )}
                   </div>
-                  <form
+                  <ChatComposer
+                    value={directInput}
+                    onChange={setDirectInput}
                     onSubmit={sendDirectMessage}
-                    className="flex items-end gap-2 border-t bg-gray-50/80 p-3"
-                  >
-                    <Textarea
-                      value={directInput}
-                      onChange={(e) => setDirectInput(e.target.value)}
-                      placeholder="관리자 메시지 입력..."
-                      rows={2}
-                      className="min-h-[44px] flex-1 resize-none"
-                      disabled={directSending}
-                    />
-                    <Button
-                      type="submit"
-                      size="icon"
-                      className="h-11 w-11 shrink-0 rounded-full"
-                      disabled={directSending || !directInput.trim()}
-                    >
-                      <Send className="h-5 w-5" />
-                    </Button>
-                  </form>
+                    placeholder="관리자 메시지 입력..."
+                    disabled={directSending}
+                    locale="ko-KR"
+                  />
                 </>
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 text-gray-500">

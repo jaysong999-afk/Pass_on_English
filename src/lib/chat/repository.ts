@@ -23,6 +23,11 @@ import {
   setChatCache,
   setChatMessagesForRoom,
 } from "@/lib/chat/chat-cache";
+import {
+  CHAT_MESSAGE_PAGE_SIZE,
+  type ChatMessageCursor,
+  type ChatMessagePage,
+} from "@/lib/chat/message-page";
 
 export type PortalRole = "student" | "teacher" | "admin";
 
@@ -569,29 +574,71 @@ export async function markChatRoomReadInDb(
   void viewerRole; // Authorization and the viewer role are derived inside the RPC.
 }
 
-export async function reloadChatMessagesInDb(roomId: string): Promise<ChatMessage[]> {
+function isMissingPaginatedChatRpc(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === "PGRST202" || error?.message?.includes("get_chat_thread_messages_page") === true;
+}
+
+function isBeforeCursor(row: ChatThreadMessageRow, cursor: ChatMessageCursor): boolean {
+  return row.created_at < cursor.createdAt ||
+    (row.created_at === cursor.createdAt && row.id < cursor.id);
+}
+
+export async function reloadChatMessagesInDb(
+  roomId: string,
+  cursor: ChatMessageCursor | null = null
+): Promise<ChatMessagePage<ChatMessage>> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_chat_thread_messages", {
+  let { data, error } = await supabase.rpc("get_chat_thread_messages_page", {
     p_room_id: roomId,
+    p_before_created_at: cursor?.createdAt ?? null,
+    p_before_id: cursor?.id ?? null,
+    p_limit: CHAT_MESSAGE_PAGE_SIZE + 1,
   });
+
+  if (isMissingPaginatedChatRpc(error)) {
+    const legacy = await supabase.rpc("get_chat_thread_messages", {
+      p_room_id: roomId,
+    });
+    data = legacy.data;
+    error = legacy.error;
+    if (!error) {
+      data = ((data ?? []) as ChatThreadMessageRow[])
+        .filter((row) => !cursor || isBeforeCursor(row, cursor))
+        .sort((left, right) =>
+          right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id)
+        )
+        .slice(0, CHAT_MESSAGE_PAGE_SIZE + 1);
+    }
+  }
 
   if (error) {
     throw new Error(`chat_messages_fetch_failed: ${error.message}`);
   }
 
   const rows = (data ?? []) as ChatThreadMessageRow[];
-  const messages = rows.map((row) =>
+  const hasMore = rows.length > CHAT_MESSAGE_PAGE_SIZE;
+  const pageRows = rows.slice(0, CHAT_MESSAGE_PAGE_SIZE);
+  const messages = pageRows.map((row) =>
     rowToMessage(row, {
       name: row.sender_name,
       avatarUrl: row.sender_avatar_url?.trim() || undefined,
     })
-  );
-  const meta = rows.map((row) => ({
+  ).reverse();
+  const meta = pageRows.map((row) => ({
     id: row.id,
     senderRole: row.sender_role,
     readAt: row.read_at,
-  }));
+  })).reverse();
 
-  setChatMessagesForRoom(roomId, messages, meta);
-  return messages.map((m) => ({ ...m }));
+  if (!cursor) setChatMessagesForRoom(roomId, messages, meta);
+  const oldest = pageRows.at(-1);
+  return {
+    messages: messages.map((message) => ({ ...message })),
+    page: {
+      hasMore,
+      nextCursor: hasMore && oldest
+        ? { createdAt: oldest.created_at, id: oldest.id }
+        : null,
+    },
+  };
 }

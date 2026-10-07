@@ -31,6 +31,11 @@ import {
   ADMIN_SENDER_DISPLAY_NAME,
   resolveAdminProfileIdInDb,
 } from "@/lib/admin/resolve-admin-sender";
+import {
+  CHAT_MESSAGE_PAGE_SIZE,
+  type ChatMessageCursor,
+  type ChatMessagePage,
+} from "@/lib/chat/message-page";
 
 interface DirectThreadRow {
   id: string;
@@ -991,18 +996,68 @@ export async function updateSystemNotificationRulesInDb(
   return rules;
 }
 
+function isMissingPaginatedDirectRpc(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === "PGRST202" ||
+    error?.message?.includes("get_admin_direct_thread_messages_page") === true;
+}
+
+function directMessageIsBeforeCursor(
+  row: DirectMessageRow,
+  cursor: ChatMessageCursor
+): boolean {
+  return row.created_at < cursor.createdAt ||
+    (row.created_at === cursor.createdAt && row.id < cursor.id);
+}
+
 export async function reloadAdminDirectMessagesInDb(
-  threadId: string
-): Promise<DirectMessage[]> {
+  threadId: string,
+  cursor: ChatMessageCursor | null = null
+): Promise<ChatMessagePage<DirectMessage>> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc(
-    "get_admin_direct_thread_messages",
-    { p_thread_id: threadId }
+  let { data, error } = await supabase.rpc(
+    "get_admin_direct_thread_messages_page",
+    {
+      p_thread_id: threadId,
+      p_before_created_at: cursor?.createdAt ?? null,
+      p_before_id: cursor?.id ?? null,
+      p_limit: CHAT_MESSAGE_PAGE_SIZE + 1,
+    }
   );
+
+  if (isMissingPaginatedDirectRpc(error)) {
+    const legacy = await supabase.rpc(
+      "get_admin_direct_thread_messages",
+      { p_thread_id: threadId }
+    );
+    data = legacy.data;
+    error = legacy.error;
+    if (!error) {
+      data = ((data ?? []) as DirectMessageRow[])
+        .filter((row) => !cursor || directMessageIsBeforeCursor(row, cursor))
+        .sort((left, right) =>
+          right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id)
+        )
+        .slice(0, CHAT_MESSAGE_PAGE_SIZE + 1);
+    }
+  }
+
   if (error) {
     throw new Error(`admin_direct_messages_fetch_failed: ${error.message}`);
   }
-  return ((data ?? []) as DirectMessageRow[]).map(rowToDirectMessage);
+
+  const rows = (data ?? []) as DirectMessageRow[];
+  const hasMore = rows.length > CHAT_MESSAGE_PAGE_SIZE;
+  const pageRows = rows.slice(0, CHAT_MESSAGE_PAGE_SIZE);
+  const oldest = pageRows.at(-1);
+  return {
+    messages: pageRows.map(rowToDirectMessage).reverse(),
+    page: {
+      hasMore,
+      nextCursor: hasMore && oldest
+        ? { createdAt: oldest.created_at, id: oldest.id }
+        : null,
+    },
+  };
 }
 
 export async function getAdminDirectInboxInDb(): Promise<{
@@ -1056,14 +1111,24 @@ async function buildRecipientThreadPreview(
   };
 }
 
-export async function getAdminDirectInboxForProfileInDb(profileId: string): Promise<{
+export async function getAdminDirectInboxForProfileInDb(
+  profileId: string,
+  cursor: ChatMessageCursor | null = null
+): Promise<{
   thread: DirectThreadPreview | null;
   messages: DirectMessage[];
+  page: ChatMessagePage<DirectMessage>["page"];
 }> {
   const thread = await getAdminDirectThreadForProfileInDb(profileId);
-  if (!thread) return { thread: null, messages: [] };
-  const messages = await reloadAdminDirectMessagesInDb(thread.id);
-  return { thread, messages };
+  if (!thread) {
+    return {
+      thread: null,
+      messages: [],
+      page: { hasMore: false, nextCursor: null },
+    };
+  }
+  const result = await reloadAdminDirectMessagesInDb(thread.id, cursor);
+  return { thread, ...result };
 }
 
 export async function getAdminDirectThreadForProfileInDb(

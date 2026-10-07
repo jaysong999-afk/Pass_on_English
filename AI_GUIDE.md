@@ -3,7 +3,7 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-10-07 (migration 049~051 운영 DB 적용·권한 검증 완료, 연계 앱은 아직 미배포)
+최종 검증일: 2026-10-07 (migration 049~052 운영 DB 적용·권한 검증 완료, 연계 앱은 아직 미배포)
 기준 브랜치: `main`
 검증된 운영 기준 커밋: `33fc09e` (`feat: add refund workflow and portal safeguards`)
 
@@ -22,7 +22,7 @@
 | 폐기 대상 Supabase project ref | `yldtimpsgumheiahcwwi` |
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
-| DB migration 최신 기준 | `051_teacher_compensation_governance.sql` — 2026-10-07 싱가포르 운영 DB에 단독 트랜잭션 적용·객체·RLS·권한·backfill 검증 완료 |
+| DB migration 최신 기준 | `052_paginated_chat_history.sql` — 2026-10-07 싱가포르 운영 DB에 단독 트랜잭션 적용·RPC·인덱스·역할별 실행 권한 검증 완료 |
 | 현재 운영 이미지 / 릴리스 | `pass-on-english:33fc09e` / `/opt/pass-on-english/releases/33fc09e` |
 | 남은 검증 | 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관·환불의 실기기·실데이터 확인 필요 |
 
@@ -88,7 +88,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 ### Migration
 
 - migration 디렉터리: `supabase/migrations/`
-- 현재 운영 기준: 기존 `001`~`042` 적용 기준에 `043`을 2026-09-03, `044`를 2026-09-06, `045`~`048`을 2026-10-06, `049`~`051`을 2026-10-07 싱가포르 운영 DB에 각각 단독 적용. `024`는 운영 migration이 아니라 `supabase/seeds/`로 분리됐다.
+- 현재 운영 기준: 기존 `001`~`042` 적용 기준에 `043`을 2026-09-03, `044`를 2026-09-06, `045`~`048`을 2026-10-06, `049`~`052`를 2026-10-07 싱가포르 운영 DB에 각각 단독 적용. `024`는 운영 migration이 아니라 `supabase/seeds/`로 분리됐다.
 - `039_repair_auth_refresh_token_sequence.sql`: 이전 후 refresh token PK/sequence 충돌 복구.
 - `040_restore_auth_profile_provisioning.sql`: `auth.users` → `public.profiles` 트리거 복구와 누락 프로필 backfill.
 - `041_targeted_chat_inbox.sql`: 사용자 범위 채팅 inbox/thread 집계, 채팅 인덱스와 enrollment/admin 대화방 lifecycle trigger.
@@ -99,6 +99,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 - `045_chat_delivery_consistency.sql`~`048_atomic_enrollment_refunds.sql`은 2026-10-06 운영 DB에 순서대로 단독 적용했다. 채팅 읽음 cursor·관리자 direct RPC, 강사 계좌 컬럼 제거, 환불 FAQ, 관리자 환불 원자 처리 객체를 확인했다. 환불 테이블 RLS와 authenticated/anon RPC 권한, 민감 컬럼 제거, 기존 확정 수강의 환불 기준 회차 backfill 누락 0건을 읽기 전용으로 검증했다.
 - `049_student_announcements.sql`과 `050_harden_student_announcement_privileges.sql`은 2026-10-07 운영 DB에 순서대로 단독 적용했다. 학생 포털 공지 테이블·기간/우선순위 인덱스·감사 trigger·관리자/학생 RLS 정책을 확인했고 Realtime publication에는 추가하지 않았다. 후속 migration 050으로 `authenticated`의 기본 DELETE 권한을 제거하고 SELECT·INSERT·UPDATE만 허용했으며, `anon` 접근 거부와 service role 권한을 읽기 전용으로 검증했다. 연계 앱 코드는 아직 운영에 배포하지 않았다.
 - `051_teacher_compensation_governance.sql`은 2026-10-07 운영 DB에 단독 트랜잭션으로 적용했다. 강사 근속일·월 출석·고정 분기 보너스 필드, 연간 보상 심사·시급 변경 이력·노쇼 패널티 원장, 관리자 원자 처리 RPC 8개를 추가했다. 신규 컬럼 11개, RLS 테이블 3개, 정책 5개, 인덱스 6개와 근속일 backfill 누락 0건을 확인했고, `anon`의 신규 함수 실행·테이블 조회 및 `authenticated`의 직접 DELETE가 차단됨을 검증했다. 연계 앱 코드는 아직 운영에 배포하지 않았다.
+- `052_paginated_chat_history.sql`은 2026-10-07 운영 DB에 단독 트랜잭션으로 적용했다. 일반 채팅과 관리자 1:1 채팅의 최신 50건 keyset 조회 RPC 2개와 `(thread/room, created_at DESC, id DESC)` 복합 인덱스 2개를 추가했다. 두 함수가 `SECURITY DEFINER`, `STABLE`, `postgres` 소유이고 `anon` 실행은 차단되며 `authenticated`·`service_role`만 실행 가능한 상태를 확인했다. 연계 앱 코드는 아직 운영에 배포하지 않았다.
 - 같은 날 운영 DB에 `supabase_migrations.schema_migrations`가 없음을 확인했다. 043은 Management API를 통한 해당 SQL 파일 단독 트랜잭션 실행으로 적용했고, CLI 이력을 임의로 생성하거나 과거 이력을 복구하지 않았다. `db push`/전체 migration 재적용 금지: 실제 객체와 과거 적용 기록을 대조한 이력 정합화가 먼저 필요하다.
 - 로컬 `supabase/.temp`의 구 프로젝트 연결을 발견하여 실행을 중단한 후, 공식 CLI `link`로 싱가포르 project ref 및 pooler를 재설정·확인했다. 향후 CLI 실행 전 숨김/ignored 파일의 project-ref도 반드시 확인한다.
 - 운영 DB 적용 전 대상 project ref를 출력 가능한 비밀이 아닌 URL/ref 수준에서 확인하고, 데이터 보존형 SQL인지 검토한다.
@@ -238,6 +239,12 @@ https://passonenglish.com/api/health     → 200
 - 로컬 환경 URL과 CLI 연결 ref가 싱가포르 운영 프로젝트 `mvngtkoqjejvwygikvhi`로 일치하고 폐기 프로젝트 참조가 없음을 확인한 뒤, migration 이력 테이블을 만들거나 `db push`를 사용하지 않고 051 SQL 파일만 단독 트랜잭션으로 실행했다.
 - 신규 함수 8개, 컬럼 11개, RLS 테이블 3개, 정책 5개, 인덱스 6개와 강사 근속 시작일 backfill 누락 0건을 확인했다. `anon`은 신규 함수 실행·테이블 조회가 불가능하고, `authenticated`는 RPC 실행만 허용되며 신규 원장 테이블을 직접 삭제할 수 없다.
 - 강사 급여 평가·인상·노쇼 패널티 앱 코드는 로컬 타입 검사·정책 테스트·트랜잭션 테스트와 lint를 제외한 production compile을 통과했다. 전체 lint 포함 build는 별도 미커밋 학생 공지 UI의 `react/no-unescaped-entities` 2건 때문에 중단되며, 연계 앱은 아직 운영에 배포하지 않았다. 현재 운영 이미지는 계속 `33fc09e`다.
+
+2026-10-07 migration 052 채팅 기록 페이지 조회 기반 적용 검증:
+
+- 싱가포르 운영 프로젝트 `mvngtkoqjejvwygikvhi`의 SQL Editor에서 migration 이력 테이블을 만들거나 `db push`를 사용하지 않고 052 SQL 파일만 단독 트랜잭션으로 실행했다.
+- `get_chat_thread_messages_page`, `get_admin_direct_thread_messages_page`와 복합 인덱스 2개가 생성됐음을 확인했다. 두 함수 모두 `SECURITY DEFINER`, `STABLE`, `postgres` 소유이며 `anon_execute=false`, `authenticated_execute=true`, `service_role_execute=true`다.
+- migration은 데이터 행을 변경하지 않는 추가형 변경이다. 페이지 조회를 사용하는 연계 앱 코드는 아직 운영에 배포하지 않았으며 현재 운영 이미지는 계속 `33fc09e`다.
 
 ## 7. 테스트 기준
 

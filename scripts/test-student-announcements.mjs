@@ -12,6 +12,7 @@ const adminRoute = read("src/app/api/admin/student-announcements/route.ts");
 const provider = read("src/contexts/StudentAnnouncementsContext.tsx");
 const studentUi = read("src/components/student/StudentAnnouncements.tsx");
 const adminUi = read("src/components/admin/messages/StudentAnnouncementsPanel.tsx");
+const validation = read("src/lib/announcements/validation.ts");
 
 for (const requirement of [
   "CREATE TABLE IF NOT EXISTS public.student_announcements",
@@ -89,6 +90,21 @@ for (const requirement of ["임시저장", "예약 게시", "한국어", "中文
   if (!adminUi.includes(requirement)) {
     throw new Error(`admin announcement workflow missing: ${requirement}`);
   }
+}
+for (const requirement of [
+  "공지 연결 버튼",
+  "링크 버튼 문구",
+  "연결할 내부 경로를 입력한 경우에만 표시됩니다",
+  "자세히 보기",
+  "查看详情",
+  "aria-invalid={linkNeedsPath}",
+]) {
+  if (!adminUi.includes(requirement)) {
+    throw new Error(`admin announcement link UX missing: ${requirement}`);
+  }
+}
+if (!validation.includes('return "link_path_required"')) {
+  throw new Error("announcement link labels must require an internal path");
 }
 if (/method:\s*["']DELETE["']/.test(adminUi)) {
   throw new Error("published announcements must be archived instead of deleted");

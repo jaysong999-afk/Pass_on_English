@@ -875,6 +875,7 @@ supabase db push
 | 40 | `040_restore_auth_profile_provisioning.sql` | `auth.users`→`profiles` 트리거 복구와 누락 프로필 backfill |
 | 41 | `041_targeted_chat_inbox.sql` | 사용자 범위 채팅 집계 RPC, 메시지 인덱스, enrollment/admin 대화방 lifecycle trigger |
 | 42 | `042_harden_chat_rpc_privileges.sql` | 채팅 RPC의 익명 실행 권한 제거와 trigger 함수 실행 권한 강화 |
+| 52 | `052_paginated_chat_history.sql` | 일반·관리자 1:1 채팅을 `(created_at, id)` 기준 최신 50건씩 조회하는 RPC와 복합 인덱스. **2026-10-07 운영 적용·권한 검증 완료** |
 | E2E seed | `supabase/seeds/e2e_rich_seed.sql` | 운영 migration history와 분리된 통합 테스트 시드 (수강신청·홀드·입금·스케줄·보강·피드백·재수강) |
 
 ### 8.3 `001` 포함 항목 (개념적 순서)
@@ -935,7 +936,7 @@ supabase db push
 | Realtime | `ALTER PUBLICATION supabase_realtime ADD TABLE chat_messages` |
 
 > `finance/repository.ts` — 급여 `paid`·KRW 이체 완료 시 payroll 지출 기록; 입금 확인(`confirmEnrollmentPaymentInDb`) 시 수강료 수입 기록; 월별 `finance_snapshots` 자동 upsert.  
-> `chat/repository.ts` — `chat_rooms` CRUD·`chat_messages` 전송·읽음; 클라이언트 `useChatRealtime` 구독.
+> `chat/repository.ts` — `chat_rooms` CRUD·`chat_messages` 전송·읽음; migration 052 적용 후 메시지 기록은 최신 50건과 `(created_at, id)` cursor만 조회한다. 클라이언트는 `useChatRealtime`으로 새 메시지만 구독하며 과거 기록은 상단 도달 시 추가한다.
 
 ---
 
@@ -989,3 +990,11 @@ supabase db push
 - `admin_teacher_compensation_overview`: 활성 강사의 평가용 집계를 페이지 단위 JSON으로 반환
 - `admin_apply_teacher_no_show` / `admin_reverse_teacher_no_show`: 수업·보강·회차·로그·패널티를 하나의 트랜잭션으로 처리
 - 신규 객체는 관리자 변경, 강사 본인 패널티·시급 이력 조회만 허용하며 `anon`과 `PUBLIC` 함수 실행 권한을 제거
+
+### Migration 052 — 채팅 기록 페이지 조회 (2026-10-07 운영 적용 완료)
+
+- 일반 채팅과 관리자 1:1 채팅 기록을 `(created_at, id)` keyset 기준으로 최신 50건씩 조회하는 `SECURITY DEFINER` RPC 2개를 추가
+- `chat_messages(room_id, created_at DESC, id DESC)`와 `admin_direct_messages(thread_id, created_at DESC, id DESC)` 복합 인덱스로 페이지 조회 범위를 제한
+- 함수 내부에서 기존 채팅 접근 권한 함수를 재사용하고 cursor 쌍과 최대 조회량을 검증하여 전체 기록 조회를 방지
+- `PUBLIC`·`anon` 실행 권한을 제거하고 `authenticated`·`service_role`만 실행하도록 제한
+- 운영 검증에서 RPC 2개와 인덱스 2개 존재, `SECURITY DEFINER`, `STABLE`, `postgres` 소유, 역할별 실행 권한을 확인했다. 연계 앱은 아직 운영 미배포다.

@@ -8,12 +8,10 @@ interface UseChatRoomOptions {
   roomId: string;
   role: Extract<UserRole, "student" | "teacher" | "admin">;
   enabled?: boolean;
-  readEnabled?: boolean;
   studentId?: string;
-  onRead?: () => void;
 }
 
-export function useChatRoom({ roomId, role, enabled = true, readEnabled = enabled, studentId, onRead }: UseChatRoomOptions) {
+export function useChatRoom({ roomId, role, enabled = true, studentId }: UseChatRoomOptions) {
   const [room, setRoom] = useState<ChatRoom | null>(null);
 
   useEffect(() => {
@@ -33,12 +31,6 @@ export function useChatRoom({ roomId, role, enabled = true, readEnabled = enable
       cancelled = true;
     };
   }, [enabled, role, roomId, studentId]);
-
-  useEffect(() => {
-    if (!readEnabled || document.visibilityState !== "visible" || !document.hasFocus()) return;
-    const params = new URLSearchParams({ role, id: roomId, action: "read" });
-    void fetch(`/api/chat/rooms?${params}`, { method: "PATCH" }).then(() => onRead?.());
-  }, [onRead, readEnabled, role, roomId]);
 
   return room;
 }

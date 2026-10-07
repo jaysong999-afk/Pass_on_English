@@ -7,6 +7,7 @@ import {
   reloadChatMessagesInDb,
   sendChatMessageInDb,
 } from "@/lib/chat/repository";
+import { parseChatCursor } from "@/lib/chat/message-page";
 
 const ROLES: UserRole[] = ["student", "teacher", "admin"];
 
@@ -42,12 +43,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "roomId required" }, { status: 400 });
     }
 
-    const messages = await reloadChatMessagesInDb(roomId);
-    return NextResponse.json({ messages });
+    const result = await reloadChatMessagesInDb(roomId, parseChatCursor(searchParams));
+    return NextResponse.json(result);
   } catch (error) {
     console.error("[GET /api/chat/messages]", error);
     const message = error instanceof Error ? error.message : "chat_messages_failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: message },
+      { status: message === "invalid_cursor" ? 400 : 500 }
+    );
   }
 }
 

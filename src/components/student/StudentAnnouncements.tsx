@@ -125,7 +125,10 @@ export function StudentAnnouncementStrip() {
               <ChevronDown className={cn("h-3.5 w-3.5 transition", expanded && "rotate-180")} />
             </button>
             {announcement.linkPath && (
-              <Link href={localizedInternalPath(announcement.linkPath, locale)} className="inline-flex items-center gap-0.5 underline underline-offset-2">
+              <Link
+                href={localizedInternalPath(announcement.linkPath, locale)}
+                className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-current/20 bg-white/80 px-3 py-1.5 shadow-sm transition hover:bg-white"
+              >
                 {announcement.linkLabel || t("viewDetails")}
                 <ChevronRight className="h-3.5 w-3.5" />
               </Link>
@@ -202,7 +205,10 @@ function AnnouncementArticle({ announcement }: { announcement: StudentAnnounceme
           <h3 className="mt-2 text-base font-bold leading-snug md:text-lg">{announcement.title}</h3>
           <p className="mt-3 whitespace-pre-line text-sm leading-7">{announcement.body}</p>
           {announcement.linkPath && (
-            <Link href={localizedInternalPath(announcement.linkPath, locale)} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">
+            <Link
+              href={localizedInternalPath(announcement.linkPath, locale)}
+              className="mt-4 inline-flex min-h-10 items-center gap-1 rounded-xl border border-brand-200 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50"
+            >
               {announcement.linkLabel || t("viewDetails")}
               <ChevronRight className="h-4 w-4" />
             </Link>

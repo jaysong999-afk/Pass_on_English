@@ -32,6 +32,7 @@ export function useChatRealtime(
   useEffect(() => {
     if (!roomId || !visible) return;
     let disposed = false;
+    let subscribedOnce = false;
 
     const supabase = createClient();
     const channel = supabase
@@ -64,7 +65,10 @@ export function useChatRealtime(
       .subscribe((status) => {
         if (disposed) return;
         setConnected(status === "SUBSCRIBED");
-        if (status === "SUBSCRIBED") reconnectRef.current?.();
+        if (status === "SUBSCRIBED") {
+          if (subscribedOnce) reconnectRef.current?.();
+          subscribedOnce = true;
+        }
       });
 
     return () => {

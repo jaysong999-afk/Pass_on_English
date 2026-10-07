@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Headphones, Megaphone, Radio, ScrollText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,7 +10,30 @@ import { CsManagerPanel } from "@/components/admin/messages/CsManagerPanel";
 import { PushNotificationsPanel } from "@/components/admin/messages/PushNotificationsPanel";
 import { StudentAnnouncementsPanel } from "@/components/admin/messages/StudentAnnouncementsPanel";
 
-export function AdminMessagesHub() {
+const MESSAGE_TABS = ["notices", "cs", "broadcast", "push"] as const;
+type MessageTab = (typeof MESSAGE_TABS)[number];
+
+function AdminMessagesHubContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab: MessageTab = MESSAGE_TABS.includes(requestedTab as MessageTab)
+    ? requestedTab as MessageTab
+    : searchParams.has("thread")
+      ? "cs"
+      : "notices";
+
+  function selectTab(tab: MessageTab) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tab);
+    if (tab !== "cs") {
+      params.delete("view");
+      params.delete("thread");
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50/80 to-white px-5 py-4">
@@ -24,7 +48,7 @@ export function AdminMessagesHub() {
         </Badge>
       </div>
 
-      <Tabs defaultValue="notices">
+      <Tabs value={activeTab} onValueChange={(value) => selectTab(value as MessageTab)}>
         <TabsList className="h-auto flex-wrap gap-1 p-1">
           <TabsTrigger value="notices" className="gap-1.5 px-4 py-2">
             <ScrollText className="h-4 w-4" />
@@ -49,15 +73,7 @@ export function AdminMessagesHub() {
         </TabsContent>
 
         <TabsContent value="cs">
-          <Suspense
-            fallback={
-              <div className="rounded-2xl border bg-white p-8 text-sm text-gray-500">
-                CS 대화 불러오는 중...
-              </div>
-            }
-          >
-            <CsManagerPanel />
-          </Suspense>
+          <CsManagerPanel />
         </TabsContent>
         <TabsContent value="broadcast">
           <BroadcastPanel />
@@ -67,5 +83,19 @@ export function AdminMessagesHub() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export function AdminMessagesHub() {
+  return (
+    <Suspense
+      fallback={
+        <div className="rounded-2xl border bg-white p-8 text-sm text-gray-500">
+          메시지 센터 불러오는 중...
+        </div>
+      }
+    >
+      <AdminMessagesHubContent />
+    </Suspense>
   );
 }

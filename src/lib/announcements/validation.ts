@@ -35,6 +35,12 @@ export function validateStudentAnnouncementInput(
     return "body_too_long";
   }
   if (
+    (body.linkLabelKo?.trim() || body.linkLabelZhCn?.trim()) &&
+    !body.linkPath?.trim()
+  ) {
+    return "link_path_required";
+  }
+  if (
     body.linkPath &&
     (!body.linkPath.startsWith("/") || body.linkPath.startsWith("//") || /[\r\n]/.test(body.linkPath))
   ) {

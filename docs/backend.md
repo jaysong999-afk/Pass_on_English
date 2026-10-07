@@ -11,7 +11,7 @@
 | **DB 상세** | 컬럼·ENUM·인덱스는 [`db.md`](./db.md)를 SSOT로 따른다. 본 문서는 **UI가 실제로 쓰는 테이블·필드**만 강조한다 |
 | **목표 스택** | Next.js Route Handlers + Supabase PostgreSQL + Auth + (선택) Realtime |
 
-> **현재 (2026-09-01)**: Route Handler **60+**개 + Supabase PostgreSQL 데이터 레이어. 세 역할의 세션 UUID 바인딩, API **기본 거부(default deny)**, 열 단위 DTO 제한, RLS·트랜잭션 보강을 완료했다. 운영 migration은 `001`~`042`이며 E2E 시드는 `supabase/seeds/`로 분리한다. 운영 대상은 신규 싱가포르 프로젝트이며 루트 `AI_GUIDE.md`가 project ref의 SSOT다.
+> **현재 (2026-10-07)**: Route Handler **60+**개 + Supabase PostgreSQL 데이터 레이어. 세 역할의 세션 UUID 바인딩, API **기본 거부(default deny)**, 열 단위 DTO 제한, RLS·트랜잭션 보강을 완료했다. 운영 DB 최신 적용은 migration `052`이며, 채팅 페이지 조회 연계 앱은 아직 운영에 배포하지 않았다. E2E 시드는 `supabase/seeds/`로 분리한다. 운영 대상은 신규 싱가포르 프로젝트이며 루트 `AI_GUIDE.md`가 project ref의 SSOT다.
 
 > `041_targeted_chat_inbox.sql`은 전체 채팅 cache warm을 사용자 범위 집계로 교체하고, `042_harden_chat_rpc_privileges.sql`은 해당 RPC의 익명 실행 권한을 제거한다. 두 migration 모두 신규 싱가포르 운영 DB에 적용됐다.
 
@@ -515,6 +515,7 @@
 | `029_transaction_and_column_security.sql` | 보강/급여 정산 RPC 원자화, profile·교사 단가 열 노출 제한 |
 | `041_targeted_chat_inbox.sql` | 사용자 범위 채팅 집계 RPC와 lifecycle trigger |
 | `042_harden_chat_rpc_privileges.sql` | 채팅 RPC 익명 실행 권한 제거 |
+| `052_paginated_chat_history.sql` | 일반·관리자 1:1 채팅의 `(created_at, id)` keyset 페이지 RPC와 복합 인덱스. 2026-10-07 운영 DB 적용·권한 검증 완료, 연계 앱 미배포 |
 
 **적용·검증**: `npm run apply:rls` · `npm run test:rls` · `npm run test:schema-rls-boundaries` · `npm run test:transactions`
 

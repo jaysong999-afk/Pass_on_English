@@ -5,8 +5,10 @@ import {
   ensureAdminDirectThreadInDb,
   getAdminDirectInboxForProfileInDb,
   markAdminDirectThreadReadForRecipientInDb,
+  reloadAdminDirectMessagesInDb,
   sendAdminDirectReplyFromRecipientInDb,
 } from "@/lib/admin/messages/repository";
+import { parseChatCursor, type ChatMessageCursor } from "@/lib/chat/message-page";
 
 async function resolveProfileId(
   role: "student" | "teacher"
@@ -37,7 +39,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const inbox = await getAdminDirectInboxForProfileInDb(profileId);
+  let cursor: ChatMessageCursor | null;
+  try {
+    cursor = parseChatCursor(searchParams);
+  } catch {
+    return NextResponse.json({ error: "invalid_cursor" }, { status: 400 });
+  }
+
+  const requestedThreadId = searchParams.get("threadId");
+  if (cursor && requestedThreadId) {
+    try {
+      const result = await reloadAdminDirectMessagesInDb(requestedThreadId, cursor);
+      return NextResponse.json({ thread: null, ...result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "direct_messages_failed";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  }
+
+  const inbox = await getAdminDirectInboxForProfileInDb(profileId, cursor);
   if (!inbox.thread && role === "student") {
     const session = await ensureAccountSession();
     if (session?.activeLearnerId) {
@@ -45,7 +65,7 @@ export async function GET(request: Request) {
         targetType: "student",
         targetId: session.activeLearnerId,
       });
-      return NextResponse.json(await getAdminDirectInboxForProfileInDb(profileId));
+      return NextResponse.json(await getAdminDirectInboxForProfileInDb(profileId, cursor));
     }
   }
   if (!inbox.thread && role === "teacher") {
@@ -54,7 +74,7 @@ export async function GET(request: Request) {
       targetType: "teacher",
       targetId: teacherId,
     });
-    return NextResponse.json(await getAdminDirectInboxForProfileInDb(profileId));
+    return NextResponse.json(await getAdminDirectInboxForProfileInDb(profileId, cursor));
   }
   return NextResponse.json(inbox);
 }

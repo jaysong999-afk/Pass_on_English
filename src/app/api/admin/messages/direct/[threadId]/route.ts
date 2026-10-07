@@ -5,9 +5,10 @@ import {
   reloadAdminDirectMessagesInDb,
   sendAdminDirectMessageInDb,
 } from "@/lib/admin/messages/repository";
+import { parseChatCursor } from "@/lib/chat/message-page";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ threadId: string }> }
 ) {
   const guard = await guardAdminApi();
@@ -15,12 +16,18 @@ export async function GET(
 
   try {
     const { threadId } = await params;
-    const messages = await reloadAdminDirectMessagesInDb(threadId);
-    return NextResponse.json({ messages });
+    const result = await reloadAdminDirectMessagesInDb(
+      threadId,
+      parseChatCursor(new URL(request.url).searchParams)
+    );
+    return NextResponse.json(result);
   } catch (error) {
     console.error("[GET /api/admin/messages/direct/[threadId]]", error);
     const message = error instanceof Error ? error.message : "direct_messages_failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: message },
+      { status: message === "invalid_cursor" ? 400 : 500 }
+    );
   }
 }
 

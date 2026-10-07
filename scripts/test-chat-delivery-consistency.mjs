@@ -133,6 +133,7 @@ try {
   `);
 
   await db.query(readFileSync(new URL("../supabase/migrations/045_chat_delivery_consistency.sql", import.meta.url), "utf8"));
+  await db.query(readFileSync(new URL("../supabase/migrations/052_paginated_chat_history.sql", import.meta.url), "utf8"));
 
   const asUser = async (userId, sql, params = []) => {
     await db.query("SELECT set_config('request.jwt.claim.sub', $1, false)", [userId]);
@@ -187,12 +188,59 @@ try {
   );
   console.log("PASS admin direct send is atomic, authorized, and immediately queryable");
 
+  for (let index = 0; index < 60; index += 1) {
+    await db.query(
+      "INSERT INTO public.chat_messages(id,room_id,sender_id,sender_role,body,created_at) VALUES($1,$2,$3,'teacher',$4,$5)",
+      [uid(100 + index), room, teacher, `History ${index}`, new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString()]
+    );
+  }
+  const firstPage = await asUser(
+    studentProfile,
+    "SELECT * FROM public.get_chat_thread_messages_page($1,NULL,NULL,51)",
+    [room]
+  );
+  assert.equal(firstPage.rows.length, 51);
+  assert.ok(firstPage.rows[0].created_at >= firstPage.rows[50].created_at);
+  const cursor = firstPage.rows[49];
+  const secondPage = await asUser(
+    studentProfile,
+    "SELECT * FROM public.get_chat_thread_messages_page($1,$2,$3,51)",
+    [room, cursor.created_at, cursor.id]
+  );
+  assert.ok(secondPage.rows.length > 0 && secondPage.rows.length < 51);
+  assert.equal(
+    secondPage.rows.some((message) => firstPage.rows.slice(0, 50).some((first) => first.id === message.id)),
+    false
+  );
+
+  for (let index = 0; index < 55; index += 1) {
+    await db.query(
+      "INSERT INTO public.admin_direct_messages(thread_id,sender_role,sender_id,body,created_at) VALUES($1,'student',$2,$3,$4)",
+      [thread, studentProfile, `Direct history ${index}`, new Date(Date.UTC(2026, 0, 2, 0, index)).toISOString()]
+    );
+  }
+  const directPage = await asUser(
+    admin,
+    "SELECT * FROM public.get_admin_direct_thread_messages_page($1,NULL,NULL,51)",
+    [thread]
+  );
+  assert.equal(directPage.rows.length, 51);
+  console.log("PASS chat history RPCs return bounded keyset pages without overlap");
+
   assert.equal(
     (await db.query("SELECT has_function_privilege('anon','public.send_admin_direct_message(uuid,text)','execute') allowed")).rows[0].allowed,
     false
   );
   assert.equal(
     (await db.query("SELECT has_function_privilege('authenticated','public.send_admin_direct_message(uuid,text)','execute') allowed")).rows[0].allowed,
+    true
+  );
+  assert.equal(
+    (await db.query("SELECT has_function_privilege('anon','public.get_chat_thread_messages_page(uuid,timestamptz,uuid,integer)','execute') allowed")).rows[0].allowed,
+    false
+  );
+  assert.equal(
+    (await db.query("SELECT has_function_privilege('authenticated','public.get_chat_thread_messages_page(uuid,timestamptz,uuid,integer)','execute') allowed")).rows[0].allowed,
     true
   );
   console.log("PASS chat RPCs reject anonymous execution and retain authenticated access");

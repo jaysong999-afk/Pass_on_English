@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
+  ArrowRight,
   CalendarClock,
   Copy,
+  Link2,
   Megaphone,
   Pencil,
   Plus,
@@ -63,6 +65,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   important_end_required: "중요·긴급 공지는 게시 종료 일시를 입력해 주세요.",
   title_too_long: "제목은 120자 이내로 입력해 주세요.",
   body_too_long: "내용은 3,000자 이내로 입력해 주세요.",
+  link_path_required: "링크 버튼 문구를 사용하려면 연결할 내부 경로를 입력해 주세요.",
   invalid_link_path: "연결 경로는 /로 시작하는 서비스 내부 경로만 사용할 수 있습니다.",
 };
 
@@ -125,9 +128,9 @@ function formToInput(
     startsAt: new Date(form.startsAt).toISOString(),
     endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
     portalWide: form.portalWide,
-    linkPath: form.linkPath || null,
-    linkLabelKo: form.linkLabelKo || null,
-    linkLabelZhCn: form.linkLabelZhCn || null,
+    linkPath: form.linkPath.trim() || null,
+    linkLabelKo: form.linkLabelKo.trim() || null,
+    linkLabelZhCn: form.linkLabelZhCn.trim() || null,
     sortOrder: Number(form.sortOrder) || 0,
   };
 }
@@ -253,6 +256,13 @@ export function StudentAnnouncementsPanel() {
       setMessage("게시 시작 일시를 입력해 주세요.");
       return;
     }
+    if (
+      (form.linkLabelKo.trim() || form.linkLabelZhCn.trim()) &&
+      !form.linkPath.trim()
+    ) {
+      setMessage(ERROR_MESSAGES.link_path_required);
+      return;
+    }
 
     setSaving(true);
     setMessage("");
@@ -298,6 +308,13 @@ export function StudentAnnouncementsPanel() {
 
   const previewTitle = previewLocale === "ko" ? form.titleKo : form.titleZhCn;
   const previewBody = previewLocale === "ko" ? form.bodyKo : form.bodyZhCn;
+  const hasLinkPath = Boolean(form.linkPath.trim());
+  const hasLinkLabel = Boolean(form.linkLabelKo.trim() || form.linkLabelZhCn.trim());
+  const linkNeedsPath = hasLinkLabel && !hasLinkPath;
+  const previewLinkLabel =
+    previewLocale === "ko"
+      ? form.linkLabelKo.trim() || "자세히 보기"
+      : form.linkLabelZhCn.trim() || "查看详情";
 
   return (
     <div className="space-y-6">
@@ -382,9 +399,6 @@ export function StudentAnnouncementsPanel() {
                   <Field label="내용">
                     <Textarea maxLength={3000} rows={7} value={form.bodyKo} onChange={(event) => setForm({ ...form, bodyKo: event.target.value })} placeholder="학생에게 전달할 내용을 입력하세요." />
                   </Field>
-                  <Field label="버튼 문구 (선택)">
-                    <Input value={form.linkLabelKo} onChange={(event) => setForm({ ...form, linkLabelKo: event.target.value })} placeholder="예: 수업 일정 확인" />
-                  </Field>
                 </div>
                 <div className="space-y-4 rounded-2xl border p-4">
                   <p className="font-semibold text-ink">中文</p>
@@ -394,16 +408,59 @@ export function StudentAnnouncementsPanel() {
                   <Field label="内容">
                     <Textarea maxLength={3000} rows={7} value={form.bodyZhCn} onChange={(event) => setForm({ ...form, bodyZhCn: event.target.value })} placeholder="请输入要告知学生的内容。" />
                   </Field>
-                  <Field label="按钮文字（可选）">
-                    <Input value={form.linkLabelZhCn} onChange={(event) => setForm({ ...form, linkLabelZhCn: event.target.value })} placeholder="例如：查看课程安排" />
-                  </Field>
                 </div>
               </div>
 
-              <Field label="연결할 내부 경로 (선택)">
-                <Input value={form.linkPath} onChange={(event) => setForm({ ...form, linkPath: event.target.value })} placeholder="예: /student/schedule" />
-                <p className="mt-1 text-xs text-gray-500">외부 주소는 사용할 수 없습니다. 학생 페이지는 /student/... 형태로 입력하면 현재 언어가 자동 적용됩니다.</p>
-              </Field>
+              <section
+                aria-labelledby="announcement-link-heading"
+                className={cn(
+                  "space-y-4 rounded-2xl border bg-gray-50/70 p-4",
+                  linkNeedsPath && "border-red-300 bg-red-50/60"
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="rounded-lg border border-brand-100 bg-white p-2 text-brand-700">
+                    <Link2 className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <h3 id="announcement-link-heading" className="font-semibold text-ink">공지 연결 버튼</h3>
+                    <p className="mt-0.5 text-xs leading-5 text-gray-600">
+                      공지에서 관련 학생 화면으로 바로 이동할 때 사용합니다. 연결할 내부 경로를 입력한 경우에만 표시됩니다.
+                    </p>
+                  </div>
+                </div>
+
+                <Field label="연결할 내부 경로 (선택)">
+                  <Input
+                    value={form.linkPath}
+                    onChange={(event) => setForm({ ...form, linkPath: event.target.value })}
+                    placeholder="예: /student/schedule"
+                    aria-invalid={linkNeedsPath}
+                    aria-describedby={linkNeedsPath ? "announcement-link-path-error" : "announcement-link-path-help"}
+                    className={cn(linkNeedsPath && "border-red-400 focus-visible:ring-red-400")}
+                  />
+                  {linkNeedsPath ? (
+                    <p id="announcement-link-path-error" role="alert" className="mt-1.5 text-xs font-medium text-red-700">
+                      링크 버튼 문구를 사용하려면 연결할 내부 경로를 입력해 주세요.
+                    </p>
+                  ) : (
+                    <p id="announcement-link-path-help" className="mt-1.5 text-xs leading-5 text-gray-500">
+                      외부 주소는 사용할 수 없습니다. /student/... 형태로 입력하면 학생의 현재 언어가 자동 적용됩니다.
+                    </p>
+                  )}
+                </Field>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <Field label="링크 버튼 문구 (한국어, 선택)">
+                    <Input value={form.linkLabelKo} onChange={(event) => setForm({ ...form, linkLabelKo: event.target.value })} placeholder="기본값: 자세히 보기" />
+                    <p className="mt-1.5 text-xs text-gray-500">비워 두면 ‘자세히 보기’로 표시됩니다.</p>
+                  </Field>
+                  <Field label="链接按钮文字（中文，可选）">
+                    <Input value={form.linkLabelZhCn} onChange={(event) => setForm({ ...form, linkLabelZhCn: event.target.value })} placeholder="默认：查看详情" />
+                    <p className="mt-1.5 text-xs text-gray-500">留空时显示“查看详情”。</p>
+                  </Field>
+                </div>
+              </section>
 
               <div className="flex flex-wrap gap-2 border-t pt-4">
                 <Button disabled={saving} variant="secondary" onClick={() => void save("draft")} className="gap-1.5">
@@ -437,6 +494,12 @@ export function StudentAnnouncementsPanel() {
                 </div>
                 <p className="mt-3 font-bold">{previewTitle || "제목이 표시됩니다"}</p>
                 <p className="mt-2 whitespace-pre-line text-sm leading-6 text-gray-700">{previewBody || "공지 내용이 표시됩니다."}</p>
+                {hasLinkPath && (
+                  <span className="mt-4 inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-brand-200 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm">
+                    {previewLinkLabel}
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                )}
               </div>
               <p className="mt-3 text-xs text-gray-500">상단 고정: {form.portalWide ? "표시" : "표시 안 함"}</p>
             </CardContent>

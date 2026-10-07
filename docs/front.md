@@ -273,7 +273,9 @@
 
 - 수강 중인 선생님 목록을 위에, 관리자 문의를 아래에 배치
 - 수강 신청(매칭) 완료 후 해당 선생님과 1:1 채팅방 생성; 관리자는 별도 문의 방 생성 가능
-- Instagram DM 유사 UI: 버블, 시간, 읽음 표시
+- 공통 다중행 입력기에서 Enter는 전송, Alt+Enter는 줄바꿈으로 처리하고 한글·중국어 IME 조합 중에는 전송하지 않음
+- 기기 현지 시간대를 기준으로 날짜가 바뀌는 지점에 locale별 날짜 구분선을 표시하고 각 메시지에는 시간을 표시
+- 최초 진입은 최신 50건만 받고 상단 도달 시 이전 50건을 keyset 방식으로 추가하여 긴 대화의 응답 크기를 제한
 - Web Push로 새 메시지 알림
 
 #### 5.2.8 내 정보 관리 (`/[locale]/student/settings`)
@@ -389,6 +391,8 @@
 **채팅 모니터링**: `GET /api/chat/rooms?role=admin` · `ChatMonitorThread` · `/admin/chat/[roomId]` 참여  
 **관리자 1:1**: students/teachers API로 대상 선택 · DB thread/message 저장
 
+관리자 알림 목록의 1:1 항목은 `/admin/messages?tab=cs&view=direct&thread=[id]`로 이동해 상위 `CS · 1:1`, 하위 `관리자 1:1`, 대상 대화를 함께 복원한다. 알림 클릭은 화면에서만 뱃지를 먼저 지우고 실제 읽음 저장은 도착한 채팅 화면이 한 번 수행한다. 관리자 1:1과 학생·선생님 모니터링 목록은 활성 탭만 조회·구독한다.
+
 수강 환불이 확정된 학생↔선생님 대화방은 이력을 유지하되 입력창 대신 종료 안내를 표시한다. 관리자 지원 채팅은 계속 사용할 수 있다.
 
 **Quick Replies**: `/api/admin/messages/quick-replies`
@@ -462,7 +466,8 @@
 | `MonthlyGrowthReportEditor` | 월 성장 레포트 작성 |
 | `StudentChatLink` | 학생명 옆 채팅 아이콘 |
 | `LessonStatusBadge` | scheduled / completed / reschedule_pending |
-| `ChatThread` | 메시지 목록 + 입력 |
+| `ChatThread` | 날짜 구분·50건 단위 이전 기록·메시지 목록 |
+| `ChatComposer` | Enter 전송·Alt+Enter 줄바꿈·IME 보호 공통 입력기 |
 | `ChatNotificationBell` | 헤더 미읽음 알림 |
 | `PaymentInfoPanel` | 계좌이체 안내 |
 | `DataTable` | 관리자 리스트 (Shadcn Table) |

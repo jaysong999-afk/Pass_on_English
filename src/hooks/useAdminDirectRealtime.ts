@@ -28,6 +28,7 @@ export function useAdminDirectRealtime(
   useEffect(() => {
     if (!threadId || !visible) return;
     let disposed = false;
+    let subscribedOnce = false;
 
     const supabase = createClient();
     const channel = supabase
@@ -53,7 +54,9 @@ export function useAdminDirectRealtime(
         }
       )
       .subscribe((status) => {
-        if (!disposed && status === "SUBSCRIBED") reconnectRef.current?.();
+        if (disposed || status !== "SUBSCRIBED") return;
+        if (subscribedOnce) reconnectRef.current?.();
+        subscribedOnce = true;
       });
 
     return () => {

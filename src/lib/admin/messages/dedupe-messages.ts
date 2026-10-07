@@ -1,4 +1,5 @@
 import type { DirectMessage } from "@/lib/admin/messages/types";
+import { compareChatMessages } from "@/lib/chat/message-page";
 
 export function dedupeDirectMessages(messages: DirectMessage[]): DirectMessage[] {
   const seen = new Set<string>();
@@ -6,7 +7,7 @@ export function dedupeDirectMessages(messages: DirectMessage[]): DirectMessage[]
     if (seen.has(message.id)) return false;
     seen.add(message.id);
     return true;
-  });
+  }).sort(compareChatMessages);
 }
 
 export function appendDirectMessage(
@@ -14,5 +15,5 @@ export function appendDirectMessage(
   message: DirectMessage
 ): DirectMessage[] {
   if (messages.some((m) => m.id === message.id)) return messages;
-  return [...messages, message];
+  return [...messages, message].sort(compareChatMessages);
 }

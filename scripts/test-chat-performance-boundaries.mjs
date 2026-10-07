@@ -20,6 +20,7 @@ const directInboxClient = read("src/lib/admin-direct-inbox-client.ts");
 const migration = read("supabase/migrations/041_targeted_chat_inbox.sql");
 const privilegeMigration = read("supabase/migrations/042_harden_chat_rpc_privileges.sql");
 const consistencyMigration = read("supabase/migrations/045_chat_delivery_consistency.sql");
+const paginationMigration = read("supabase/migrations/052_paginated_chat_history.sql");
 
 if (studentChat.includes('/api/student/profile')) {
   throw new Error("student chat still reloads the deprecated profile endpoint");
@@ -83,12 +84,30 @@ if (
   throw new Error("live admin direct APIs must not serve process-memory chat caches");
 }
 if (
-  !csManager.includes('useChatInboxSync(loadDirectThreads, true, "admin-direct")') ||
-  !csManager.includes('useChatInboxSync(loadRooms, true, "chat")') ||
+  !csManager.includes('useChatInboxSync(loadDirectThreads, csTab === "direct", "admin-direct")') ||
+  !csManager.includes('useChatInboxSync(loadRooms, csTab === "monitor", "chat")') ||
   !csManager.includes("fetchAdminDirectInbox") ||
   !directInboxClient.includes("pendingRequests")
 ) {
   throw new Error("CS inboxes must share scoped realtime and in-flight requests");
+}
+
+for (const marker of [
+  "get_chat_thread_messages_page",
+  "get_admin_direct_thread_messages_page",
+  "idx_chat_messages_room_created_id_desc",
+  "idx_admin_direct_messages_thread_created_id_desc",
+  "p_limit integer DEFAULT 51",
+]) {
+  if (!paginationMigration.includes(marker)) {
+    throw new Error(`paginated chat migration is missing ${marker}`);
+  }
+}
+if (
+  !paginationMigration.includes("FROM PUBLIC, anon") ||
+  !paginationMigration.includes("TO authenticated, service_role")
+) {
+  throw new Error("paginated chat RPC privileges must be authenticated-only");
 }
 for (const marker of [
   "idx_chat_messages_room_created_desc",
@@ -159,3 +178,4 @@ console.log("PASS requested and sender roles are bound to the authenticated prof
 console.log("PASS enrollment/admin chat lifecycle provisioning is migration-backed");
 console.log("PASS admin direct chat uses live atomic RPCs and scoped realtime refreshes");
 console.log("PASS per-user read cursors keep student, teacher, and admin badges independent");
+console.log("PASS chat history is keyset-paginated and only the active CS inbox subscribes");

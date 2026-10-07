@@ -12,7 +12,7 @@ export default function AdminChatRoomPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold">{room?.displayName ?? "메시지"}</h2>
-      <ChatThread roomId={roomId} senderRole="admin" placeholder="답장 입력..." />
+      <ChatThread roomId={roomId} senderRole="admin" placeholder="답장 입력..." locale="ko-KR" />
     </div>
   );
 }

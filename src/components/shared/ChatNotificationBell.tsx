@@ -205,9 +205,8 @@ export function ChatNotificationBell({
     };
   }, [open]);
 
-  const openAdminDirectThread = async (thread: DirectThreadPreview) => {
+  const openAdminDirectThread = (thread: DirectThreadPreview) => {
     if (thread.unread > 0) {
-      await fetch(`/api/admin/messages/direct/${thread.id}`, { method: "PATCH" });
       setTotalUnread((n) => Math.max(0, n - thread.unread));
       setAdminDirectThreads((prev) =>
         prev.map((t) => (t.id === thread.id ? { ...t, unread: 0 } : t))
@@ -217,11 +216,8 @@ export function ChatNotificationBell({
     router.push(getAdminDirectThreadHref(thread.id));
   };
 
-  const openRoom = async (room: ChatRoom) => {
+  const openRoom = (room: ChatRoom) => {
     if (room.unread > 0) {
-      await fetch(`/api/chat/rooms?role=${role}&id=${room.id}&action=read`, {
-        method: "PATCH",
-      });
       setTotalUnread((n) => Math.max(0, n - room.unread));
       setRooms((prev) =>
         prev.map((r) => (r.id === room.id ? { ...r, unread: 0 } : r))
@@ -231,13 +227,8 @@ export function ChatNotificationBell({
     router.push(getChatHref(role, room.id, locale));
   };
 
-  const openAdminSupport = async () => {
+  const openAdminSupport = () => {
     if (adminSupport?.unread) {
-      await fetch("/api/messages/admin-direct", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, threadId: adminSupport.id }),
-      });
       setTotalUnread((n) => Math.max(0, n - adminSupport.unread));
       setAdminSupport((prev) => (prev ? { ...prev, unread: 0 } : null));
     }
