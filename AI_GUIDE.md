@@ -5,7 +5,7 @@
 
 최종 검증일: 2026-10-08 (migration 053~054 및 연계 앱 `4c043e1` 운영 적용·배포 검증 완료)
 기준 브랜치: `main`
-검증된 운영 기준 커밋: `5618074` (`fix: make production dependency install deterministic`)
+검증된 운영 기준 커밋: `4c043e1` (`feat: enforce reschedule policy and optimize maintenance`)
 
 ## 1. 절대 혼동하면 안 되는 운영 정보
 
@@ -122,7 +122,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 해당 릴리스 `.env.production`에 로컬 공개키·비밀키 두 항목만 등록했다. 키 쌍 정상 및 로컬/서버 파일 일치 확인.
 기존 `VAPID_SUBJECT`와 Supabase 설정은 보존했고 원본은 동일 디렉터리의 `.env.production.pre-vapid-*`로 백업했다(두 파일 모두 600).
 이후 사용자 승인으로 `35bb954` 새 릴리스에 환경파일을 복사하고 이미지 태그만 바꿔 새 이미지를 빌드·배포했다.
-현재 환경파일은 `/opt/pass-on-english/releases/5618074/deploy/tencent-lighthouse/.env.production`이다.
+현재 환경파일은 `/opt/pass-on-english/releases/4c043e1/deploy/tencent-lighthouse/.env.production`이다.
 실행 컨테이너 키와 환경파일 일치, 키 쌍 정상, 실제 HTTPS 브라우저 코드의 공개키 포함 및 비밀키 비노출을 확인했다.
 
 필수 운영 변수:

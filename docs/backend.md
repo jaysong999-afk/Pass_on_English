@@ -517,7 +517,7 @@
 | `042_harden_chat_rpc_privileges.sql` | 채팅 RPC 익명 실행 권한 제거 |
 | `052_paginated_chat_history.sql` | 일반·관리자 1:1 채팅의 `(created_at, id)` keyset 페이지 RPC와 복합 인덱스. 2026-10-07 운영 DB 적용·권한 검증 및 `5618074` 앱 배포 완료 |
 | `053_enrollment_reschedule_policy.sql` | 수강별 학생 변경 한도, 2시간 마감·자동 만료, 강사 2회차 보너스 제외 원장과 원자 RPC. **2026-10-08 운영 DB 적용·권한 검증 및 연계 앱 `4c043e1` 배포 완료** |
-| `054_legacy_reschedule_rpc_compatibility.sql` | 운영 앱 `5618074`의 기존 5인자 생성 RPC를 유지하고 클라이언트 월 값을 무시한 채 053의 4인자 정책 RPC로 위임. **2026-10-08 운영 DB 적용·권한 검증 완료** |
+| `054_legacy_reschedule_rpc_compatibility.sql` | 이전 운영 릴리스 `5618074`의 기존 5인자 생성 RPC를 유지하고 클라이언트 월 값을 무시한 채 053의 4인자 정책 RPC로 위임. **2026-10-08 운영 DB 적용·권한 검증 완료, `4c043e1` 연계 배포 완료** |
 
 **적용·검증**: `npm run apply:rls` · `npm run test:rls` · `npm run test:schema-rls-boundaries` · `npm run test:transactions`
 
