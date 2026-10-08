@@ -3,7 +3,7 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-10-07 (migration 049~052 및 연계 앱 `5618074` 운영 적용·배포 검증 완료)
+최종 검증일: 2026-10-08 (migration 053~054 운영 DB 적용·검증 완료, 연계 앱은 미배포)
 기준 브랜치: `main`
 검증된 운영 기준 커밋: `5618074` (`fix: make production dependency install deterministic`)
 
@@ -22,7 +22,7 @@
 | 폐기 대상 Supabase project ref | `yldtimpsgumheiahcwwi` |
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
-| DB migration 최신 기준 | `052_paginated_chat_history.sql` — 2026-10-07 싱가포르 운영 DB에 단독 트랜잭션 적용·RPC·인덱스·역할별 실행 권한 검증 완료 |
+| DB migration 최신 기준 | `054_legacy_reschedule_rpc_compatibility.sql` — 2026-10-08 싱가포르 운영 DB 적용·권한 검증 완료. 본 정책은 `053`, 현재 운영 앱 호환 계층은 `054` |
 | 현재 운영 이미지 / 릴리스 | `pass-on-english:5618074` / `/opt/pass-on-english/releases/5618074` |
 | 남은 검증 | 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관·환불의 실기기·실데이터 확인 필요 |
 
@@ -88,7 +88,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 ### Migration
 
 - migration 디렉터리: `supabase/migrations/`
-- 현재 운영 기준: 기존 `001`~`042` 적용 기준에 `043`을 2026-09-03, `044`를 2026-09-06, `045`~`048`을 2026-10-06, `049`~`052`를 2026-10-07 싱가포르 운영 DB에 각각 단독 적용. `024`는 운영 migration이 아니라 `supabase/seeds/`로 분리됐다.
+- 현재 운영 기준: 기존 `001`~`042` 적용 기준에 `043`을 2026-09-03, `044`를 2026-09-06, `045`~`048`을 2026-10-06, `049`~`052`를 2026-10-07, `053`~`054`를 2026-10-08 싱가포르 운영 DB에 각각 단독 적용. `024`는 운영 migration이 아니라 `supabase/seeds/`로 분리됐다.
 - `039_repair_auth_refresh_token_sequence.sql`: 이전 후 refresh token PK/sequence 충돌 복구.
 - `040_restore_auth_profile_provisioning.sql`: `auth.users` → `public.profiles` 트리거 복구와 누락 프로필 backfill.
 - `041_targeted_chat_inbox.sql`: 사용자 범위 채팅 inbox/thread 집계, 채팅 인덱스와 enrollment/admin 대화방 lifecycle trigger.
@@ -100,6 +100,8 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 - `049_student_announcements.sql`과 `050_harden_student_announcement_privileges.sql`은 2026-10-07 운영 DB에 순서대로 단독 적용했다. 학생 포털 공지 테이블·기간/우선순위 인덱스·감사 trigger·관리자/학생 RLS 정책을 확인했고 Realtime publication에는 추가하지 않았다. 후속 migration 050으로 `authenticated`의 기본 DELETE 권한을 제거하고 SELECT·INSERT·UPDATE만 허용했으며, `anon` 접근 거부와 service role 권한을 읽기 전용으로 검증했다. 연계 앱은 `5618074`로 운영 배포했다.
 - `051_teacher_compensation_governance.sql`은 2026-10-07 운영 DB에 단독 트랜잭션으로 적용했다. 강사 근속일·월 출석·고정 분기 보너스 필드, 연간 보상 심사·시급 변경 이력·노쇼 패널티 원장, 관리자 원자 처리 RPC 8개를 추가했다. 신규 컬럼 11개, RLS 테이블 3개, 정책 5개, 인덱스 6개와 근속일 backfill 누락 0건을 확인했고, `anon`의 신규 함수 실행·테이블 조회 및 `authenticated`의 직접 DELETE가 차단됨을 검증했다. 연계 앱은 `5618074`로 운영 배포했다.
 - `052_paginated_chat_history.sql`은 2026-10-07 운영 DB에 단독 트랜잭션으로 적용했다. 일반 채팅과 관리자 1:1 채팅의 최신 50건 keyset 조회 RPC 2개와 `(thread/room, created_at DESC, id DESC)` 복합 인덱스 2개를 추가했다. 두 함수가 `SECURITY DEFINER`, `STABLE`, `postgres` 소유이고 `anon` 실행은 차단되며 `authenticated`·`service_role`만 실행 가능한 상태를 확인했다. 연계 앱은 `5618074`로 운영 배포했다.
+- `053_enrollment_reschedule_policy.sql`은 2026-10-08 운영 DB에 단독 트랜잭션으로 적용했다. 수강별 변경 한도·2시간 마감·자동 만료·강사 2회차 보너스 제외를 DB 원자 처리로 전환했으며, 컬럼 5개·이벤트 원장/RLS·인덱스 5개·한도 trigger·함수 5개와 역할별 권한을 검증했다.
+- `054_legacy_reschedule_rpc_compatibility.sql`은 2026-10-08 운영 DB에 적용했다. 아직 운영 중인 앱 `5618074`의 5인자 요청 생성 호출을 유지하되 클라이언트 월 값은 무시하고 053의 4인자 정책 RPC에 위임한다. 두 함수 모두 `SECURITY DEFINER`, `postgres` 소유이며 `anon` 실행은 차단되고 `authenticated`·`service_role`만 실행 가능함을 확인했다. 053 연계 앱 코드는 아직 운영 배포하지 않았다.
 - 같은 날 운영 DB에 `supabase_migrations.schema_migrations`가 없음을 확인했다. 043은 Management API를 통한 해당 SQL 파일 단독 트랜잭션 실행으로 적용했고, CLI 이력을 임의로 생성하거나 과거 이력을 복구하지 않았다. `db push`/전체 migration 재적용 금지: 실제 객체와 과거 적용 기록을 대조한 이력 정합화가 먼저 필요하다.
 - 로컬 `supabase/.temp`의 구 프로젝트 연결을 발견하여 실행을 중단한 후, 공식 CLI `link`로 싱가포르 project ref 및 pooler를 재설정·확인했다. 향후 CLI 실행 전 숨김/ignored 파일의 project-ref도 반드시 확인한다.
 - 운영 DB 적용 전 대상 project ref를 출력 가능한 비밀이 아닌 URL/ref 수준에서 확인하고, 데이터 보존형 SQL인지 검토한다.

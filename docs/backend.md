@@ -11,7 +11,7 @@
 | **DB 상세** | 컬럼·ENUM·인덱스는 [`db.md`](./db.md)를 SSOT로 따른다. 본 문서는 **UI가 실제로 쓰는 테이블·필드**만 강조한다 |
 | **목표 스택** | Next.js Route Handlers + Supabase PostgreSQL + Auth + (선택) Realtime |
 
-> **현재 (2026-10-07)**: Route Handler **60+**개 + Supabase PostgreSQL 데이터 레이어. 세 역할의 세션 UUID 바인딩, API **기본 거부(default deny)**, 열 단위 DTO 제한, RLS·트랜잭션 보강을 완료했다. 운영 DB 최신 적용은 migration `052`이며, 채팅 페이지 조회 연계 앱은 `5618074`로 운영 배포했다. E2E 시드는 `supabase/seeds/`로 분리한다. 운영 대상은 신규 싱가포르 프로젝트이며 루트 `AI_GUIDE.md`가 project ref의 SSOT다.
+> **현재 (2026-10-08)**: Route Handler **60+**개 + Supabase PostgreSQL 데이터 레이어. 세 역할의 세션 UUID 바인딩, API **기본 거부(default deny)**, 열 단위 DTO 제한, RLS·트랜잭션 보강을 완료했다. 운영 DB 최신 적용은 migration `054`이며, 현재 운영 앱은 `5618074`다. 수업 변경 정책 앱 코드는 아직 미배포이고 054 호환 RPC가 기존 앱 호출을 053 정책 RPC로 위임한다. E2E 시드는 `supabase/seeds/`로 분리한다. 운영 대상은 신규 싱가포르 프로젝트이며 루트 `AI_GUIDE.md`가 project ref의 SSOT다.
 
 > `041_targeted_chat_inbox.sql`은 전체 채팅 cache warm을 사용자 범위 집계로 교체하고, `042_harden_chat_rpc_privileges.sql`은 해당 RPC의 익명 실행 권한을 제거한다. 두 migration 모두 신규 싱가포르 운영 DB에 적용됐다.
 
@@ -245,9 +245,9 @@
 | GET | `/api/learning/reports` | Learning, `MonthlyGrowthReportEditor` | `monthly_growth_reports` | `studentId` \| `teacherId` |
 | POST | `/api/learning/reports` | teacher reports | ↑ | 5필드 + `month`, `studentId`, `teacherId` |
 | PATCH | `/api/learning/reports` | Learning read | `monthly_growth_reports.read_at` | `?id=&action=read` |
-| GET | `/api/lessons/reschedule` | My Lessons hubs, `RescheduleProgressPanel` | `lesson_reschedule_requests` | `studentId` \| `teacherId` (+ `makeupRemaining`) |
-| POST | `/api/lessons/reschedule` | `RescheduleRequestForm` | ↑ + `lessons` | `lessonId`, `proposedScheduledAt`, `initiator`, `reason?` |
-| PATCH | `/api/lessons/reschedule` | `RescheduleProgressPanel`, 검토센터 | ↑ | `{ id, action: approve\|reject\|cancel, role }` |
+| GET | `/api/lessons/reschedule` | My Lessons hubs, `RescheduleProgressPanel` | `lesson_reschedule_requests` | `studentId` \| `teacherId`; 사용자 범위·건수 제한 조회 |
+| POST | `/api/lessons/reschedule` | `RescheduleRequestForm` | ↑ + `lessons` | `lessonId`, `proposedScheduledAt`, `reason?`; initiator는 로그인 역할에서 파생 |
+| PATCH | `/api/lessons/reschedule` | `RescheduleProgressPanel`, 검토센터 | ↑ | `{ id, action: approve\|reject\|cancel }` |
 
 > `GET ?scope=all` — Route Handler에만 존재, **UI 미호출**. admin 검토는 `GET /api/admin/reviews` 스냅샷 사용.
 
@@ -424,7 +424,7 @@
 
 ### 6.5 보강 · 완료 · 급여
 
-- **보강**: 학생 월 2회 (`cancelled` 제외), pending 중복 불가. 생성·승인/거절/취소와 lesson 상태 변경은 migration 029 RPC 트랜잭션으로 원자 처리
+- **수업 변경**: 학생은 수강 계약별 기본 2회, 무료체험은 별도 1회. pending·approved만 차감하며 rejected·cancelled는 복원한다. 학생·강사 모두 수업 시작 2시간 전까지 요청하고 원 수업 시작 전까지만 승인 가능하다. migration 053 RPC가 한도·가용시간·충돌·상태 전환을 원자 처리한다. 강사 발의 2회차 승인부터 원 수업 KST 월의 월 만근·고정 분기 보너스를 별도 이벤트로 제외한다.
 - **피드백 POST** → `completeLesson` → `status=completed` → 급여 `duration_minutes` 반영
 - **mark_student_absent** → `student_absent=true`, completed, 피드백 생략
 - **급여**: `estimated` → `processing` → `paid`/`completed`; 정산 상태·재무 원장 연결은 migration 027~029 RPC로 원자 처리
@@ -516,6 +516,8 @@
 | `041_targeted_chat_inbox.sql` | 사용자 범위 채팅 집계 RPC와 lifecycle trigger |
 | `042_harden_chat_rpc_privileges.sql` | 채팅 RPC 익명 실행 권한 제거 |
 | `052_paginated_chat_history.sql` | 일반·관리자 1:1 채팅의 `(created_at, id)` keyset 페이지 RPC와 복합 인덱스. 2026-10-07 운영 DB 적용·권한 검증 및 `5618074` 앱 배포 완료 |
+| `053_enrollment_reschedule_policy.sql` | 수강별 학생 변경 한도, 2시간 마감·자동 만료, 강사 2회차 보너스 제외 원장과 원자 RPC. **2026-10-08 운영 DB 적용·권한 검증 완료, 연계 앱 미배포** |
+| `054_legacy_reschedule_rpc_compatibility.sql` | 운영 앱 `5618074`의 기존 5인자 생성 RPC를 유지하고 클라이언트 월 값을 무시한 채 053의 4인자 정책 RPC로 위임. **2026-10-08 운영 DB 적용·권한 검증 완료** |
 
 **적용·검증**: `npm run apply:rls` · `npm run test:rls` · `npm run test:schema-rls-boundaries` · `npm run test:transactions`
 

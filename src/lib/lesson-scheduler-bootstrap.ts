@@ -7,7 +7,7 @@ import {
   warmEnrollmentCache,
 } from "@/lib/enrollments/repository";
 import { warmLessonCache } from "@/lib/lessons/repository";
-import { warmRescheduleCache } from "@/lib/reschedule/repository";
+import { expireDueRescheduleRequestsInDb, warmRescheduleCache } from "@/lib/reschedule/repository";
 import { restoreOccupiedWeeklyAvailabilityInDb, warmAllTeacherAvailabilityCache } from "@/lib/teacher-availability/repository";
 import { bootstrapActiveEnrollmentSchedulesInDb } from "@/lib/lessons/schedule-service";
 import { warmLearningCache } from "@/lib/learning/repository";
@@ -19,6 +19,7 @@ import { warmAdminReviewLogCache } from "@/lib/admin/admin-review-log-repository
 import { warmAdminLessonOperationLogCache } from "@/lib/admin/admin-lesson-operation-log-repository";
 import { warmTeacherPayrollPenaltyCache } from "@/lib/teacher-payroll-penalty-repository";
 import { warmTeacherPayrollPenaltyEventCache } from "@/lib/teacher-payroll-penalty-event-repository";
+import { warmTeacherAttendancePolicyEventCache } from "@/lib/teacher-attendance-policy-event-repository";
 import { warmSalaryBonusPolicyCache } from "@/lib/teacher-salary-policy-repository";
 import { warmTeacherSalaryAdjustmentCache } from "@/lib/teacher-salary-adjustment-repository";
 import { warmTeacherStudentContextCache } from "@/lib/teacher-student-context-repository";
@@ -88,6 +89,7 @@ export async function ensureReadModelsBootstrapped(): Promise<void> {
     ensureReadModel("admin lesson operation logs", warmAdminLessonOperationLogCache),
     ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
     ensureReadModel("teacher payroll penalty events", warmTeacherPayrollPenaltyEventCache),
+    ensureReadModel("teacher attendance policy events", warmTeacherAttendancePolicyEventCache),
     ensureReadModel("salary bonus policy", warmSalaryBonusPolicyCache),
     ensureReadModel("salary adjustments", warmTeacherSalaryAdjustmentCache),
     ensureReadModel("teacher student context", warmTeacherStudentContextCache),
@@ -167,6 +169,7 @@ export async function ensureAdminTeachersBootstrapped(): Promise<void> {
     ensureReadModel("teacher applications", warmTeacherApplicationCache),
     ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
     ensureReadModel("teacher payroll penalty events", warmTeacherPayrollPenaltyEventCache),
+    ensureReadModel("teacher attendance policy events", warmTeacherAttendancePolicyEventCache),
   ]);
 }
 
@@ -177,6 +180,7 @@ export async function ensureAdminSalaryBootstrapped(): Promise<void> {
     ensureTeacherProfilesBootstrapped(),
     ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
     ensureReadModel("teacher payroll penalty events", warmTeacherPayrollPenaltyEventCache),
+    ensureReadModel("teacher attendance policy events", warmTeacherAttendancePolicyEventCache),
     ensureReadModel("salary bonus policy", warmSalaryBonusPolicyCache),
     ensureReadModel("salary adjustments", warmTeacherSalaryAdjustmentCache),
   ]);
@@ -193,6 +197,7 @@ export async function ensureLessonOperationsBootstrapped(): Promise<void> {
     ensureReadModel("admin lesson operation logs", warmAdminLessonOperationLogCache),
     ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
     ensureReadModel("teacher payroll penalty events", warmTeacherPayrollPenaltyEventCache),
+    ensureReadModel("teacher attendance policy events", warmTeacherAttendancePolicyEventCache),
   ]);
 }
 
@@ -227,15 +232,6 @@ export async function ensureLearningWorkflowBootstrapped(): Promise<void> {
   await Promise.all([ensureLearningBootstrapped(), ensureLessonsBootstrapped()]);
 }
 
-export async function ensureRescheduleWorkflowBootstrapped(): Promise<void> {
-  await Promise.all([
-    ensureReschedulesBootstrapped(),
-    ensureLessonsBootstrapped(),
-    ensureEnrollmentsBootstrapped(),
-    ensureTeacherAvailabilityBootstrapped(),
-  ]);
-}
-
 export const ensureTeacherApplicationsBootstrapped = () =>
   ensureReadModel("teacher applications", warmTeacherApplicationCache);
 
@@ -244,6 +240,7 @@ export async function ensureTeacherSalaryBootstrapped(): Promise<void> {
     ensureSalaryBootstrapped(),
     ensureLessonsBootstrapped(),
     ensureReadModel("teacher payroll penalties", warmTeacherPayrollPenaltyCache),
+    ensureReadModel("teacher attendance policy events", warmTeacherAttendancePolicyEventCache),
     ensureReadModel("salary bonus policy", warmSalaryBonusPolicyCache),
     ensureReadModel("salary adjustments", warmTeacherSalaryAdjustmentCache),
   ]);
@@ -260,6 +257,7 @@ export async function ensureTeacherStudentContextBootstrapped(): Promise<void> {
 export interface ScheduleMaintenanceResult {
   opened: number;
   expired: number;
+  reschedulesExpired: number;
 }
 
 /** Server-only: perform scheduled repairs and lifecycle transitions. */
@@ -299,9 +297,12 @@ export async function runScheduleMaintenanceInDb(): Promise<ScheduleMaintenanceR
     lastMaintenanceRefreshAt = Date.now();
   }
 
-  const opened = await ensureRenewalOffersInDb();
-  const expired = await expireEnrollmentHoldsInDb();
-  return { opened, expired };
+  const [opened, expired, reschedulesExpired] = await Promise.all([
+    ensureRenewalOffersInDb(),
+    expireEnrollmentHoldsInDb(),
+    expireDueRescheduleRequestsInDb(),
+  ]);
+  return { opened, expired, reschedulesExpired };
 }
 
 /** Lighter bootstrap for public/marketing pages. */

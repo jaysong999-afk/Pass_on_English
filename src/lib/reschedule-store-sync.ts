@@ -3,6 +3,7 @@ import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import { getDateKeyInTimezone } from "@/lib/availability/timezone";
 import { getRescheduleCache } from "@/lib/reschedule/reschedule-cache";
 
+/** @deprecated Quotas are enrollment-based; retained for legacy cache consumers. */
 export const STUDENT_RESCHEDULE_MONTHLY_LIMIT = 2;
 
 function monthKey(date = new Date()): string {
@@ -49,7 +50,7 @@ export function countStudentRescheduleRequestsThisMonth(
       r.studentId === studentId &&
       r.initiator === "student" &&
       r.requestMonth === month &&
-      r.status !== "cancelled"
+      ["pending_student_approval", "pending_teacher_approval", "approved"].includes(r.status)
   ).length;
 }
 

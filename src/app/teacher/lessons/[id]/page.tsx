@@ -10,11 +10,13 @@ import { LessonStatusBadge } from "@/components/shared/LessonStatusBadge";
 import { TEACHER_TIMEZONE } from "@/lib/availability/timezone";
 import type { LessonDisplayContext } from "@/lib/teacher-lesson-context";
 import type { Lesson } from "@/types";
+import { canRequestReschedule } from "@/lib/reschedule-policy";
 
 interface LessonDetailResponse {
   lesson: Lesson;
   display: LessonDisplayContext | null;
   needsFeedback: boolean;
+  teacherApprovedRescheduleCount: number;
 }
 
 export default function TeacherLessonDetailPage({
@@ -91,6 +93,10 @@ export default function TeacherLessonDetailPage({
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           A reschedule request is pending approval.
         </p>
+      ) : lesson.status === "scheduled" && !canRequestReschedule(lesson) ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Reschedule requests close two hours before class.
+        </p>
       ) : lesson.status === "scheduled" && !showRescheduleForm ? (
         <Button variant="secondary" onClick={() => setShowRescheduleForm(true)}>
           Request Reschedule
@@ -99,6 +105,7 @@ export default function TeacherLessonDetailPage({
         <RescheduleRequestForm
           lesson={lesson}
           initiator="teacher"
+          teacherApprovedRescheduleCount={data.teacherApprovedRescheduleCount}
           inputTimeZone={TEACHER_TIMEZONE}
           onCancel={() => setShowRescheduleForm(false)}
           onSubmitted={() => {
@@ -116,6 +123,10 @@ export default function TeacherLessonDetailPage({
             success: "Request sent. Waiting for student approval.",
             pendingExists: "A reschedule request is already pending for this lesson.",
             slotUnavailable: "That time is already occupied by another class.",
+            deadlinePassed: "Reschedule requests close two hours before class.",
+            deadlineHint: "Request deadline:",
+            teacherBonusWarning: "This is the second or later teacher-initiated change for this enrollment. Once the student approves it, both the monthly perfect-attendance bonus and the fixed-quarter bonus for the original lesson month will be forfeited.",
+            teacherBonusConfirm: "I understand the bonus impact and want to continue.",
           }}
         />
       ) : null}

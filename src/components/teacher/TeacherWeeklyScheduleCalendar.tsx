@@ -31,6 +31,7 @@ import {
 import { TeacherLessonDetailCard } from "@/components/teacher/TeacherLessonDetailCard";
 import { RescheduleRequestForm } from "@/components/shared/RescheduleRequestForm";
 import type { LessonDisplayContext } from "@/lib/teacher-lesson-context";
+import { canRequestReschedule } from "@/lib/reschedule-policy";
 
 const ACTIVE_LESSON: LessonStatus[] = ["scheduled", "reschedule_pending", "pending_payment"];
 const PAST_LESSON: LessonStatus[] = ["completed", "cancelled"];
@@ -127,6 +128,7 @@ export function TeacherWeeklyScheduleCalendar({
   };
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [selectedDisplay, setSelectedDisplay] = useState<LessonDisplayContext | null>(null);
+  const [teacherApprovedRescheduleCount, setTeacherApprovedRescheduleCount] = useState(0);
   const [displayLoading, setDisplayLoading] = useState(false);
   const [showRescheduleForm, setShowRescheduleForm] = useState(false);
   const gridTimes = useMemo(() => generateGridStartTimes(), []);
@@ -165,6 +167,7 @@ export function TeacherWeeklyScheduleCalendar({
   useEffect(() => {
     if (!selectedLesson) {
       setSelectedDisplay(null);
+      setTeacherApprovedRescheduleCount(0);
       setDisplayLoading(false);
       return;
     }
@@ -175,9 +178,10 @@ export function TeacherWeeklyScheduleCalendar({
 
     fetch(`/api/teacher/lessons/${selectedLesson.id}`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((json: { display?: LessonDisplayContext | null } | null) => {
+      .then((json: { display?: LessonDisplayContext | null; teacherApprovedRescheduleCount?: number } | null) => {
         if (cancelled) return;
         setSelectedDisplay(json?.display ?? null);
+        setTeacherApprovedRescheduleCount(json?.teacherApprovedRescheduleCount ?? 0);
       })
       .catch(() => {
         if (!cancelled) setSelectedDisplay(null);
@@ -498,17 +502,24 @@ export function TeacherWeeklyScheduleCalendar({
                     A reschedule request is pending approval.
                   </p>
                 ) : selectedLesson.status === "scheduled" && !showRescheduleForm ? (
-                  <Button
-                    variant="secondary"
-                    className="w-full gap-2"
-                    onClick={() => setShowRescheduleForm(true)}
-                  >
-                    Request Reschedule
-                  </Button>
+                  canRequestReschedule(selectedLesson) ? (
+                    <Button
+                      variant="secondary"
+                      className="w-full gap-2"
+                      onClick={() => setShowRescheduleForm(true)}
+                    >
+                      Request Reschedule
+                    </Button>
+                  ) : (
+                    <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      Reschedule requests close two hours before class.
+                    </p>
+                  )
                 ) : selectedLesson.status === "scheduled" && showRescheduleForm ? (
                   <RescheduleRequestForm
                     lesson={selectedLesson}
                     initiator="teacher"
+                    teacherApprovedRescheduleCount={teacherApprovedRescheduleCount}
                     inputTimeZone={TEACHER_TIMEZONE}
                     onCancel={() => setShowRescheduleForm(false)}
                     onSubmitted={() => {
@@ -527,6 +538,10 @@ export function TeacherWeeklyScheduleCalendar({
                       success: "Request sent. Waiting for student approval.",
                       pendingExists: "A reschedule request is already pending for this lesson.",
                       slotUnavailable: "That time is already occupied by another class.",
+                      deadlinePassed: "Reschedule requests close two hours before class.",
+                      deadlineHint: "Request deadline:",
+                      teacherBonusWarning: "This is the second or later teacher-initiated change for this enrollment. Student approval will forfeit the monthly perfect-attendance and fixed-quarter bonuses for the original lesson month.",
+                      teacherBonusConfirm: "I understand the bonus impact and want to continue.",
                     }}
                   />
                 ) : null}

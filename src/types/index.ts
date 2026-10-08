@@ -71,6 +71,8 @@ export interface StudentEnrollment {
   sessionsTotal: number;
   /** 잔여 수업 횟수 — 관리자가 가감 가능 */
   sessionsRemaining: number;
+  /** Student-initiated reschedules allowed for this enrollment. */
+  studentRescheduleLimit?: number;
   startDate: string;
   endDate: string;
   status: EnrollmentStatus;
@@ -515,6 +517,7 @@ export type RescheduleRequestStatus =
 export interface LessonRescheduleRequest {
   id: string;
   lessonId: string;
+  enrollmentId?: string;
   teacherId: string;
   teacherName: string;
   studentId: string;
@@ -524,10 +527,36 @@ export interface LessonRescheduleRequest {
   reason?: string;
   initiator: RescheduleInitiator;
   status: RescheduleRequestStatus;
-  /** YYYY-MM — student monthly limit tracking */
+  /** Legacy/audit month (YYYY-MM); quota is enrollment-based. */
   requestMonth: string;
+  isTrialRequest?: boolean;
+  teacherBonusPolicyApplies?: boolean;
+  closedReason?: string;
   createdAt: string;
   respondedAt?: string;
+}
+
+export interface RescheduleUsage {
+  scopeKey: string;
+  enrollmentId?: string;
+  isTrial: boolean;
+  studentLimit: number;
+  studentUsed: number;
+  studentRemaining: number;
+  teacherApprovedCount: number;
+  /** The next approved teacher request forfeits attendance bonuses. */
+  teacherBonusForfeitureOnNextApproval: boolean;
+}
+
+export interface TeacherAttendancePolicyEvent {
+  id: string;
+  teacherId: string;
+  enrollmentId: string;
+  rescheduleRequestId: string;
+  eventMonth: string;
+  perfectAttendanceForfeited: boolean;
+  quarterlyBonusReset: boolean;
+  createdAt: string;
 }
 
 export interface ChatRoom {

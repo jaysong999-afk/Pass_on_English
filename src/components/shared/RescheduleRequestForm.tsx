@@ -11,11 +11,14 @@ import { snapIsoToSlotGrid } from "@/lib/availability/time-utils";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import { getTimezoneShortLabel } from "@/lib/availability/timezone";
 import type { Lesson } from "@/types";
+import { canRequestReschedule, getRescheduleDeadline } from "@/lib/reschedule-policy";
 
 interface RescheduleRequestFormProps {
   lesson: Lesson;
   initiator: "teacher" | "student";
   makeupRemaining?: number;
+  makeupLimit?: number;
+  teacherApprovedRescheduleCount?: number;
   /** Wall-clock zone for datetime-local (teachers: PHT, students: KST). */
   inputTimeZone?: string;
   /** Locale hint for the browser's native date/time control. */
@@ -39,6 +42,10 @@ interface RescheduleRequestFormProps {
     time?: string;
     loadingSlots?: string;
     noAvailableSlots?: string;
+    deadlinePassed?: string;
+    deadlineHint?: string;
+    teacherBonusWarning?: string;
+    teacherBonusConfirm?: string;
   };
 }
 
@@ -46,6 +53,8 @@ export function RescheduleRequestForm({
   lesson,
   initiator,
   makeupRemaining,
+  makeupLimit,
+  teacherApprovedRescheduleCount = 0,
   inputTimeZone = CANONICAL_TIMEZONE,
   inputLocale = "en",
   onSubmitted,
@@ -61,6 +70,10 @@ export function RescheduleRequestForm({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bonusWarningAccepted, setBonusWarningAccepted] = useState(false);
+  const deadlinePassed = !canRequestReschedule(lesson);
+  const needsBonusAcknowledgement =
+    initiator === "teacher" && !lesson.isTrial && teacherApprovedRescheduleCount >= 1;
 
   const handleSubmit = async () => {
     if (!effectiveProposedTime.trim()) return;
@@ -82,8 +95,11 @@ export function RescheduleRequestForm({
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === "monthly_limit_reached") setError(labels.limitReached ?? data.error);
+        if (data.error === "student_reschedule_limit_reached") setError(labels.limitReached ?? data.error);
         else if (data.error === "pending_request_exists") setError(labels.pendingExists ?? data.error);
+        else if (data.error === "reschedule_deadline_passed") {
+          setError(labels.deadlinePassed ?? data.error);
+        }
         else if (data.error === "slot_unavailable") {
           setError(labels.slotUnavailable ?? "That time is already occupied by another class.");
         } else setError(data.error ?? "Request failed");
@@ -98,9 +114,11 @@ export function RescheduleRequestForm({
 
   const disabledByLimit =
     initiator === "student" && makeupRemaining !== undefined && makeupRemaining <= 0;
+  const submitDisabled =
+    disabledByLimit || deadlinePassed || (needsBonusAcknowledgement && !bonusWarningAccepted);
 
   useEffect(() => {
-    if (initiator !== "student" || !selectedDate || disabledByLimit) {
+    if (initiator !== "student" || !selectedDate || submitDisabled) {
       setAvailableSlots([]);
       setSelectedSlot("");
       return;
@@ -131,7 +149,7 @@ export function RescheduleRequestForm({
     return () => {
       cancelled = true;
     };
-  }, [disabledByLimit, initiator, inputTimeZone, lesson.durationMinutes, lesson.id, lesson.teacherId, selectedDate]);
+  }, [initiator, inputTimeZone, lesson.durationMinutes, lesson.id, lesson.teacherId, selectedDate, submitDisabled]);
 
   const studentProposedTime =
     selectedDate && selectedSlot ? `${selectedDate}T${selectedSlot}` : "";
@@ -155,8 +173,36 @@ export function RescheduleRequestForm({
       {initiator === "student" && labels.makeupRemaining && makeupRemaining !== undefined && (
         <p className="text-sm text-gray-600">
           {labels.makeupRemaining}{" "}
-          <span className="font-semibold text-emerald-700">{makeupRemaining}</span>
+          <span className="font-semibold text-emerald-700">
+            {makeupRemaining}{makeupLimit !== undefined ? ` / ${makeupLimit}` : ""}
+          </span>
         </p>
+      )}
+
+      {deadlinePassed ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {labels.deadlinePassed ?? "Reschedule requests close two hours before class."}
+        </p>
+      ) : labels.deadlineHint ? (
+        <p className="text-xs text-gray-500">
+          {labels.deadlineHint}{" "}
+          {getRescheduleDeadline(lesson).toLocaleString(inputLocale, { timeZone: inputTimeZone })}
+        </p>
+      ) : null}
+
+      {needsBonusAcknowledgement && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          <p>{labels.teacherBonusWarning ?? "A second approved change for this enrollment removes the attendance bonuses for the original lesson month."}</p>
+          <label className="mt-2 flex items-start gap-2 font-medium">
+            <input
+              type="checkbox"
+              checked={bonusWarningAccepted}
+              onChange={(event) => setBonusWarningAccepted(event.target.checked)}
+              className="mt-0.5 h-4 w-4"
+            />
+            <span>{labels.teacherBonusConfirm ?? "I understand and want to continue."}</span>
+          </label>
+        </div>
       )}
 
       <div className="space-y-2">
@@ -169,7 +215,7 @@ export function RescheduleRequestForm({
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
               className="rounded-xl"
-              disabled={disabledByLimit}
+              disabled={submitDisabled}
             />
             <p className="text-xs text-gray-500">{labels.date ?? "Date"}</p>
             {loadingSlots ? (
@@ -209,7 +255,7 @@ export function RescheduleRequestForm({
               value={proposedTime}
               onChange={(e) => setProposedTime(e.target.value)}
               className="rounded-xl"
-              disabled={disabledByLimit}
+              disabled={submitDisabled}
             />
             <p className="text-xs text-gray-500">
               :00 · :20 · :40 (20-minute slots, {getTimezoneShortLabel(inputTimeZone)})
@@ -225,7 +271,7 @@ export function RescheduleRequestForm({
           onChange={(e) => setReason(e.target.value)}
           placeholder={labels.reasonPlaceholder}
           rows={3}
-          disabled={disabledByLimit}
+          disabled={submitDisabled}
         />
       </div>
 
@@ -236,7 +282,7 @@ export function RescheduleRequestForm({
       <div className="flex gap-2">
         <Button
           className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-          disabled={!effectiveProposedTime.trim() || submitting || disabledByLimit}
+          disabled={!effectiveProposedTime.trim() || submitting || submitDisabled}
           onClick={handleSubmit}
         >
           {submitting ? labels.submitting : labels.submit}

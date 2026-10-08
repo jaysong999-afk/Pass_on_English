@@ -13,13 +13,14 @@ import {
 import { LessonStatusBadge } from "@/components/shared/LessonStatusBadge";
 import { RescheduleRequestForm } from "@/components/shared/RescheduleRequestForm";
 import { formatDate, formatTime } from "@/lib/utils";
-import type { Lesson } from "@/types";
+import { canRequestReschedule, getRescheduleUsageForLesson } from "@/lib/reschedule-policy";
+import type { Lesson, RescheduleUsage } from "@/types";
 
 interface LessonDetailDialogProps {
   lesson: Lesson | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  makeupRemaining: number;
+  rescheduleUsage: Record<string, RescheduleUsage>;
   onRescheduleSubmitted?: () => void;
   locale: string;
   timeZone: string;
@@ -29,7 +30,7 @@ export function LessonDetailDialog({
   lesson,
   open,
   onOpenChange,
-  makeupRemaining,
+  rescheduleUsage,
   onRescheduleSubmitted,
   locale,
   timeZone,
@@ -45,8 +46,8 @@ export function LessonDetailDialog({
 
   if (!lesson) return null;
 
-  const canReschedule =
-    lesson.status === "scheduled" || lesson.status === "reschedule_pending";
+  const canReschedule = canRequestReschedule(lesson);
+  const usage = getRescheduleUsageForLesson(lesson, rescheduleUsage);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -80,7 +81,8 @@ export function LessonDetailDialog({
             <RescheduleRequestForm
               lesson={lesson}
               initiator="student"
-              makeupRemaining={makeupRemaining}
+              makeupRemaining={usage.studentRemaining}
+              makeupLimit={usage.studentLimit}
               inputTimeZone={timeZone}
               inputLocale={locale}
               onCancel={() => setShowReschedule(false)}
@@ -106,10 +108,12 @@ export function LessonDetailDialog({
                 time: t("timeOptions"),
                 loadingSlots: t("loadingSlots"),
                 noAvailableSlots: t("noAvailableSlots"),
+                deadlinePassed: t("deadlinePassed"),
+                deadlineHint: t("deadlineHint"),
               }}
             />
           ) : (
-            canReschedule && (
+            canReschedule ? (
               <Button
                 variant="secondary"
                 className="w-full gap-2 rounded-xl"
@@ -117,7 +121,11 @@ export function LessonDetailDialog({
               >
                 {t("rescheduleTitle")}
               </Button>
-            )
+            ) : lesson.status === "scheduled" ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                {t("deadlinePassed")}
+              </p>
+            ) : null
           )}
         </div>
       </DialogContent>
@@ -138,7 +146,7 @@ interface GlobalRescheduleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lessons: Lesson[];
-  makeupRemaining: number;
+  rescheduleUsage: Record<string, RescheduleUsage>;
   onSelectLesson: (lesson: Lesson) => void;
   locale: string;
   timeZone: string;
@@ -148,7 +156,7 @@ export function GlobalRescheduleDialog({
   open,
   onOpenChange,
   lessons,
-  makeupRemaining,
+  rescheduleUsage,
   onSelectLesson,
   locale,
   timeZone,
@@ -165,7 +173,7 @@ export function GlobalRescheduleDialog({
         <DialogHeader>
           <DialogTitle>{t("globalRescheduleTitle")}</DialogTitle>
           <DialogDescription>
-            {t("globalRescheduleDesc", { count: makeupRemaining })}
+            {t("globalRescheduleDesc")}
           </DialogDescription>
         </DialogHeader>
 
@@ -173,25 +181,34 @@ export function GlobalRescheduleDialog({
           {upcoming.length === 0 ? (
             <p className="py-6 text-center text-sm text-ink-muted">{t("noLessonsToReschedule")}</p>
           ) : (
-            upcoming.map((lesson) => (
+            upcoming.map((lesson) => {
+              const usage = getRescheduleUsageForLesson(lesson, rescheduleUsage);
+              const disabled = !canRequestReschedule(lesson) || usage.studentRemaining <= 0;
+              return (
               <button
                 key={lesson.id}
                 type="button"
                 onClick={() => {
+                  if (disabled) return;
                   onOpenChange(false);
                   onSelectLesson(lesson);
                 }}
-                className="flex w-full items-center justify-between rounded-xl border border-brand-100 p-4 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/50"
+                disabled={disabled}
+                className="flex w-full items-center justify-between rounded-xl border border-brand-100 p-4 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/50 disabled:cursor-not-allowed disabled:opacity-55"
               >
                 <div>
                   <p className="font-semibold text-ink">
                     {formatDate(lesson.scheduledAt, locale, timeZone)} {formatTime(lesson.scheduledAt, locale, timeZone)}
                   </p>
                   <p className="text-sm text-ink-muted">{lesson.teacherName}</p>
+                  <p className="mt-1 text-xs text-ink-muted">
+                    {t("lessonQuota", { remaining: usage.studentRemaining, limit: usage.studentLimit })}
+                  </p>
                 </div>
                 <LessonStatusBadge status={lesson.status} />
               </button>
-            ))
+              );
+            })
           )}
         </div>
       </DialogContent>

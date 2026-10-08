@@ -8,6 +8,7 @@ import type {
 import type { Locale } from "@/lib/i18n/config";
 import type { DayLabel, SlotStartTime } from "@/lib/availability/types";
 import { formatPlanLabel } from "@/lib/pricing-plan-display";
+import { findParentsWithPendingRenewalHolds } from "@/lib/enrollments/renewal-hold-lookup";
 import { getCachedPricingPlanById } from "@/lib/pricing-plan-cache";
 import { getTeacherFromCache } from "@/lib/teachers/teacher-profile-cache";
 import { getAccountSessionCache } from "@/lib/account-session-cache";
@@ -89,6 +90,7 @@ interface EnrollmentRow {
   sessions_total: number;
   sessions_completed: number;
   sessions_remaining: number | null;
+  student_reschedule_limit: number;
   curriculum: string | null;
   preferred_slot_time: string | null;
   preferred_slot_day: string | null;
@@ -132,6 +134,7 @@ const ENROLLMENT_SELECT = `
   sessions_total,
   sessions_completed,
   sessions_remaining,
+  student_reschedule_limit,
   curriculum,
   preferred_slot_time,
   preferred_slot_day,
@@ -188,6 +191,7 @@ function rowToEnrollment(row: EnrollmentRow, planLabel?: string): StudentEnrollm
     curriculum: row.curriculum?.trim() || "General English",
     sessionsTotal: row.sessions_total,
     sessionsRemaining: row.sessions_remaining ?? row.sessions_total - row.sessions_completed,
+    studentRescheduleLimit: row.student_reschedule_limit,
     startDate: toDateKey(row.started_at),
     endDate: toDateKey(row.ended_at),
     status: row.status,
@@ -984,8 +988,23 @@ export async function syncEnrollmentCompletionStatusInDb(
 
 /** Open 15h slot holds for enrollments whose last lesson has ended, even if the student has not clicked 재수강. */
 export async function ensureRenewalOffersInDb(now = new Date()): Promise<number> {
+  const enrollments = getEnrollmentCache();
+  const lessonsAtStart = getAllLessons();
+  const activatedParents = new Set(
+    enrollments.filter((row) => row.status === "active" || row.status === "expiring_soon")
+      .map((row) => row.renewedFromEnrollmentId)
+  );
+  const candidates = enrollments.filter((row) =>
+    isRenewableEnrollmentStatus(row.status) &&
+    !activatedParents.has(row.id) &&
+    !hasUpcomingPaidLesson(row, lessonsAtStart, now)
+  );
+  if (candidates.length === 0) return 0;
+  const parentsWithHolds = await findParentsWithPendingRenewalHolds(
+    createBootstrapDbClient(), candidates.map((row) => row.id)
+  );
   let opened = 0;
-  for (const enrollment of getEnrollmentCache()) {
+  for (const enrollment of candidates) {
     if (!isRenewableEnrollmentStatus(enrollment.status)) continue;
     if (
       getEnrollmentCache().some(
@@ -1001,7 +1020,12 @@ export async function ensureRenewalOffersInDb(now = new Date()): Promise<number>
     if (hasUpcomingPaidLesson(enrollment, lessons, now)) continue;
 
     const window = getRenewalWindowState(enrollment, lessons, now);
-    const existingHold = await dedupeRenewalHoldsForParentInDb(enrollment.id);
+    // Keep duplicate repair even outside the renewal window. A negative batch
+    // result only skips this read; confirmRenewalEnrollmentInDb still rechecks
+    // the database immediately before creating or reusing a hold.
+    const existingHold = parentsWithHolds.has(enrollment.id)
+      ? await dedupeRenewalHoldsForParentInDb(enrollment.id)
+      : null;
     if (existingHold) {
       if (window.canAdminActivate) {
         await markEnrollmentCompletedIfCourseEnded(enrollment);

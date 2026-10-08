@@ -12,6 +12,10 @@ import {
 } from "@/lib/teacher-salary-policy-store-sync";
 import { getAdjustmentTotals } from "@/lib/teacher-salary-adjustment-store-sync";
 import { getActiveNoShowDeductionTotal } from "@/lib/teacher-payroll-penalty-event-store-sync";
+import {
+  isScheduleChangePerfectAttendanceForfeited,
+  isScheduleChangeQuarterlyBonusReset,
+} from "@/lib/teacher-attendance-policy-event-cache";
 import { getTeacherById, getAllTeachers, updateTeacherHourlyRatePhp } from "@/lib/teacher-profile-store-sync";
 import { getTeacherLessons } from "@/lib/teacher-lesson-store-sync";
 import {
@@ -84,7 +88,10 @@ export function isQuarterlyBonusEligible(teacherId: string, month: string): bool
 
     for (const earningMonth of earningMonths) {
       if (lessonsInMonth(teacherId, earningMonth).length === 0) return false;
-      if (isQuarterlyBonusReset(teacherId, earningMonth)) return false;
+      if (
+        isQuarterlyBonusReset(teacherId, earningMonth) ||
+        isScheduleChangeQuarterlyBonusReset(teacherId, earningMonth)
+      ) return false;
     }
     return fixedQuarterlyHours(teacherId, month) > 0;
   }
@@ -97,7 +104,11 @@ export function isQuarterlyBonusEligible(teacherId: string, month: string): bool
   if (joinedDate > firstMonthStart) return false;
 
   for (let i = 0; i < policy.quarterlyPeriodMonths; i++) {
-    if (isQuarterlyBonusReset(teacherId, addMonths(month, -i))) return false;
+    const earningMonth = addMonths(month, -i);
+    if (
+      isQuarterlyBonusReset(teacherId, earningMonth) ||
+      isScheduleChangeQuarterlyBonusReset(teacherId, earningMonth)
+    ) return false;
   }
 
   return legacyRollingQuarterlyHours(teacherId, month) > 0;
@@ -126,8 +137,14 @@ export function isPerfectAttendanceBonusEligible(
   if (joinedDate > `${qualifyingMonth}-01`) return false;
 
   if (lessonsInMonth(teacherId, qualifyingMonth).length === 0) return false;
-  if (isPerfectAttendanceForfeited(teacherId, qualifyingMonth)) return false;
-  if (isPerfectAttendanceForfeited(teacherId, month)) return false;
+  if (
+    isPerfectAttendanceForfeited(teacherId, qualifyingMonth) ||
+    isScheduleChangePerfectAttendanceForfeited(teacherId, qualifyingMonth)
+  ) return false;
+  if (
+    isPerfectAttendanceForfeited(teacherId, month) ||
+    isScheduleChangePerfectAttendanceForfeited(teacherId, month)
+  ) return false;
 
   return true;
 }

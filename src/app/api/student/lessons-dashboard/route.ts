@@ -5,6 +5,7 @@ import { listStudentEnrollmentsInDb } from "@/lib/enrollments/repository";
 import { decorateEnrollmentRenewal } from "@/lib/enrollments/renewal-window";
 import { listStudentLessonsInDb } from "@/lib/lessons/repository";
 import { listStudentRescheduleRequestsInDb } from "@/lib/reschedule/repository";
+import { buildRescheduleUsageByScope } from "@/lib/reschedule-policy";
 
 export async function GET(request: Request) {
   const studentId = new URL(request.url).searchParams.get("studentId")?.trim();
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
   try {
     await assertLearnerAccess(studentId);
 
-    const [lessons, studentEnrollments, rescheduleData] = await Promise.all([
+    const [lessons, studentEnrollments, requests] = await Promise.all([
       listStudentLessonsInDb(studentId),
       listStudentEnrollmentsInDb(studentId),
       listStudentRescheduleRequestsInDb(studentId),
@@ -27,13 +28,13 @@ export async function GET(request: Request) {
         studentEnrollments
       )
     );
+    const rescheduleUsage = buildRescheduleUsageByScope(requests, enrollments);
 
     return NextResponse.json({
       lessons,
       enrollments,
-      requests: rescheduleData.requests,
-      makeupRemaining: rescheduleData.makeupRemaining,
-      makeupLimit: rescheduleData.makeupLimit,
+      requests,
+      rescheduleUsage,
     });
   } catch (error) {
     console.error("[student/lessons-dashboard GET]", error);

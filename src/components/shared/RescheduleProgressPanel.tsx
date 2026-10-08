@@ -103,13 +103,31 @@ export function RescheduleProgressPanel({
         body: JSON.stringify({ id, action, role }),
       });
       if (res.ok) {
-        await load();
+        const data = (await res.json()) as { request?: LessonRescheduleRequest };
+        if (data.request) {
+          setRequests((current) =>
+            current.map((request) => request.id === data.request?.id ? data.request : request)
+          );
+        }
         onUpdated?.();
         return;
       }
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as { error?: string; request?: LessonRescheduleRequest };
+      if (data.request) {
+        setRequests((current) =>
+          current.map((request) => request.id === data.request?.id ? data.request : request)
+        );
+      }
       setActionError(
-        data.error === "slot_unavailable" ? slotBusyMessage : (data.error ?? "Request failed")
+        data.error === "slot_unavailable"
+          ? slotBusyMessage
+          : data.error === "request_expired"
+            ? locale === "ko"
+              ? "기존 수업 시작 시간이 지나 요청이 자동 만료되었습니다."
+              : locale === "zh"
+                ? "原课程已开始，改期申请已自动失效。"
+                : "The request expired when the original lesson started."
+            : (data.error ?? "Request failed")
       );
     } finally {
       setActingId(null);

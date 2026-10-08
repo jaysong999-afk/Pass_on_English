@@ -9,8 +9,10 @@ import {
   updateSalaryStatementStatusInDb,
 } from "@/lib/teacher-salary/repository";
 import {
+  applyBulkHourlyRateUpdate,
   getVerificationLessons,
   previewBulkHourlyRateUpdate,
+  updateTeacherHourlyRate,
 } from "@/lib/teacher-salary-store-sync";
 import { getAdjustmentsForTeacherMonth } from "@/lib/teacher-salary-adjustment-store-sync";
 import { addSalaryAdjustmentInDb } from "@/lib/teacher-salary-adjustment-repository";
@@ -229,8 +231,7 @@ export async function PATCH(request: Request) {
         effectiveMonth: currentSalaryMonth(),
         reason: "관리자 개별 시급 수정",
       });
-      const { warmTeacherProfileCache } = await import("@/lib/teachers/repository");
-      await warmTeacherProfileCache();
+      updateTeacherHourlyRate(teacherId, Number(hourlyRatePhp));
       return NextResponse.json({ ok: true });
     }
 
@@ -259,8 +260,7 @@ export async function PATCH(request: Request) {
         effectiveMonth: currentSalaryMonth(),
         reason: "관리자 일괄 시급 수정",
       });
-      const { warmTeacherProfileCache } = await import("@/lib/teachers/repository");
-      await warmTeacherProfileCache();
+      applyBulkHourlyRateUpdate(Number(hourlyRatePhp), preview.targetIds);
       return NextResponse.json({ ok: true, preview });
     }
 

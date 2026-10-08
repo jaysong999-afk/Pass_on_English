@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureLearningWorkflowBootstrapped, ensureReschedulesBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { ensureLearningWorkflowBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
 import { buildLessonDisplayContext } from "@/lib/teacher-lesson-context";
 import {
   completeLessonAsStudentAbsentInDb,
@@ -7,12 +7,13 @@ import {
   lessonNeedsFeedback,
 } from "@/lib/lessons/repository";
 import { getFeedbackByLesson } from "@/lib/learning-store-sync";
+import { countTeacherApprovedReschedulesForEnrollmentInDb } from "@/lib/reschedule/repository";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await Promise.all([ensureLearningWorkflowBootstrapped(), ensureReschedulesBootstrapped()]);
+  await ensureLearningWorkflowBootstrapped();
   const { id } = await params;
   const lesson = await getLessonByIdInDb(id);
   if (!lesson) {
@@ -21,12 +22,19 @@ export async function GET(
 
   const display = buildLessonDisplayContext(lesson);
   const feedback = getFeedbackByLesson(id);
+  const teacherApprovedRescheduleCount = lesson.isTrial
+    ? 0
+    : await countTeacherApprovedReschedulesForEnrollmentInDb(
+        lesson.enrollmentId,
+        lesson.teacherId
+      );
 
   return NextResponse.json({
     lesson,
     display,
     needsFeedback: lessonNeedsFeedback(lesson),
     feedback: feedback ?? null,
+    teacherApprovedRescheduleCount,
   });
 }
 
@@ -34,7 +42,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await Promise.all([ensureLearningWorkflowBootstrapped(), ensureReschedulesBootstrapped()]);
+  await ensureLearningWorkflowBootstrapped();
   const { id } = await params;
   const lesson = await getLessonByIdInDb(id);
   if (!lesson) {

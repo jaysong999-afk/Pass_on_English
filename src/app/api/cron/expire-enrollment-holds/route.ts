@@ -10,8 +10,8 @@ export async function GET(request: Request) {
   if (authError) return authError;
 
   try {
-    const { opened, expired } = await runScheduleMaintenanceInDb();
-    return NextResponse.json({ success: true, opened, expired });
+    const { opened, expired, reschedulesExpired } = await runScheduleMaintenanceInDb();
+    return NextResponse.json({ success: true, opened, expired, reschedulesExpired });
   } catch (error) {
     console.error("[GET /api/cron/expire-enrollment-holds]", error);
     const message = error instanceof Error ? error.message : "expire_holds_failed";

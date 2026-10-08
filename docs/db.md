@@ -306,6 +306,7 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | sessions_total | int | |
 | sessions_completed | int | default 0 |
 | sessions_remaining | int | nullable — 잔여 회차 (관리자 가감) |
+| student_reschedule_limit | int | default 2 — 해당 수강 계약의 학생 발의 변경 허용 횟수 스냅샷 |
 | paid_sessions_total | int | nullable — 결제 확인 시 고정되는 환불 정책 분모; 보너스·보강 회차 제외 |
 | paid_sessions_source | text | 결제 스냅샷 또는 legacy 복원 근거 |
 | curriculum | text | nullable |
@@ -373,6 +374,7 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 |------|------|------|
 | id | uuid PK | |
 | lesson_id | uuid FK → lessons | |
+| enrollment_id | uuid FK → enrollments | nullable(무료체험·레거시), 정규 수강 한도 범위 |
 | teacher_id | uuid FK | |
 | student_id | uuid FK | |
 | initiator | reschedule_initiator | |
@@ -380,11 +382,14 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | proposed_scheduled_at | timestamptz | |
 | status | reschedule_status | default `pending_*_approval` |
 | reason | text | nullable |
-| request_month | text | YYYY-MM — 학생 월 2회 제한 (cancelled 제외) |
+| request_month | text | YYYY-MM — 감사·레거시 호환용(한도 기준 아님) |
+| is_trial_request | boolean | 무료체험 변경 한도 분리 |
+| teacher_bonus_policy_applies | boolean | migration 053 이후 강사 승인 건에만 보너스 정책 적용 |
+| closed_reason | text | 거절·취소·원 수업 시작 자동 만료 사유 |
 | responded_at | timestamptz | nullable |
 | created_at | timestamptz | |
 
-**인덱스**: (lesson_id, status), (student_id, request_month), (teacher_id, status)
+**인덱스**: 수업별 pending partial unique, 수강·initiator·trial·status 사용량, pending 원 수업 시작시각
 
 ---
 
@@ -746,9 +751,11 @@ Logic:
 
 ### 5.3 check_student_reschedule_limit()
 
-Trigger before INSERT on `lesson_reschedule_requests`:
+Trigger before INSERT/UPDATE on `lesson_reschedule_requests`:
 
-- IF initiator = student AND count (excluding `cancelled`) >= 2 for `request_month` → RAISE EXCEPTION
+- 정규수업은 `enrollments.student_reschedule_limit`(기본 2), 무료체험은 학생별 1회
+- pending·approved만 사용량에 포함하고 rejected·cancelled는 복원
+- lesson에서 teacher/student/enrollment/trial/original time을 파생해 클라이언트 위조 방지
 
 ---
 
@@ -773,8 +780,9 @@ Trigger before INSERT on `lesson_reschedule_requests`:
 
 | RPC | 보장 |
 |-----|------|
-| `create_lesson_reschedule_request` | pending 중복, 월 제한, lesson 상태 전환과 request 생성을 한 트랜잭션에서 처리 |
-| `respond_lesson_reschedule_request` | pending 조건부 승인·거절·취소와 원 수업 시간/상태 갱신을 원자 처리 |
+| `create_lesson_reschedule_request` | pending 중복, 수강별 한도, 2시간 마감, Availability·충돌, lesson 상태 전환을 한 트랜잭션에서 처리 |
+| `respond_lesson_reschedule_request` | 승인 시 슬롯·원 수업 시작을 재검증하고 거절·취소·강사 보너스 이벤트와 상태 갱신을 원자 처리 |
+| `expire_due_lesson_reschedule_requests` | 원 수업이 시작된 pending 요청을 집합 취소하고 원 수업 상태 복원 |
 | 급여 정산 RPC (migration 029) | statement 상태, 지급 시각·금액과 finance transaction 연결을 중간 실패 없이 반영 |
 
 민감 컬럼은 테이블 전체 SELECT에 의존하지 않고 제한된 view/RPC/명시적 select 및 API DTO로 제공한다. 학생·교사는 다른 사용자의 profile private 열과 교사 시급·정산 열을 직접 읽을 수 없다.
@@ -876,6 +884,8 @@ supabase db push
 | 41 | `041_targeted_chat_inbox.sql` | 사용자 범위 채팅 집계 RPC, 메시지 인덱스, enrollment/admin 대화방 lifecycle trigger |
 | 42 | `042_harden_chat_rpc_privileges.sql` | 채팅 RPC의 익명 실행 권한 제거와 trigger 함수 실행 권한 강화 |
 | 52 | `052_paginated_chat_history.sql` | 일반·관리자 1:1 채팅을 `(created_at, id)` 기준 최신 50건씩 조회하는 RPC와 복합 인덱스. **2026-10-07 운영 적용·권한 검증 완료** |
+| 53 | `053_enrollment_reschedule_policy.sql` | 수강별 변경 한도·2시간 마감·자동 만료·강사 2회차 보너스 제외 원장. **2026-10-08 운영 적용·검증 완료** |
+| 54 | `054_legacy_reschedule_rpc_compatibility.sql` | 운영 앱의 기존 5인자 생성 RPC를 053의 4인자 정책 RPC로 위임하는 임시 호환 계층. **2026-10-08 운영 적용·권한 검증 완료** |
 | E2E seed | `supabase/seeds/e2e_rich_seed.sql` | 운영 migration history와 분리된 통합 테스트 시드 (수강신청·홀드·입금·스케줄·보강·피드백·재수강) |
 
 ### 8.3 `001` 포함 항목 (개념적 순서)
@@ -998,3 +1008,10 @@ supabase db push
 - 함수 내부에서 기존 채팅 접근 권한 함수를 재사용하고 cursor 쌍과 최대 조회량을 검증하여 전체 기록 조회를 방지
 - `PUBLIC`·`anon` 실행 권한을 제거하고 `authenticated`·`service_role`만 실행하도록 제한
 - 운영 검증에서 RPC 2개와 인덱스 2개 존재, `SECURITY DEFINER`, `STABLE`, `postgres` 소유, 역할별 실행 권한을 확인했다. 연계 앱은 `5618074`로 운영 배포했다.
+
+### Migration 053~054 — 수강 건별 수업 변경 정책 (2026-10-08 운영 DB 적용 완료, 앱 미배포)
+
+- 053은 학생 수강 계약별 변경 한도, 무료체험 별도 한도, 학생·강사 공통 2시간 마감, 승인 시점 슬롯 재검증, 자동 만료와 강사 2회차 보너스 제외 이벤트를 원자 RPC로 처리한다.
+- 운영 검증에서 컬럼 5개, 이벤트 원장과 RLS/조회 정책, 인덱스 5개, 한도 trigger, 함수 5개, `SECURITY DEFINER`·`postgres` 소유와 역할별 실행 권한을 확인했다.
+- 054는 현재 운영 앱 `5618074`가 호출하는 5인자 생성 RPC를 보존한다. 레거시 `p_request_month`는 정책 판단에 사용하지 않고 053의 4인자 DB 권위 RPC로 위임한다.
+- 4·5인자 함수 모두 `anon` 실행은 차단되고 `authenticated`·`service_role`만 실행 가능하다. 연계 앱 코드는 아직 운영에 배포하지 않았다.

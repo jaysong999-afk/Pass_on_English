@@ -19,7 +19,8 @@ import type { Locale } from "@/lib/i18n/config";
 import { formatDate, formatLessonTimeRange } from "@/lib/utils";
 import { useActiveLearner } from "@/contexts/ActiveLearnerContext";
 import { StudentAnnouncementCard } from "@/components/student/StudentAnnouncements";
-import type { Lesson, LessonRescheduleRequest, StudentEnrollment } from "@/types";
+import { getRescheduleUsageForLesson } from "@/lib/reschedule-policy";
+import type { Lesson, LessonRescheduleRequest, RescheduleUsage, StudentEnrollment } from "@/types";
 
 export function MyLessonsHub() {
   const { activeLearnerId: learnerId, account, loading: accountLoading } = useActiveLearner();
@@ -36,8 +37,7 @@ export function MyLessonsHub() {
   const [studentLessons, setStudentLessons] = useState<Lesson[]>([]);
   const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([]);
   const [rescheduleRequests, setRescheduleRequests] = useState<LessonRescheduleRequest[]>([]);
-  const [makeupRemaining, setMakeupRemaining] = useState(2);
-  const makeupLimit = 2;
+  const [rescheduleUsage, setRescheduleUsage] = useState<Record<string, RescheduleUsage>>({});
 
   const loadData = useCallback(async () => {
     if (!learnerId) return;
@@ -53,7 +53,7 @@ export function MyLessonsHub() {
     );
     setEnrollments(data.enrollments ?? []);
     setRescheduleRequests(data.requests ?? []);
-    setMakeupRemaining(data.makeupRemaining ?? 2);
+    setRescheduleUsage(data.rescheduleUsage ?? {});
   }, [learnerId]);
 
   useEffect(() => {
@@ -71,6 +71,11 @@ export function MyLessonsHub() {
       (l.status === "scheduled" || l.status === "reschedule_pending") &&
       new Date(l.scheduledAt) >= now
   );
+  const featuredUsage = nextLesson
+    ? getRescheduleUsageForLesson(nextLesson, rescheduleUsage)
+    : activeEnrollments[0]
+      ? rescheduleUsage[activeEnrollments[0].id]
+      : undefined;
 
   const openLesson = (lesson: Lesson) => {
     setSelectedLesson(lesson);
@@ -146,10 +151,10 @@ export function MyLessonsHub() {
         <div className="rounded-2xl border border-brand-100 bg-white p-4 shadow-sm">
           <p className="text-xs font-medium text-ink-muted">{t("makeupRemaining")}</p>
           <p className="mt-1 text-xl font-bold tabular-nums text-ink">
-            {makeupRemaining}
+            {featuredUsage?.studentRemaining ?? "—"}
             <span className="text-base font-semibold text-ink-muted">
               {" / "}
-              {makeupLimit}
+              {featuredUsage?.studentLimit ?? "—"}
               {tCommon("sessions")}
             </span>
           </p>
@@ -211,7 +216,7 @@ export function MyLessonsHub() {
         lesson={selectedLesson}
         open={detailOpen}
         onOpenChange={setDetailOpen}
-        makeupRemaining={makeupRemaining}
+        rescheduleUsage={rescheduleUsage}
         onRescheduleSubmitted={loadData}
         locale={locale}
         timeZone={studentTz}
@@ -221,7 +226,7 @@ export function MyLessonsHub() {
         open={rescheduleOpen}
         onOpenChange={setRescheduleOpen}
         lessons={studentLessons}
-        makeupRemaining={makeupRemaining}
+        rescheduleUsage={rescheduleUsage}
         onSelectLesson={openLesson}
         locale={locale}
         timeZone={studentTz}
