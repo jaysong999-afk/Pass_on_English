@@ -3,7 +3,7 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-10-08 (migration 053~054 및 연계 앱 `4c043e1` 운영 적용·배포 검증 완료)
+최종 검증일: 2026-10-08 (migration 055 및 연계 앱 `662886c` 운영 적용·배포 검증 완료)
 기준 브랜치: `main`
 검증된 운영 기준 커밋: `4c043e1` (`feat: enforce reschedule policy and optimize maintenance`)
 
@@ -22,8 +22,8 @@
 | 폐기 대상 Supabase project ref | `yldtimpsgumheiahcwwi` |
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
-| DB migration 최신 기준 | `054_legacy_reschedule_rpc_compatibility.sql` — 2026-10-08 싱가포르 운영 DB 적용·권한 검증 완료. 본 정책은 `053`, 현재 운영 앱 호환 계층은 `054` |
-| 현재 운영 이미지 / 릴리스 | `pass-on-english:4c043e1` / `/opt/pass-on-english/releases/4c043e1` |
+| DB migration 최신 기준 | `055_repair_enrollment_session_counters.sql` — 2026-10-08 싱가포르 운영 DB 적용·trigger/RLS/정합성 검증 완료. 이전 정책 호환 계층은 `053`~`054` |
+| 현재 운영 이미지 / 릴리스 | `pass-on-english:662886c` / `/opt/pass-on-english/releases/662886c` |
 | 남은 검증 | 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관·환불의 실기기·실데이터 확인 필요 |
 
 ### 금지된 연결
@@ -88,7 +88,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 ### Migration
 
 - migration 디렉터리: `supabase/migrations/`
-- 현재 운영 기준: 기존 `001`~`042` 적용 기준에 `043`을 2026-09-03, `044`를 2026-09-06, `045`~`048`을 2026-10-06, `049`~`052`를 2026-10-07, `053`~`054`를 2026-10-08 싱가포르 운영 DB에 각각 단독 적용. `024`는 운영 migration이 아니라 `supabase/seeds/`로 분리됐다.
+- 현재 운영 기준: 기존 `001`~`042` 적용 기준에 `043`을 2026-09-03, `044`를 2026-09-06, `045`~`048`을 2026-10-06, `049`~`052`를 2026-10-07, `053`~`055`를 2026-10-08 싱가포르 운영 DB에 각각 단독 적용. `024`는 운영 migration이 아니라 `supabase/seeds/`로 분리됐다.
 - `039_repair_auth_refresh_token_sequence.sql`: 이전 후 refresh token PK/sequence 충돌 복구.
 - `040_restore_auth_profile_provisioning.sql`: `auth.users` → `public.profiles` 트리거 복구와 누락 프로필 backfill.
 - `041_targeted_chat_inbox.sql`: 사용자 범위 채팅 inbox/thread 집계, 채팅 인덱스와 enrollment/admin 대화방 lifecycle trigger.
@@ -102,6 +102,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 - `052_paginated_chat_history.sql`은 2026-10-07 운영 DB에 단독 트랜잭션으로 적용했다. 일반 채팅과 관리자 1:1 채팅의 최신 50건 keyset 조회 RPC 2개와 `(thread/room, created_at DESC, id DESC)` 복합 인덱스 2개를 추가했다. 두 함수가 `SECURITY DEFINER`, `STABLE`, `postgres` 소유이고 `anon` 실행은 차단되며 `authenticated`·`service_role`만 실행 가능한 상태를 확인했다. 연계 앱은 `5618074`로 운영 배포했다.
 - `053_enrollment_reschedule_policy.sql`은 2026-10-08 운영 DB에 단독 트랜잭션으로 적용했다. 수강별 변경 한도·2시간 마감·자동 만료·강사 2회차 보너스 제외를 DB 원자 처리로 전환했으며, 컬럼 5개·이벤트 원장/RLS·인덱스 5개·한도 trigger·함수 5개와 역할별 권한을 검증했다.
 - `054_legacy_reschedule_rpc_compatibility.sql`은 2026-10-08 운영 DB에 적용했다. 앱 `5618074`의 5인자 요청 생성 호출을 유지하되 클라이언트 월 값은 무시하고 053의 4인자 정책 RPC에 위임한다. 두 함수 모두 `SECURITY DEFINER`, `postgres` 소유이며 `anon` 실행은 차단되고 `authenticated`·`service_role`만 실행 가능함을 확인했다. 연계 앱은 `4c043e1`로 운영 배포했다.
+- `055_repair_enrollment_session_counters.sql`은 2026-10-08 운영 DB에 단독 적용했다. 완료 수업 trigger를 `SECURITY DEFINER`로 보강하고 실제 완료 수업 기준 카운터를 안전하게 backfill했으며, 활성·결제 완료 수강의 잔여수업 부족을 미해결 일정 아래로 내리지 않도록 정합성을 복구했다. 수강 단위 lessons 인덱스와 학생 범위 채팅 inbox RPC를 추가했고, 양의 완료 카운터 누락·잔여 부족 행은 0건으로 확인했다. 연계 앱은 `662886c`로 운영 배포했다.
 - 같은 날 운영 DB에 `supabase_migrations.schema_migrations`가 없음을 확인했다. 043은 Management API를 통한 해당 SQL 파일 단독 트랜잭션 실행으로 적용했고, CLI 이력을 임의로 생성하거나 과거 이력을 복구하지 않았다. `db push`/전체 migration 재적용 금지: 실제 객체와 과거 적용 기록을 대조한 이력 정합화가 먼저 필요하다.
 - 로컬 `supabase/.temp`의 구 프로젝트 연결을 발견하여 실행을 중단한 후, 공식 CLI `link`로 싱가포르 project ref 및 pooler를 재설정·확인했다. 향후 CLI 실행 전 숨김/ignored 파일의 project-ref도 반드시 확인한다.
 - 운영 DB 적용 전 대상 project ref를 출력 가능한 비밀이 아닌 URL/ref 수준에서 확인하고, 데이터 보존형 SQL인지 검토한다.
@@ -122,7 +123,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 해당 릴리스 `.env.production`에 로컬 공개키·비밀키 두 항목만 등록했다. 키 쌍 정상 및 로컬/서버 파일 일치 확인.
 기존 `VAPID_SUBJECT`와 Supabase 설정은 보존했고 원본은 동일 디렉터리의 `.env.production.pre-vapid-*`로 백업했다(두 파일 모두 600).
 이후 사용자 승인으로 `35bb954` 새 릴리스에 환경파일을 복사하고 이미지 태그만 바꿔 새 이미지를 빌드·배포했다.
-현재 환경파일은 `/opt/pass-on-english/releases/4c043e1/deploy/tencent-lighthouse/.env.production`이다.
+현재 환경파일은 `/opt/pass-on-english/releases/662886c/deploy/tencent-lighthouse/.env.production`이다.
 실행 컨테이너 키와 환경파일 일치, 키 쌍 정상, 실제 HTTPS 브라우저 코드의 공개키 포함 및 비밀키 비노출을 확인했다.
 
 필수 운영 변수:
@@ -262,6 +263,14 @@ https://passonenglish.com/api/health     → 200
 - 제한형 BuildKit에서 `pass-on-english:4c043e1` 이미지를 빌드하고 app health를 먼저 확인한 뒤 cron·nginx를 순서대로 전환했다. app·cron·nginx 모두 실행 중이며 app은 healthy, nginx 설정 검사도 통과했다.
 - 새 앱 런타임에서 VAPID 공개·비밀키가 존재하고 키 쌍이 일치함을 값 노출 없이 확인했다. 운영 HTTPS의 `/ko`, `/zh-CN`, `/ko/signup`, `/api/health`, `/manifest.json`, `/sw.js`는 모두 200이고 주요 보호 API 익명 요청은 401이다.
 - 수강변경 정책 053과 기존 앱 호환 054가 운영 DB에 이미 적용된 상태에서 연계 UI·DB 권위 정책·재수강 대기 일괄 조회 최적화를 함께 활성화했다. 이전 `5618074` 이미지와 릴리스는 롤백용으로 보존했다.
+
+2026-10-08 migration 055 학생 잔여수업 정합성 및 범위 조회 최적화 배포 검증:
+
+- migration `055_repair_enrollment_session_counters.sql`을 싱가포르 운영 DB에 단독 적용하고 완료 trigger의 `SECURITY DEFINER`, 복합 인덱스, 학생 범위 채팅 RPC, 역할별 실행 권한을 읽기 전용으로 확인했다. 양의 완료 카운터 누락과 잔여수업 부족 행은 모두 0건이었다.
+- 커밋 `662886c`를 `origin/main`에 푸시하고 `/opt/pass-on-english/releases/662886c`에 아카이브해 배포했다. 운영 이미지 `pass-on-english:662886c`의 ID는 `sha256:b0a4e6a2040d1676bf19a7f58a0e600ef2e2b5320161e2df27c84492957ef97f`이다.
+- 2GB 호스트에서 CPU 1코어·RAM 1200MB·메모리+스왑 2GB 제한 BuildKit으로 빌드했으며, production build·타입 검사와 정적 페이지 86개 생성을 통과했다. app health 통과 후 cron·nginx를 순서대로 전환했다.
+- 운영 app·cron·nginx가 정상 실행 중이고 app은 healthy다. 서버 내부 및 외부 HTTPS에서 `/ko`, `/zh-CN`, `/ko/signup`, `/api/health`, `/manifest.json`, `/sw.js`가 모두 200이며 최근 app 오류·nginx 5xx는 확인되지 않았다. cron 예약 발송 작업도 `failed: 0`으로 확인했다.
+- 이전 `4c043e1` 릴리스와 이미지는 롤백용으로 보존했다. Supabase URL은 싱가포르 프로젝트와 일치하며 기존 운영 환경변수와 비밀값은 변경·노출하지 않았다.
 
 ## 7. 테스트 기준
 
