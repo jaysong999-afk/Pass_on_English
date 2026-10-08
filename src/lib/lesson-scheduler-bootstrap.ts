@@ -72,8 +72,8 @@ async function ensureReadModel(label: string, fn: () => Promise<unknown>): Promi
 
 /** Server-only: populate in-memory read models without changing persisted state. */
 export async function ensureReadModelsBootstrapped(): Promise<void> {
+  await ensureReadModel("pricing plans", warmPricingPlanCache);
   await Promise.all([
-    ensureReadModel("pricing plans", warmPricingPlanCache),
     ensureReadModel("enrollments", warmEnrollmentCache),
     ensureReadModel("student directory", warmStudentDirectoryCache),
     ensureReadModel("admin messaging", warmAdminMessagingCache),
@@ -109,8 +109,10 @@ export const ensureSchedulesBootstrapped = ensureReadModelsBootstrapped;
 
 export const ensurePricingPlansBootstrapped = () =>
   ensureReadModel("pricing plans", warmPricingPlanCache);
-export const ensureEnrollmentsBootstrapped = () =>
-  ensureReadModel("enrollments", warmEnrollmentCache);
+export const ensureEnrollmentsBootstrapped = async () => {
+  await ensurePricingPlansBootstrapped();
+  await ensureReadModel("enrollments", warmEnrollmentCache);
+};
 export const ensureLessonsBootstrapped = () =>
   ensureReadModel("lessons", warmLessonCache);
 export const ensureReschedulesBootstrapped = () =>

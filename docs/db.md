@@ -417,12 +417,12 @@ Supabase `auth.users` 확장. **학생 역할(`role=student`)은 로그인 계�
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | id | uuid PK | |
-| enrollment_id | uuid FK | UNIQUE |
-| student_id | uuid FK | |
-| teacher_id | uuid FK | |
+| enrollment_id | uuid FK, nullable | 레거시 호환용 대표 수강; 방 식별 기준이 아님, 삭제 시 NULL |
+| student_id | uuid FK | `teacher_id`와 쌍 UNIQUE (migration 056) |
+| teacher_id | uuid FK | `student_id`와 쌍 UNIQUE (migration 056) |
 | last_message_at | timestamptz | nullable |
-| closed_at | timestamptz | nullable — 수강 환불 확정 시 채팅 읽기 전용 전환 |
-| closed_reason | text | nullable — `enrollment_refund` 등 |
+| closed_at | timestamptz | nullable — 해당 학생·강사 쌍의 마지막 유효 수강 종료 시 읽기 전용 전환 |
+| closed_reason | text | nullable — `enrollment_refund`, `enrollment_ended`, `enrollment_inactive` |
 | created_at | timestamptz | |
 
 ---
@@ -886,6 +886,8 @@ supabase db push
 | 52 | `052_paginated_chat_history.sql` | 일반·관리자 1:1 채팅을 `(created_at, id)` 기준 최신 50건씩 조회하는 RPC와 복합 인덱스. **2026-10-07 운영 적용·권한 검증 완료** |
 | 53 | `053_enrollment_reschedule_policy.sql` | 수강별 변경 한도·2시간 마감·자동 만료·강사 2회차 보너스 제외 원장. **2026-10-08 운영 적용·검증 완료** |
 | 54 | `054_legacy_reschedule_rpc_compatibility.sql` | 운영 앱의 기존 5인자 생성 RPC를 053의 4인자 정책 RPC로 위임하는 임시 호환 계층. **2026-10-08 운영 적용·권한 검증 완료** |
+| 55 | `055_repair_enrollment_session_counters.sql` | 완료 수업 카운터·잔여수업 정합성 복구와 학생 범위 채팅 inbox. **2026-10-08 운영 적용·검증 완료** |
+| 56 | `056_close_expired_enrollment_chats.sql` | 학생 1명+강사 1명당 채팅방 1개 강제, 중복 이력 병합·과거 링크 별칭·재수강 재개·최종 수강 종료 차단. **로컬 구현·격리 DB 검증 완료, 운영 미적용** |
 | E2E seed | `supabase/seeds/e2e_rich_seed.sql` | 운영 migration history와 분리된 통합 테스트 시드 (수강신청·홀드·입금·스케줄·보강·피드백·재수강) |
 
 ### 8.3 `001` 포함 항목 (개념적 순서)

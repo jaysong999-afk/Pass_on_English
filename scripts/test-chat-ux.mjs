@@ -15,6 +15,8 @@ const direct = read("src/components/shared/AdminDirectChatPanel.tsx");
 const monitor = read("src/components/admin/messages/ChatMonitorThread.tsx");
 const studentRoom = read("src/app/[locale]/student/chat/[roomId]/page.tsx");
 const teacherRoom = read("src/app/teacher/chat/[roomId]/page.tsx");
+const roomHook = read("src/hooks/useChatRoom.ts");
+const roomApi = read("src/app/api/chat/rooms/route.ts");
 
 if (!store.includes("/admin/messages?tab=cs&view=direct&thread=")) {
   throw new Error("admin notification links must identify the CS/direct tab and thread");
@@ -63,8 +65,19 @@ for (const source of [thread, direct, manager, monitor]) {
 if (!studentRoom.includes('locale={locale}') || !teacherRoom.includes('locale="en-US"')) {
   throw new Error("student and teacher timelines must pass their display locale");
 }
+if (!thread.includes("setServerClosed(true)") || !thread.includes("Boolean(closedAt) || serverClosed")) {
+  throw new Error("a server-side enrollment closure must immediately switch the composer to read-only mode");
+}
+if (!roomHook.includes("resolveId: roomId") || !roomHook.includes("router.replace")) {
+  throw new Error("historical duplicate room links must redirect to the canonical pair room");
+}
+if (!roomApi.includes("resolveChatRoomIdInDb") || !roomApi.includes("if (resolveId)")) {
+  throw new Error("the room endpoint must resolve aliases without loading the full inbox twice");
+}
 
 console.log("PASS admin notification links open the requested direct conversation");
 console.log("PASS read persistence is owned by the destination chat screen");
 console.log("PASS Enter sends, Alt+Enter creates a line break, and IME composition is protected");
 console.log("PASS all chat timelines render localized dates and bounded older-history loading");
+console.log("PASS enrollment closure responses immediately make an open chat read-only");
+console.log("PASS historical duplicate-room links resolve through a fallback-only endpoint");

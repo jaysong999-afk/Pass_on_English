@@ -63,7 +63,7 @@
 | `admin/admin-review-log-repository.ts` | `admin_review_logs` | **✅ Supabase** | 검토 처리 로그 |
 | `student-registrations/repository.ts` | `student_registration_reviews` | **✅ Supabase** | 학생 가입 검토 큐·confirm/reject |
 | `admin/student-registration-store-sync.ts` | ↑ (cache) | ✅ | 클라이언트·API sync 읽기 |
-| `chat/repository.ts` | `chat_rooms`, `chat_messages` | **✅ Supabase** | 방 목록·unread·ensure room·메시지 CRUD |
+| `chat/repository.ts` | `chat_rooms`, `chat_messages` | **✅ Supabase** | 방 목록·unread·메시지 CRUD·과거 중복 방 링크 해석; 방 lifecycle은 DB trigger 담당 |
 | `chat-store-sync.ts` | ↑ (cache) | ✅ | sync 읽기 |
 | `chat-store.ts` | — | ✅ | href helpers (클라이언트 안전) |
 | `finance/repository.ts` | `finance_transactions`, `finance_snapshots` | **✅ Supabase** | 급여 paid·입금 확인 시 정산 기록 |
@@ -267,10 +267,10 @@
 | GET | `/api/teacher/feedback` | `TeacherFeedbackHistory` | `lesson_feedbacks` | `teacherId`, `studentId?`, `month?`; `format=csv` |
 | GET | `/api/teacher/applications` | signup profile, admin | 🗄️ `teacher_applications` | `?id=` → teacher/admin; 목록 admin only |
 | POST | `/api/teacher/applications` | signup Step1 | 🗄️ | signUp + application |
-| GET/PATCH | `/api/chat/rooms` | chat list, bells | 🗄️ `chat_rooms` | `role`; PATCH: `action=read`\|`readAll`, `id` |
+| GET/PATCH | `/api/chat/rooms` | chat list, bells | 🗄️ `chat_rooms` | `role`; 과거 링크 fallback `resolveId`; PATCH: `action=read`\|`readAll`, `id` |
 | GET/POST | `/api/chat/messages` | `ChatThread` | 🗄️ `chat_messages` | GET: `roomId`; POST: body, senderRole |
 
-환불 완료된 수강 채팅은 `chat_rooms.closed_at`으로 읽기 전용이 된다. 과거 메시지 조회는 유지하고 DB insert trigger가 신규 메시지를 차단한다. 관리자 지원용 direct thread는 종료하지 않는다.
+migration 056 적용 후 일반 채팅은 `학생 1명 + 강사 1명 = 채팅방 1개`를 DB UNIQUE로 보장한다. 같은 강사 재수강은 기존 방을 다시 열고, 해당 쌍의 유효 수강이 모두 끝난 경우에만 읽기 전용으로 전환한다. 기존 중복 방은 메시지·읽음 cursor·presence·저장 알림 링크까지 대표 방으로 병합하며, 일반 목록에는 추가 조회가 없고 삭제된 과거 방 링크를 열 때만 별칭 RPC를 1회 호출한다. 관리자 지원용 direct thread는 별도 구조로 계속 사용할 수 있다. 현재 056은 로컬 검증만 완료했고 운영 미적용이다.
 
 **신규 수업 배정 알림**: 무료체험 lesson 생성 시 `trial:{lessonId}`, 정규 수강 첫 스케줄 생성 시 `enrollment:{enrollmentId}` 키로 teacher notification을 중복 없이 생성한다. payload에는 첫 lesson, 학생명, 수강목적, trial 여부를 포함한다. My Lessons는 unread `teacher_lesson_assignment`만 반환하며 확인 버튼은 기존 `PATCH /api/notifications?role=teacher`로 `read_at`을 기록한다.
 

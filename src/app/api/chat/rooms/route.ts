@@ -4,8 +4,10 @@ import { getAdminDirectThreadForProfileInDb } from "@/lib/admin/messages/reposit
 import {
   getChatInboxInDb,
   markChatRoomReadInDb,
+  resolveChatRoomIdInDb,
   type PortalRole,
 } from "@/lib/chat/repository";
+import { isUuid } from "@/lib/teachers/resolve-teacher-id";
 
 const ROLES: PortalRole[] = ["student", "teacher", "admin"];
 
@@ -46,6 +48,18 @@ export async function GET(request: Request) {
 
     const authResult = await requireRequestedRole(role);
     if ("error" in authResult) return authResult.error;
+
+    const resolveId = searchParams.get("resolveId");
+    if (resolveId) {
+      if (!isUuid(resolveId)) {
+        return NextResponse.json({ error: "invalid_room_id" }, { status: 400 });
+      }
+      const roomId = await resolveChatRoomIdInDb(resolveId);
+      if (!roomId) {
+        return NextResponse.json({ error: "chat_room_not_found" }, { status: 404 });
+      }
+      return NextResponse.json({ roomId });
+    }
 
     const studentId = role === "student" ? searchParams.get("studentId") ?? undefined : undefined;
     const inbox = await loadInbox(role, authResult.auth.userId, studentId);

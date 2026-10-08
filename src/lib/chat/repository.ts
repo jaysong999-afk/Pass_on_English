@@ -4,7 +4,6 @@ import {
   fetchStudentDisplayNameInDb,
   fetchProfileAvatarUrlInDb,
 } from "@/lib/accounts/repository";
-import { getEnrollmentsByStudent } from "@/lib/enrollment-store-sync";
 import { getTeacherFromCache } from "@/lib/teachers/teacher-profile-cache";
 import { resolveTeacherId } from "@/lib/teachers/resolve-teacher-id";
 import { createBootstrapDbClient } from "@/lib/supabase/db-client";
@@ -33,7 +32,7 @@ export type PortalRole = "student" | "teacher" | "admin";
 
 interface ChatRoomRow {
   id: string;
-  enrollment_id: string;
+  enrollment_id: string | null;
   student_id: string;
   teacher_id: string;
   last_message_at: string | null;
@@ -54,7 +53,7 @@ interface ChatMessageRow {
 
 interface ChatInboxRow {
   id: string;
-  enrollment_id: string;
+  enrollment_id: string | null;
   teacher_id: string;
   teacher_name: string;
   student_id: string;
@@ -108,7 +107,7 @@ export async function getChatInboxInDb(studentId?: string): Promise<ChatRoom[]> 
 
   return ((data ?? []) as ChatInboxRow[]).map((row) => ({
     id: row.id,
-    enrollmentId: row.enrollment_id,
+    enrollmentId: row.enrollment_id ?? undefined,
     teacherId: row.teacher_id,
     teacherName: row.teacher_name,
     studentId: row.student_id,
@@ -241,7 +240,7 @@ async function buildChatRoomDto(
 
   return {
     id: row.id,
-    enrollmentId: row.enrollment_id,
+    enrollmentId: row.enrollment_id ?? undefined,
     teacherId: row.teacher_id,
     teacherName,
     studentId: row.student_id,
@@ -371,145 +370,14 @@ export function getChatMessagesFromCache(roomId: string): ChatMessage[] {
   return getChatMessagesCache(roomId).map((m) => ({ ...m }));
 }
 
-export async function ensureTeacherChatRoomInDb(input: {
-  teacherId: string;
-  teacherName: string;
-  studentId: string;
-  displayName: string;
-  enrollmentId?: string;
-}): Promise<ChatRoom> {
-  void input.teacherName;
-  void input.displayName;
-
-  const teacherId = resolveTeacherId(input.teacherId);
-  if (!teacherId) throw new Error("teacher_not_found");
-
-  const existing = input.enrollmentId
-    ? getChatRoomCache().find((room) => room.enrollmentId === input.enrollmentId)
-    : getChatRoomCache().find(
-        (room) => room.teacherId === teacherId && room.studentId === input.studentId && !room.closedAt
-      );
-  if (existing) {
-    return { ...existing, displayName: input.displayName };
-  }
-
-  const enrollment =
-    getEnrollmentsByStudent(input.studentId).find(
-      (e) => e.teacherId === teacherId && e.status === "active"
-    ) ??
-    getEnrollmentsByStudent(input.studentId).find((e) => e.teacherId === teacherId);
-  const enrollmentId = input.enrollmentId ?? enrollment?.id;
-
-  if (!enrollmentId) {
-    throw new Error("enrollment_not_found_for_chat");
-  }
-
+/** Resolve a removed duplicate room id from an old push/deep link. */
+export async function resolveChatRoomIdInDb(roomId: string): Promise<string | null> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("chat_rooms")
-    .insert({
-      enrollment_id: enrollmentId,
-      student_id: input.studentId,
-      teacher_id: teacherId,
-    })
-    .select(ROOM_SELECT)
-    .single();
-
-  if (error) {
-    if (error.code === "23505") {
-      const { data: existingRoom } = await supabase
-        .from("chat_rooms")
-        .select(ROOM_SELECT)
-        .eq("enrollment_id", enrollmentId)
-        .single();
-      if (existingRoom) {
-        await warmChatCache();
-        const room = getChatRoomFromCache(existingRoom.id, {
-          viewerRole: "teacher",
-          teacherId,
-        });
-        if (room) return room;
-      }
-    }
-    throw new Error(`chat_room_create_failed: ${error.message}`);
-  }
-
-  const messageRows = await fetchAllMessageRows();
-  const room = await buildChatRoomDto(data as ChatRoomRow, "teacher", messageRows);
-  patchChatRoomInCache(room);
-  return room;
-}
-
-/** Ensure the student can start a conversation with every currently assigned teacher. */
-export async function ensureStudentTeacherChatRoomsInDb(
-  studentId: string
-): Promise<ChatRoom[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("enrollments")
-    .select("id, teacher_id, status")
-    .eq("student_id", studentId)
-    .in("status", ["active", "expiring_soon"])
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(`student_chat_enrollments_failed: ${error.message}`);
-
-  const activeEnrollments = data ?? [];
-  const rooms: ChatRoom[] = [];
-  const teacherIds = new Set<string>();
-
-  for (const enrollment of activeEnrollments) {
-    if (teacherIds.has(enrollment.teacher_id)) continue;
-    teacherIds.add(enrollment.teacher_id);
-    const teacher = getTeacherFromCache(enrollment.teacher_id);
-    rooms.push(
-      await ensureTeacherChatRoomInDb({
-        teacherId: enrollment.teacher_id,
-        teacherName: teacher?.displayName ?? "Teacher",
-        studentId,
-        displayName: teacher?.displayName ?? "Teacher",
-        enrollmentId: enrollment.id,
-      })
-    );
-  }
-
-  return rooms;
-}
-
-/** Ensure a teacher can start a conversation with every currently enrolled student. */
-export async function ensureTeacherStudentChatRoomsInDb(
-  teacherId: string
-): Promise<ChatRoom[]> {
-  const resolvedTeacherId = resolveTeacherId(teacherId);
-  if (!resolvedTeacherId) throw new Error("teacher_not_found");
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("enrollments")
-    .select("id, student_id, status")
-    .eq("teacher_id", resolvedTeacherId)
-    .in("status", ["active", "expiring_soon"])
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(`teacher_chat_enrollments_failed: ${error.message}`);
-
-  const rooms: ChatRoom[] = [];
-  const studentIds = new Set<string>();
-  const teacher = getTeacherFromCache(resolvedTeacherId);
-  for (const enrollment of data ?? []) {
-    if (studentIds.has(enrollment.student_id)) continue;
-    studentIds.add(enrollment.student_id);
-    const studentName = await fetchStudentDisplayNameInDb(enrollment.student_id, "Student");
-    rooms.push(
-      await ensureTeacherChatRoomInDb({
-        teacherId: resolvedTeacherId,
-        teacherName: teacher?.displayName ?? "Teacher",
-        studentId: enrollment.student_id,
-        displayName: studentName,
-        enrollmentId: enrollment.id,
-      })
-    );
-  }
-
-  return rooms;
+  const { data, error } = await supabase.rpc("resolve_chat_room_id", {
+    p_room_id: roomId,
+  });
+  if (error) throw new Error(`chat_room_resolve_failed: ${error.message}`);
+  return typeof data === "string" ? data : null;
 }
 
 export async function sendChatMessageInDb(input: {

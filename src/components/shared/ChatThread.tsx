@@ -52,6 +52,8 @@ export function ChatThread({
   const [sending, setSending] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [serverClosed, setServerClosed] = useState(false);
+  const isClosed = Boolean(closedAt) || serverClosed;
   const visible = usePageVisible();
   const currentRoom = useRef(roomId);
   currentRoom.current = roomId;
@@ -135,6 +137,8 @@ export function ChatThread({
     setActiveChatRoom(roomId);
     setMessages([]);
     setPage(EMPTY_PAGE);
+    setServerClosed(false);
+    setSendError("");
     historyAdvanced.current = false;
     return () => setActiveChatRoom(null);
   }, [roomId]);
@@ -154,7 +158,7 @@ export function ChatThread({
   useChatPresence(roomId, connected);
 
   async function handleSend() {
-    if (!input.trim() || sending || closedAt) return;
+    if (!input.trim() || sending || isClosed) return;
     setSending(true);
     setSendError("");
     pinToBottom();
@@ -166,7 +170,8 @@ export function ChatThread({
       });
       const data = await res.json();
       if (res.status === 409 || String(data.error ?? "").includes("chat_room_closed")) {
-        setSendError(closedMessage);
+        setServerClosed(true);
+        setSendError("");
         return;
       }
       if (!res.ok) {
@@ -228,7 +233,7 @@ export function ChatThread({
           })}
         </div>
       </div>
-      {closedAt ? (
+      {isClosed ? (
         <div className="border-t bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-800">{closedMessage}</div>
       ) : (
         <>

@@ -107,6 +107,28 @@ interface EnrollmentRow {
     | { display_name: string | null }
     | Array<{ display_name: string | null }>
     | null;
+  plan?:
+    | {
+        plan_type: string;
+        sessions_count: number;
+        session_minutes: number;
+        description: {
+          ko?: { name?: string };
+          "zh-CN"?: { name?: string };
+          schedule_days?: string[];
+        } | null;
+      }
+    | Array<{
+        plan_type: string;
+        sessions_count: number;
+        session_minutes: number;
+        description: {
+          ko?: { name?: string };
+          "zh-CN"?: { name?: string };
+          schedule_days?: string[];
+        } | null;
+      }>
+    | null;
 }
 
 interface PaymentRow {
@@ -150,6 +172,16 @@ const ENROLLMENT_SELECT = `
   teacher:teachers!enrollments_teacher_id_fkey(display_name)
 `;
 
+const STUDENT_ENROLLMENT_SELECT = `
+  ${ENROLLMENT_SELECT},
+  plan:pricing_plans!enrollments_plan_id_fkey(
+    plan_type,
+    sessions_count,
+    session_minutes,
+    description
+  )
+`;
+
 function toDateKey(value: string | null | undefined): string {
   if (!value) return getDateKeyInTimezone(new Date(), CANONICAL_TIMEZONE);
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -177,7 +209,17 @@ function normalizeSessionAdjustments(value: unknown): SessionAdjustment[] {
 }
 
 function rowToEnrollment(row: EnrollmentRow, planLabel?: string): StudentEnrollment {
-  const plan = getCachedPricingPlanById(row.plan_id);
+  const joinedPlanRow = Array.isArray(row.plan) ? row.plan[0] : row.plan;
+  const joinedPlan = joinedPlanRow
+    ? {
+        name: joinedPlanRow.description?.ko?.name?.trim() || joinedPlanRow.plan_type,
+        nameZh: joinedPlanRow.description?.["zh-CN"]?.name?.trim() || undefined,
+        sessionsCount: joinedPlanRow.sessions_count,
+        sessionMinutes: joinedPlanRow.session_minutes,
+        scheduleDays: [...(joinedPlanRow.description?.schedule_days ?? [])],
+      }
+    : undefined;
+  const plan = joinedPlan ?? getCachedPricingPlanById(row.plan_id);
   const teacher = getTeacherFromCache(row.teacher_id);
   const joinedTeacher = Array.isArray(row.teacher) ? row.teacher[0] : row.teacher;
   return {
@@ -187,7 +229,7 @@ function rowToEnrollment(row: EnrollmentRow, planLabel?: string): StudentEnrollm
     teacherName: joinedTeacher?.display_name?.trim() || teacher?.displayName || "Teacher",
     teacherAvatarUrl: teacher?.avatarUrl,
     planId: row.plan_id,
-    planLabel: planLabel ?? (plan ? formatPlanLabel(plan, "ko") : row.plan_id),
+    planLabel: planLabel ?? (plan ? formatPlanLabel(plan, "ko") : "플랜 정보 없음"),
     curriculum: row.curriculum?.trim() || "General English",
     sessionsTotal: row.sessions_total,
     sessionsCompleted: row.sessions_completed,
@@ -318,7 +360,7 @@ export async function listStudentEnrollmentsInDb(
   const supabase = createBootstrapDbClient();
   const enrollmentResult = await supabase
     .from("enrollments")
-    .select(ENROLLMENT_SELECT)
+    .select(STUDENT_ENROLLMENT_SELECT)
     .eq("student_id", studentId)
     .order("created_at", { ascending: false });
 

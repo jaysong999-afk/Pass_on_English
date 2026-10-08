@@ -87,7 +87,7 @@ try {
       confirmed_at timestamptz, created_at timestamptz default now()
     );
     CREATE TABLE public.chat_rooms(
-      id uuid primary key, enrollment_id uuid unique references public.enrollments, student_id uuid references public.students,
+      id uuid primary key default extensions.gen_random_uuid(), enrollment_id uuid unique references public.enrollments, student_id uuid references public.students,
       teacher_id uuid references public.teachers, last_message_at timestamptz, created_at timestamptz default now()
     );
     CREATE TABLE public.chat_messages(
@@ -95,6 +95,18 @@ try {
       sender_id uuid references public.profiles, sender_role public.user_role, body text, read_at timestamptz, created_at timestamptz default now()
     );
     CREATE TABLE public.chat_room_read_state(room_id uuid references public.chat_rooms, user_id uuid references public.profiles, last_read_at timestamptz, primary key(room_id,user_id));
+    CREATE TABLE public.chat_room_presence(
+      room_id uuid references public.chat_rooms, user_id uuid references public.profiles,
+      client_id uuid, expires_at timestamptz, primary key(room_id,user_id,client_id)
+    );
+    CREATE FUNCTION public.can_access_chat_room(p_room_id uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER AS $$
+      SELECT EXISTS (
+        SELECT 1 FROM public.chat_rooms room
+        JOIN public.students student_row ON student_row.id=room.student_id
+        WHERE room.id=p_room_id
+          AND (public.is_admin() OR room.teacher_id=auth.uid() OR student_row.account_holder_id=auth.uid())
+      )
+    $$;
     CREATE TABLE public.lesson_reschedule_requests(
       id uuid primary key default extensions.gen_random_uuid(), lesson_id uuid references public.lessons,
       teacher_id uuid, student_id uuid, initiator public.reschedule_initiator, original_scheduled_at timestamptz,
@@ -194,6 +206,14 @@ try {
       VALUES ('${secondEnrollment}','${student}','${teacher}','${plan}','active','confirmed','KRW',87000,20,0,20);
     INSERT INTO public.payments(enrollment_id,student_id,amount,currency,status,confirmed_at) VALUES ('${secondEnrollment}','${student}',87000,'KRW','confirmed',now());
     INSERT INTO public.chat_rooms VALUES ('${secondRoom}','${secondEnrollment}','${student}','${teacher}',now(),now(),null,null);
+    INSERT INTO public.chat_messages(room_id,sender_id,sender_role,body,created_at)
+      VALUES ('${secondRoom}','${teacher}','teacher','renewal message',now()+interval '1 second');
+    INSERT INTO public.chat_room_read_state(room_id,user_id,last_read_at)
+      VALUES ('${room}','${account}',now()-interval '2 minutes'),('${secondRoom}','${account}',now()-interval '1 minute');
+    INSERT INTO public.chat_room_presence(room_id,user_id,client_id,expires_at)
+      VALUES ('${secondRoom}','${teacher}','${uid(29)}',now()+interval '1 minute');
+    INSERT INTO public.notifications(user_id,type,title,body,payload)
+      VALUES ('${account}','chat_message','Chat','Renewal message',jsonb_build_object('roomId','${uid(23)}'));
     INSERT INTO public.lessons(enrollment_id,teacher_id,student_id,scheduled_at,status) VALUES ('${secondEnrollment}','${teacher}','${student}',now()-interval '1 hour','scheduled');
   `);
   const blocked = await callPreview(secondEnrollment);
@@ -202,12 +222,137 @@ try {
   assert.equal((await db.query("select status from public.enrollments where id=$1", [secondEnrollment])).rows[0].status, "active");
   console.log("PASS: unresolved past lessons fail closed without partial writes");
 
+  const expiredEnrollment = uid(22), expiredRoom = uid(23);
+  await db.query(`
+    INSERT INTO public.enrollments(id,student_id,teacher_id,plan_id,status,payment_status,currency,total_amount,sessions_total,sessions_completed,sessions_remaining,ended_at)
+      VALUES ('${expiredEnrollment}','${student}','${teacher}','${plan}','active','confirmed','KRW',87000,20,20,0,now()-interval '1 day');
+    INSERT INTO public.chat_rooms(id,enrollment_id,student_id,teacher_id,last_message_at,created_at,closed_at,closed_reason)
+      VALUES ('${expiredRoom}','${expiredEnrollment}','${student}','${teacher}',now(),now(),null,null);
+  `);
+  const chatLifecycleMigration = readFileSync(
+    new URL("../supabase/migrations/056_close_expired_enrollment_chats.sql", import.meta.url),
+    "utf8"
+  );
+  await db.query(chatLifecycleMigration);
+  const canonicalRoom = (
+    await db.query("select id,enrollment_id,closed_at from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, teacher])
+  ).rows[0];
+  assert.equal(canonicalRoom.id, secondRoom);
+  assert.equal(canonicalRoom.closed_at, null);
+  assert.equal(
+    Number((await db.query("select count(*) n from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, teacher])).rows[0].n),
+    1
+  );
+  assert.equal(
+    Number((await db.query("select count(*) n from public.chat_messages where room_id=$1", [canonicalRoom.id])).rows[0].n),
+    2
+  );
+  assert.equal(
+    Number((await db.query("select count(*) n from public.chat_room_aliases where canonical_room_id=$1", [canonicalRoom.id])).rows[0].n),
+    2
+  );
+  assert.equal(
+    Number((await db.query("select count(*) n from public.chat_room_read_state where room_id=$1 and user_id=$2", [canonicalRoom.id, account])).rows[0].n),
+    1
+  );
+  assert.equal(
+    Number((await db.query("select count(*) n from public.chat_room_presence where room_id=$1 and user_id=$2", [canonicalRoom.id, teacher])).rows[0].n),
+    1
+  );
+  assert.equal(
+    (await db.query("select payload->>'roomId' room_id from public.notifications where title='Chat'")).rows[0].room_id,
+    canonicalRoom.id
+  );
+  await db.query(`SELECT set_config('test.uid','${account}',false)`);
+  assert.equal((await db.query("select public.resolve_chat_room_id($1) id", [room])).rows[0].id, canonicalRoom.id);
+  assert.equal((await db.query("select public.resolve_chat_room_id($1) id", [expiredRoom])).rows[0].id, canonicalRoom.id);
+  console.log("PASS: duplicate rooms merge atomically with messages, read state, presence, and old deep links preserved");
+
+  const futureEnrollment = uid(24), inactiveEnrollment = uid(25);
+  await db.query(`
+    INSERT INTO public.enrollments(id,student_id,teacher_id,plan_id,status,payment_status,currency,total_amount,sessions_total,sessions_completed,sessions_remaining,ended_at)
+      VALUES ('${futureEnrollment}','${student}','${teacher}','${plan}','active','confirmed','KRW',87000,20,0,20,now()+interval '30 days');
+    INSERT INTO public.enrollments(id,student_id,teacher_id,plan_id,status,payment_status,currency,total_amount,sessions_total,sessions_completed,sessions_remaining,ended_at)
+      VALUES ('${inactiveEnrollment}','${student}','${teacher}','${plan}','active','confirmed','KRW',87000,20,20,0,now()-interval '2 days');
+  `);
+  assert.equal(
+    Number((await db.query("select count(*) n from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, teacher])).rows[0].n),
+    1
+  );
+  assert.equal(
+    Number((await db.query("select count(*) n from public.chat_rooms where enrollment_id=$1", [inactiveEnrollment])).rows[0].n),
+    0
+  );
+  assert.equal(
+    (await db.query("select id from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, teacher])).rows[0].id,
+    canonicalRoom.id
+  );
+  console.log("PASS: additional active or expired enrollments never create another pair room");
+
+  const refundableEnrollment = uid(28);
+  await db.query(`
+    INSERT INTO public.enrollments(id,student_id,teacher_id,plan_id,status,payment_status,currency,total_amount,sessions_total,sessions_completed,sessions_remaining,ended_at)
+      VALUES ('${refundableEnrollment}','${student}','${teacher}','${plan}','active','confirmed','KRW',10000,1,0,1,now()+interval '10 days');
+    INSERT INTO public.payments(enrollment_id,student_id,amount,currency,status,confirmed_at)
+      VALUES ('${refundableEnrollment}','${student}',10000,'KRW','confirmed',now());
+    INSERT INTO public.lessons(enrollment_id,teacher_id,student_id,scheduled_at,status)
+      VALUES ('${refundableEnrollment}','${teacher}','${student}',now()+interval '1 day','scheduled');
+    SELECT set_config('test.uid','${admin}',false);
+  `);
+  const pairRefund = await finalize(refundableEnrollment, 0, 10000, 10000);
+  assert.equal(pairRefund.cancelledLessonCount, 1);
+  assert.equal(
+    (await db.query("select closed_at from public.chat_rooms where id=$1", [canonicalRoom.id])).rows[0].closed_at,
+    null
+  );
+  await db.query("insert into public.chat_messages(room_id,sender_id,sender_role,body) values ($1,$2,'student','other enrollment still active')", [canonicalRoom.id, account]);
+  console.log("PASS: refunding one enrollment does not close a pair that still has another active enrollment");
+
   await db.query(`SELECT set_config('test.uid','${account}',false)`);
   const inbox = (await db.query("select enrollment_id,closed_at from public.get_chat_inbox($1)", [student])).rows;
-  assert.equal(inbox.length, 2);
-  assert.ok(inbox.find((item) => item.enrollment_id === enrollment)?.closed_at);
-  assert.equal(inbox.find((item) => item.enrollment_id === secondEnrollment)?.closed_at, null);
-  console.log("PASS: a renewed enrollment keeps a separate open room while refunded chat history stays readable");
+  assert.equal(inbox.length, 1);
+  assert.equal(inbox[0].closed_at, null);
+  await db.query("insert into public.chat_messages(room_id,sender_id,sender_role,body) values ($1,$2,'student','pair remains open')", [canonicalRoom.id, account]);
+
+  await db.query(`
+    UPDATE public.enrollments
+    SET status='completed', ended_at=now()-interval '1 minute'
+    WHERE id IN ('${secondEnrollment}','${futureEnrollment}','${triggerEnrollment}');
+  `);
+  const closedPair = (await db.query("select id,closed_at from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, teacher])).rows[0];
+  assert.equal(closedPair.id, canonicalRoom.id);
+  assert.ok(closedPair.closed_at);
+  await assert.rejects(
+    db.query("insert into public.chat_messages(room_id,sender_id,sender_role,body) values ($1,$2,'student','blocked after final enrollment')", [canonicalRoom.id, account]),
+    /chat_room_closed/
+  );
+
+  const renewalEnrollment = uid(26);
+  await db.query(`
+    INSERT INTO public.enrollments(id,student_id,teacher_id,plan_id,status,payment_status,currency,total_amount,sessions_total,sessions_completed,sessions_remaining,ended_at)
+      VALUES ('${renewalEnrollment}','${student}','${teacher}','${plan}','active','confirmed','KRW',87000,20,0,20,now()+interval '30 days');
+  `);
+  const reopenedPair = (await db.query("select id,closed_at,enrollment_id from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, teacher])).rows[0];
+  assert.equal(reopenedPair.id, canonicalRoom.id);
+  assert.equal(reopenedPair.closed_at, null);
+  assert.equal(reopenedPair.enrollment_id, renewalEnrollment);
+  assert.equal(Number((await db.query("select count(*) n from public.chat_messages where room_id=$1", [canonicalRoom.id])).rows[0].n), 4);
+  console.log("PASS: final enrollment closes the pair and a later renewal reopens the same room with history intact");
+
+  const secondTeacher = uid(27);
+  await db.query(`
+    INSERT INTO public.profiles VALUES ('${secondTeacher}','teacher','Teacher Two','en',null,null);
+    INSERT INTO public.teachers VALUES ('${secondTeacher}','ET2');
+    UPDATE public.enrollments SET teacher_id='${secondTeacher}' WHERE id='${renewalEnrollment}';
+  `);
+  assert.ok((await db.query("select closed_at from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, teacher])).rows[0].closed_at);
+  assert.equal(Number((await db.query("select count(*) n from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, secondTeacher])).rows[0].n), 1);
+  await db.query("update public.enrollments set teacher_id=$1 where id=$2", [teacher, renewalEnrollment]);
+  assert.equal((await db.query("select id,closed_at from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, teacher])).rows[0].id, canonicalRoom.id);
+  assert.equal((await db.query("select closed_at from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, teacher])).rows[0].closed_at, null);
+  assert.ok((await db.query("select closed_at from public.chat_rooms where student_id=$1 and teacher_id=$2", [student, secondTeacher])).rows[0].closed_at);
+  console.log("PASS: teacher reassignment closes the old pair and reuses each pair's single durable room");
+
   await assert.rejects(callPreview(secondEnrollment), /forbidden/);
   assert.equal((await db.query("select has_function_privilege('anon','public.admin_finalize_enrollment_refund(uuid,integer,numeric,numeric,text,text,text,integer,boolean,numeric,text,timestamptz)','execute') allowed")).rows[0].allowed, false);
   console.log("PASS: refund RPCs are admin-only and anonymous execution is denied");

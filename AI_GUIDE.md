@@ -103,6 +103,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 - `053_enrollment_reschedule_policy.sql`은 2026-10-08 운영 DB에 단독 트랜잭션으로 적용했다. 수강별 변경 한도·2시간 마감·자동 만료·강사 2회차 보너스 제외를 DB 원자 처리로 전환했으며, 컬럼 5개·이벤트 원장/RLS·인덱스 5개·한도 trigger·함수 5개와 역할별 권한을 검증했다.
 - `054_legacy_reschedule_rpc_compatibility.sql`은 2026-10-08 운영 DB에 적용했다. 앱 `5618074`의 5인자 요청 생성 호출을 유지하되 클라이언트 월 값은 무시하고 053의 4인자 정책 RPC에 위임한다. 두 함수 모두 `SECURITY DEFINER`, `postgres` 소유이며 `anon` 실행은 차단되고 `authenticated`·`service_role`만 실행 가능함을 확인했다. 연계 앱은 `4c043e1`로 운영 배포했다.
 - `055_repair_enrollment_session_counters.sql`은 2026-10-08 운영 DB에 단독 적용했다. 완료 수업 trigger를 `SECURITY DEFINER`로 보강하고 실제 완료 수업 기준 카운터를 안전하게 backfill했으며, 활성·결제 완료 수강의 잔여수업 부족을 미해결 일정 아래로 내리지 않도록 정합성을 복구했다. 수강 단위 lessons 인덱스와 학생 범위 채팅 inbox RPC를 추가했고, 양의 완료 카운터 누락·잔여 부족 행은 0건으로 확인했다. 연계 앱은 `662886c`로 운영 배포했다.
+- `056_close_expired_enrollment_chats.sql`은 로컬 구현·격리 DB 검증만 완료했고 운영 DB에는 아직 적용하지 않았다. 학생·강사 쌍별 채팅방 UNIQUE, 기존 중복 방의 메시지·읽음 cursor·presence·알림 링크 병합, 재수강 시 동일 방 재개, 최종 수강 종료 시 읽기 전용 전환을 DB trigger로 보장한다. 적용 전 운영 중복 현황과 대상 project ref를 다시 확인하고 이 파일만 단독 트랜잭션으로 실행해야 한다.
 - 같은 날 운영 DB에 `supabase_migrations.schema_migrations`가 없음을 확인했다. 043은 Management API를 통한 해당 SQL 파일 단독 트랜잭션 실행으로 적용했고, CLI 이력을 임의로 생성하거나 과거 이력을 복구하지 않았다. `db push`/전체 migration 재적용 금지: 실제 객체와 과거 적용 기록을 대조한 이력 정합화가 먼저 필요하다.
 - 로컬 `supabase/.temp`의 구 프로젝트 연결을 발견하여 실행을 중단한 후, 공식 CLI `link`로 싱가포르 project ref 및 pooler를 재설정·확인했다. 향후 CLI 실행 전 숨김/ignored 파일의 project-ref도 반드시 확인한다.
 - 운영 DB 적용 전 대상 project ref를 출력 가능한 비밀이 아닌 URL/ref 수준에서 확인하고, 데이터 보존형 SQL인지 검토한다.

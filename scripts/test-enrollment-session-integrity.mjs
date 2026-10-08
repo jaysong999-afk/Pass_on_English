@@ -48,6 +48,8 @@ const editor = read("src/components/admin/EnrollmentSessionEditor.tsx");
 const adminDetail = read("src/app/admin/students/[id]/page.tsx");
 const enrollmentRoute = read("src/app/api/enrollments/route.ts");
 const studentDetailRoute = read("src/app/api/admin/students/[id]/route.ts");
+const enrollmentRepository = read("src/lib/enrollments/repository.ts");
+const schedulerBootstrap = read("src/lib/lesson-scheduler-bootstrap.ts");
 
 assert.match(migration, /SECURITY DEFINER/);
 assert.match(migration, /SET search_path = pg_catalog/);
@@ -69,6 +71,20 @@ assert.match(editor, /지난 미처리 수업/);
 assert.match(adminDetail, /filter\(isUsableEnrollment\)/);
 assert.match(enrollmentRoute, /listStudentEnrollmentsInDb/);
 assert.match(studentDetailRoute, /listStudentLessonsInDb\(id\)/);
+assert.match(
+  enrollmentRepository,
+  /plan:pricing_plans!enrollments_plan_id_fkey\([\s\S]*?plan_type,[\s\S]*?sessions_count,[\s\S]*?session_minutes,[\s\S]*?description/
+);
+assert.match(enrollmentRepository, /\.select\(STUDENT_ENROLLMENT_SELECT\)/);
+assert.match(
+  enrollmentRepository,
+  /planLabel: planLabel \?\? \(plan \? formatPlanLabel\(plan, "ko"\) : "플랜 정보 없음"\)/
+);
+assert.doesNotMatch(enrollmentRepository, /formatPlanLabel\(plan, "ko"\) : row\.plan_id/);
+assert.match(
+  schedulerBootstrap,
+  /export const ensureEnrollmentsBootstrapped = async \(\) => \{\s+await ensurePricingPlansBootstrapped\(\);\s+await ensureReadModel\("enrollments", warmEnrollmentCache\);/
+);
 assert.doesNotMatch(studentDetailRoute, /ensureAdminStudentsBootstrapped|ensureLessonsBootstrapped/);
 assert.doesNotMatch(
   enrollmentRoute.slice(
