@@ -20,7 +20,12 @@ import { AdminEnrollmentRefundDialog } from "@/components/admin/AdminEnrollmentR
 import type { AdminStudentDetail } from "@/lib/admin/student-detail-store";
 import type { FinalizedEnrollmentRefund } from "@/lib/refunds/types";
 import { formatCefrLevel, formatCoursePurposes } from "@/lib/student-survey-labels";
-import { formatSessionBalance, getSessionsUsed } from "@/lib/sessions";
+import {
+  formatSessionBalance,
+  getSessionsUsed,
+  isUsableEnrollment,
+  sumActiveSessionBalance,
+} from "@/lib/sessions";
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
 import type { EnrollmentStatus, Lesson, PaymentStatus } from "@/types";
@@ -134,7 +139,8 @@ export default function AdminStudentDetailPage() {
 
   const { student, displayName, legalName, accountHolder, learner } = detail;
   const paymentStatus = pendingEnrollment?.paymentStatus ?? student.paymentStatus;
-  const activeEnrollments = detail.enrollments.filter((e) => e.status !== "completed");
+  const activeEnrollments = detail.enrollments.filter(isUsableEnrollment);
+  const activeBalance = sumActiveSessionBalance(detail.enrollments);
   const feedbackByLessonId = new Map(
     detail.feedbacks.map((feedback) => [feedback.lessonId, feedback])
   );
@@ -164,8 +170,8 @@ export default function AdminStudentDetailPage() {
               value={
                 activeEnrollments.length > 0
                   ? formatSessionBalance(
-                      activeEnrollments.reduce((s, e) => s + e.sessionsRemaining, 0),
-                      activeEnrollments.reduce((s, e) => s + e.sessionsTotal, 0)
+                      activeBalance.remaining,
+                      activeBalance.total
                     )
                   : "—"
               }
@@ -238,6 +244,9 @@ export default function AdminStudentDetailPage() {
                 )}
               </div>
             ))}
+            {activeEnrollments.length === 0 && (
+              <p className="text-sm text-gray-500">현재 이용 가능한 수강이 없습니다.</p>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -40,6 +40,7 @@ import {
   removeFutureScheduledLessonsForEnrollmentInDb,
 } from "@/lib/lessons/repository";
 import { notifyTeacherOfLessonAssignmentInDb } from "@/lib/notifications/teacher-lesson-assignment";
+import { isUsableEnrollment } from "@/lib/sessions";
 
 export interface GenerateEnrollmentLessonsResult {
   created: Lesson[];
@@ -283,6 +284,9 @@ async function scheduleLessonsForConfirmedEnrollmentInDbUnlocked(
 ): Promise<GenerateEnrollmentLessonsResult | null> {
   const enrollment = getEnrollmentById(enrollmentId);
   if (!enrollment) return null;
+  if (!isUsableEnrollment(enrollment)) {
+    return null;
+  }
   if (enrollment.paymentStatus !== "confirmed") return null;
 
   const existing = await futurePaidLessonsForEnrollmentFromDb(enrollment);
@@ -381,13 +385,14 @@ export async function adjustEnrollmentSessionsWithScheduleBatchInDb(
   delta: number,
   input?: { reason?: string; adminName?: string; deltaRemaining?: number; schedule?: boolean }
 ): Promise<AdjustEnrollmentSessionsWithScheduleResult | null> {
-  if (delta === 0) {
-    const enrollment = getEnrollmentById(enrollmentId);
-    return enrollment ? { enrollment, appliedDelta: 0 } : null;
-  }
-
   const enrollment = getEnrollmentById(enrollmentId);
   if (!enrollment) return null;
+  if (!isUsableEnrollment(enrollment)) {
+    return { enrollment, error: "enrollment_not_adjustable" };
+  }
+  if (delta === 0) {
+    return { enrollment, appliedDelta: 0 };
+  }
 
   if (input?.schedule === false) {
     const updated = await adjustEnrollmentSessionsInDb(enrollmentId, {

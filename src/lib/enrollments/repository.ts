@@ -190,6 +190,7 @@ function rowToEnrollment(row: EnrollmentRow, planLabel?: string): StudentEnrollm
     planLabel: planLabel ?? (plan ? formatPlanLabel(plan, "ko") : row.plan_id),
     curriculum: row.curriculum?.trim() || "General English",
     sessionsTotal: row.sessions_total,
+    sessionsCompleted: row.sessions_completed,
     sessionsRemaining: row.sessions_remaining ?? row.sessions_total - row.sessions_completed,
     studentRescheduleLimit: row.student_reschedule_limit,
     startDate: toDateKey(row.started_at),
@@ -252,6 +253,33 @@ async function fetchPaymentRows(): Promise<PaymentRow[]> {
     throw new Error(`payments_fetch_failed: ${error.message}`);
   }
   return (data ?? []) as PaymentRow[];
+}
+
+export async function listStudentPaymentRecordsInDb(
+  studentId: string,
+  enrollments?: StudentEnrollment[]
+): Promise<PaymentRecord[]> {
+  const supabase = createBootstrapDbClient();
+  const { data, error } = await supabase
+    .from("payments")
+    .select(
+      "id, enrollment_id, student_id, amount, currency, status, depositor_name, reported_at, confirmed_at, created_at"
+    )
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`student_payments_fetch_failed: ${error.message}`);
+  }
+
+  const enrollmentRows = enrollments ?? getEnrollmentsByStudent(studentId);
+  return ((data ?? []) as PaymentRow[]).map((row) => {
+    const enrollment = enrollmentRows.find((item) => item.id === row.enrollment_id);
+    return rowToPayment(
+      row,
+      enrollment ? `${enrollment.planLabel} — ${enrollment.teacherName}` : "Payment"
+    );
+  });
 }
 
 export {

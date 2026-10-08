@@ -2,7 +2,7 @@ import type { CountryCode, PaymentStatus, StudentGender } from "@/types";
 import { getEnrollmentsByStudent } from "@/lib/enrollment-store-sync";
 import { getAllStudentDirectoryEntries } from "@/lib/students/student-directory-store-sync";
 import { getStudentDisplayName } from "@/lib/student-display-name";
-import { sumSessionBalance } from "@/lib/sessions";
+import { sumActiveSessionBalance } from "@/lib/sessions";
 
 export interface AdminStudentListItem {
   id: string;
@@ -34,8 +34,10 @@ export function getAdminStudentListItems(tab: "active" | "past" = "active"): Adm
     const enrollments = getEnrollmentsByStudent(entry.student.id).sort((a, b) =>
       b.startDate.localeCompare(a.startDate)
     );
-    const openEnrollments = enrollments.filter((e) => e.status !== "completed");
-    const balance = sumSessionBalance(openEnrollments);
+    const openEnrollments = enrollments.filter(
+      (e) => e.status !== "completed" && e.status !== "cancelled"
+    );
+    const balance = sumActiveSessionBalance(enrollments);
     const primary =
       openEnrollments.find(
         (e) =>

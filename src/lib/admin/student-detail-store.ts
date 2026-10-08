@@ -47,6 +47,17 @@ export interface AdminStudentDetail {
   sessionAdjustments: SessionAdjustmentLogEntry[];
 }
 
+type AdminStudentDetailData = Pick<
+  AdminStudentDetail,
+  | "enrollments"
+  | "payments"
+  | "lessons"
+  | "feedbacks"
+  | "reports"
+  | "rescheduleRequests"
+  | "chatRooms"
+>;
+
 function computeEnrollmentDates(enrollments: StudentEnrollment[]) {
   if (enrollments.length === 0) {
     return { firstEnrollmentDate: null, enrollmentPeriod: null };
@@ -106,7 +117,10 @@ function getChatRoomsForStudent(studentId: string, displayName: string, legalNam
   );
 }
 
-export function getAdminStudentDetail(studentId: string): AdminStudentDetail | null {
+export function getAdminStudentDetail(
+  studentId: string,
+  data?: Partial<AdminStudentDetailData>
+): AdminStudentDetail | null {
   const directoryEntry = getStudentDirectoryEntry(studentId);
   if (!directoryEntry) return null;
 
@@ -114,16 +128,16 @@ export function getAdminStudentDetail(studentId: string): AdminStudentDetail | n
   const displayName = getStudentDisplayName(student);
   const legalName = student.fullName;
 
-  const enrollments = getEnrollmentsByStudent(studentId).sort((a, b) =>
+  const enrollments = (data?.enrollments ?? getEnrollmentsByStudent(studentId)).sort((a, b) =>
     b.startDate.localeCompare(a.startDate)
   );
   const { firstEnrollmentDate, enrollmentPeriod } = computeEnrollmentDates(enrollments);
 
-  const payments = getPaymentRecordsByStudent(studentId).sort((a, b) =>
+  const payments = (data?.payments ?? getPaymentRecordsByStudent(studentId)).sort((a, b) =>
     b.paidAt.localeCompare(a.paidAt)
   );
 
-  const lessons = getStudentLessons(studentId).sort(
+  const lessons = (data?.lessons ?? getStudentLessons(studentId)).sort(
     (a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime()
   );
 
@@ -138,10 +152,10 @@ export function getAdminStudentDetail(studentId: string): AdminStudentDetail | n
     enrollments,
     payments,
     lessons,
-    feedbacks: getFeedbacksByStudent(studentId),
-    reports: getReportsByStudent(studentId),
-    rescheduleRequests: getRescheduleRequestsForStudent(studentId),
-    chatRooms: getChatRoomsForStudent(studentId, displayName, legalName),
+    feedbacks: data?.feedbacks ?? getFeedbacksByStudent(studentId),
+    reports: data?.reports ?? getReportsByStudent(studentId),
+    rescheduleRequests: data?.rescheduleRequests ?? getRescheduleRequestsForStudent(studentId),
+    chatRooms: data?.chatRooms ?? getChatRoomsForStudent(studentId, displayName, legalName),
     sessionAdjustments: collectSessionAdjustments(enrollments),
   };
 }

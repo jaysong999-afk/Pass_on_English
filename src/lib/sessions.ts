@@ -18,15 +18,30 @@ export function formatSessionProgress(used: number, total: number, remaining: nu
 }
 
 export function formatSessionProgressFromEnrollment(
-  enrollment: Pick<StudentEnrollment, "sessionsTotal" | "sessionsRemaining">,
+  enrollment: Pick<StudentEnrollment, "sessionsTotal" | "sessionsRemaining" | "sessionsCompleted">,
   labels?: SessionFormatLabels
 ) {
   const used = getSessionsUsed(enrollment);
   return formatSessionProgress(used, enrollment.sessionsTotal, enrollment.sessionsRemaining, labels);
 }
 
-export function getSessionsUsed(enrollment: Pick<StudentEnrollment, "sessionsTotal" | "sessionsRemaining">) {
-  return Math.max(0, enrollment.sessionsTotal - enrollment.sessionsRemaining);
+export function getSessionsUsed(
+  enrollment: Pick<StudentEnrollment, "sessionsTotal" | "sessionsRemaining" | "sessionsCompleted">
+) {
+  return Math.max(
+    0,
+    enrollment.sessionsCompleted ?? enrollment.sessionsTotal - enrollment.sessionsRemaining
+  );
+}
+
+/** A course contributes to the student's usable balance only after payment confirmation. */
+export function isUsableEnrollment(
+  enrollment: Pick<StudentEnrollment, "status" | "paymentStatus">
+) {
+  return (
+    (enrollment.status === "active" || enrollment.status === "expiring_soon") &&
+    enrollment.paymentStatus === "confirmed"
+  );
 }
 
 export function sumSessionBalance(enrollments: StudentEnrollment[]) {
@@ -37,9 +52,7 @@ export function sumSessionBalance(enrollments: StudentEnrollment[]) {
 
 /** Only active courses with generated schedules — excludes payment holds. */
 export function sumActiveSessionBalance(enrollments: StudentEnrollment[]) {
-  return sumSessionBalance(
-    enrollments.filter((e) => e.status === "active" || e.status === "expiring_soon")
-  );
+  return sumSessionBalance(enrollments.filter(isUsableEnrollment));
 }
 
 export function formatAdjustmentLine(adj: SessionAdjustment) {

@@ -176,6 +176,43 @@ export async function warmLearningCache(): Promise<{
   return { feedbacks, reports };
 }
 
+/** Fetch one student's learning records for an admin detail page. */
+export async function listStudentLearningInDb(studentId: string): Promise<{
+  feedbacks: LessonFeedback[];
+  reports: MonthlyGrowthReport[];
+}> {
+  const supabase = createBootstrapDbClient();
+  const [feedbackResult, reportResult] = await Promise.all([
+    supabase
+      .from("lesson_feedbacks")
+      .select(FEEDBACK_SELECT)
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("monthly_growth_reports")
+      .select(REPORT_SELECT)
+      .eq("student_id", studentId)
+      .order("month", { ascending: false }),
+  ]);
+
+  if (feedbackResult.error) {
+    throw new Error(`student_feedbacks_fetch_failed: ${feedbackResult.error.message}`);
+  }
+  if (reportResult.error) {
+    throw new Error(`student_reports_fetch_failed: ${reportResult.error.message}`);
+  }
+
+  const feedbacks = ((feedbackResult.data ?? []) as unknown as FeedbackRow[]).map((row) =>
+    rowToFeedback(row)
+  );
+  const reports = ((reportResult.data ?? []) as unknown as ReportRow[]).map((row) =>
+    rowToReport(row)
+  );
+  feedbacks.forEach(patchFeedbackInCache);
+  reports.forEach(patchReportInCache);
+  return { feedbacks, reports };
+}
+
 export type AddLessonFeedbackInput = Omit<LessonFeedback, "id" | "createdAt" | "readAt">;
 
 export async function addLessonFeedbackInDb(

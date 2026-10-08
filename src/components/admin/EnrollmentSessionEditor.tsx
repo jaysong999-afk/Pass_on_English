@@ -19,6 +19,7 @@ import {
   formatAdjustmentLine,
   formatSessionBalance,
   formatSessionProgressFromEnrollment,
+  isUsableEnrollment,
 } from "@/lib/sessions";
 import { formatDate, formatLessonTimeRange, formatTime } from "@/lib/utils";
 import { CANONICAL_TIMEZONE } from "@/lib/availability/constants";
@@ -46,6 +47,7 @@ const SCHEDULE_ERROR_LABELS: Record<string, string> = {
   schedule_failed: "스케줄을 생성할 수 없습니다. 선생님 가용 시간을 확인해 주세요.",
   enrollment_not_found: "수강 정보를 찾을 수 없습니다.",
   invalid_delta: "조정 횟수가 올바르지 않습니다.",
+  enrollment_not_adjustable: "활성·결제 완료 수강만 횟수를 조정할 수 있습니다.",
 };
 
 function scheduleErrorMessage(code: string) {
@@ -97,7 +99,9 @@ export function EnrollmentSessionEditor({ studentId, studentName }: EnrollmentSe
     try {
       const [enrollmentsRes, lessonsRes] = await Promise.all([
         fetch(`/api/enrollments?studentId=${studentId}`),
-        fetch(`/api/admin/lessons?studentId=${studentId}`),
+        fetch(
+          `/api/admin/lessons?studentId=${studentId}&statuses=scheduled,reschedule_pending`
+        ),
       ]);
       const enrollmentsData = await enrollmentsRes.json();
       const lessonsData = await lessonsRes.json();
@@ -127,16 +131,20 @@ export function EnrollmentSessionEditor({ studentId, studentName }: EnrollmentSe
     load();
   }, [load]);
 
-  const upcomingByEnrollment = useMemo(() => {
-    const map = new Map<string, Lesson[]>();
+  const lessonStateByEnrollment = useMemo(() => {
+    const map = new Map<string, { future: Lesson[]; overdue: Lesson[] }>();
+    const now = Date.now();
     for (const lesson of upcomingLessons) {
-      if (!lesson.enrollmentId) continue;
-      const list = map.get(lesson.enrollmentId) ?? [];
-      list.push(lesson);
-      map.set(lesson.enrollmentId, list);
+      if (!lesson.enrollmentId || lesson.isTrial) continue;
+      if (lesson.status !== "scheduled" && lesson.status !== "reschedule_pending") continue;
+      const state = map.get(lesson.enrollmentId) ?? { future: [], overdue: [] };
+      const bucket = new Date(lesson.scheduledAt).getTime() >= now ? state.future : state.overdue;
+      bucket.push(lesson);
+      map.set(lesson.enrollmentId, state);
     }
-    for (const [, list] of map) {
-      list.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+    for (const [, state] of map) {
+      state.future.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+      state.overdue.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
     }
     return map;
   }, [upcomingLessons]);
@@ -257,7 +265,7 @@ export function EnrollmentSessionEditor({ studentId, studentName }: EnrollmentSe
     );
   }
 
-  const editableEnrollments = enrollments.filter((e) => e.status !== "completed");
+  const editableEnrollments = enrollments.filter(isUsableEnrollment);
 
   return (
     <>
@@ -270,21 +278,34 @@ export function EnrollmentSessionEditor({ studentId, studentName }: EnrollmentSe
           </p>
         </div>
 
-        {(editableEnrollments.length > 0 ? editableEnrollments : enrollments.slice(0, 1)).map(
+        {editableEnrollments.length === 0 && (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-gray-500">
+              횟수를 조정할 수 있는 활성·결제 완료 수강이 없습니다.
+            </CardContent>
+          </Card>
+        )}
+
+        {editableEnrollments.map(
           (enrollment) => {
-            const scheduled = upcomingByEnrollment.get(enrollment.id) ?? [];
+            const lessonState = lessonStateByEnrollment.get(enrollment.id) ?? {
+              future: [],
+              overdue: [],
+            };
+            const scheduled = lessonState.future;
+            const overdue = lessonState.overdue;
             const lastScheduled = scheduled[scheduled.length - 1];
-            const readOnly = enrollment.status === "completed";
             const busy = busyId === enrollment.id;
             const draftDelta = draftDeltas[enrollment.id] ?? 0;
             const removable = maxRemovable(enrollment, scheduled.length);
-            const canDecrease = draftDelta > -removable && !readOnly;
-            const canIncrease = draftDelta < 30 && !readOnly;
+            const canDecrease = draftDelta > -removable;
+            const canIncrease = draftDelta < 30;
             const hasDraft = draftDelta !== 0;
             const previewRemaining = enrollment.sessionsRemaining + draftDelta;
             const previewTotal = enrollment.sessionsTotal + draftDelta;
             const previewScheduled = scheduled.length + draftDelta;
-            const syncMismatch = scheduled.length !== enrollment.sessionsRemaining;
+            const unresolvedCount = scheduled.length + overdue.length;
+            const syncMismatch = unresolvedCount !== enrollment.sessionsRemaining;
             const cardFeedback = feedback[enrollment.id];
 
             return (
@@ -338,123 +359,125 @@ export function EnrollmentSessionEditor({ studentId, studentName }: EnrollmentSe
                       )}
                       {syncMismatch && !hasDraft && (
                         <p className="mt-2 text-xs text-amber-700">
-                          잔여 {enrollment.sessionsRemaining}회와 예정 {scheduled.length}회가
+                          잔여 {enrollment.sessionsRemaining}회와 미처리 일정 {unresolvedCount}회가
                           일치하지 않습니다.
+                        </p>
+                      )}
+                      {overdue.length > 0 && (
+                        <p className="mt-2 text-xs font-medium text-red-700">
+                          지난 미처리 수업 {overdue.length}회가 있습니다. 출석·결석 처리를 확인해
+                          주세요.
                         </p>
                       )}
                     </div>
                   </div>
 
-                  {!readOnly && (
-                    <>
-                      <div className="space-y-2">
-                        <Label>조정 횟수 (미리보기)</Label>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <StepperButton
-                            label="1회 차감"
-                            disabled={!canDecrease || busy}
-                            onClick={() => changeDraftDelta(enrollment, scheduled.length, -1)}
-                          >
-                            <ChevronLeft className="h-5 w-5 stroke-[2.5]" aria-hidden />
-                          </StepperButton>
-                          <div className="min-w-[7rem] text-center">
-                            <p
-                              className={`text-xl font-bold tabular-nums ${
-                                hasDraft ? "text-violet-700" : "text-ink"
-                              }`}
-                            >
-                              {draftDelta > 0 ? `+${draftDelta}` : draftDelta === 0 ? "0" : draftDelta}
-                              <span className="ml-1 text-sm font-normal text-gray-500">회</span>
-                            </p>
-                            {hasDraft && (
-                              <p className="mt-0.5 text-xs text-violet-600">
-                                → {formatSessionBalance(previewRemaining, previewTotal)}
-                              </p>
-                            )}
-                          </div>
-                          <StepperButton
-                            label="1회 추가"
-                            disabled={!canIncrease || busy}
-                            onClick={() => changeDraftDelta(enrollment, scheduled.length, 1)}
-                          >
-                            <ChevronRight className="h-5 w-5 stroke-[2.5]" aria-hidden />
-                          </StepperButton>
-                        </div>
-                        {hasDraft && (
-                          <p className="text-xs text-gray-500">
-                            적용 시 예정 스케줄 {scheduled.length}회 → {previewScheduled}회
-                            {draftDelta > 0
-                              ? ` · ${draftDelta}회 자동 예약`
-                              : ` · 마지막 ${Math.abs(draftDelta)}회 삭제`}
-                          </p>
-                        )}
-                        {!hasDraft && (
-                          <p className="text-xs text-gray-500">
-                            최대 {removable}회까지 차감 가능 (잔여·예정 스케줄 기준)
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor={`reason-${enrollment.id}`}>조정 사유 (선택)</Label>
-                        <Textarea
-                          id={`reason-${enrollment.id}`}
-                          placeholder={`예: ${studentName} 학생 보강 2회 추가, 서비스 보상 등`}
-                          value={reasons[enrollment.id] ?? ""}
-                          onChange={(e) =>
-                            setReasons((prev) => ({
-                              ...prev,
-                              [enrollment.id]: e.target.value,
-                            }))
-                          }
-                          rows={2}
-                        />
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          className="bg-violet-600 hover:bg-violet-700"
-                          disabled={!hasDraft || busy}
-                          onClick={() =>
-                            setConfirmTarget({
-                              enrollment,
-                              delta: draftDelta,
-                              scheduledCount: scheduled.length,
-                            })
-                          }
-                        >
-                          변경 적용
-                        </Button>
-                        {hasDraft && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className="gap-2"
-                            disabled={busy}
-                            onClick={() => resetDraft(enrollment.id)}
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                            되돌리기
-                          </Button>
-                        )}
-                      </div>
-
-                      {cardFeedback && (
+                  <div className="space-y-2">
+                    <Label>조정 횟수 (미리보기)</Label>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <StepperButton
+                        label="1회 차감"
+                        disabled={!canDecrease || busy}
+                        onClick={() => changeDraftDelta(enrollment, scheduled.length, -1)}
+                      >
+                        <ChevronLeft className="h-5 w-5 stroke-[2.5]" aria-hidden />
+                      </StepperButton>
+                      <div className="min-w-[7rem] text-center">
                         <p
-                          className={`rounded-xl px-3 py-2 text-sm ${
-                            cardFeedback.type === "success"
-                              ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
-                              : "border border-red-200 bg-red-50 text-red-800"
+                          className={`text-xl font-bold tabular-nums ${
+                            hasDraft ? "text-violet-700" : "text-ink"
                           }`}
                         >
-                          {cardFeedback.message}
+                          {draftDelta > 0 ? `+${draftDelta}` : draftDelta === 0 ? "0" : draftDelta}
+                          <span className="ml-1 text-sm font-normal text-gray-500">회</span>
                         </p>
-                      )}
+                        {hasDraft && (
+                          <p className="mt-0.5 text-xs text-violet-600">
+                            → {formatSessionBalance(previewRemaining, previewTotal)}
+                          </p>
+                        )}
+                      </div>
+                      <StepperButton
+                        label="1회 추가"
+                        disabled={!canIncrease || busy}
+                        onClick={() => changeDraftDelta(enrollment, scheduled.length, 1)}
+                      >
+                        <ChevronRight className="h-5 w-5 stroke-[2.5]" aria-hidden />
+                      </StepperButton>
+                    </div>
+                    {hasDraft && (
+                      <p className="text-xs text-gray-500">
+                        적용 시 예정 스케줄 {scheduled.length}회 → {previewScheduled}회
+                        {draftDelta > 0
+                          ? ` · ${draftDelta}회 자동 예약`
+                          : ` · 마지막 ${Math.abs(draftDelta)}회 삭제`}
+                      </p>
+                    )}
+                    {!hasDraft && (
+                      <p className="text-xs text-gray-500">
+                        최대 {removable}회까지 차감 가능 (잔여·예정 스케줄 기준)
+                      </p>
+                    )}
+                  </div>
 
-                      {busy && <p className="text-sm text-gray-500">처리 중…</p>}
-                    </>
+                  <div className="space-y-2">
+                    <Label htmlFor={`reason-${enrollment.id}`}>조정 사유 (선택)</Label>
+                    <Textarea
+                      id={`reason-${enrollment.id}`}
+                      placeholder={`예: ${studentName} 학생 보강 2회 추가, 서비스 보상 등`}
+                      value={reasons[enrollment.id] ?? ""}
+                      onChange={(e) =>
+                        setReasons((prev) => ({
+                          ...prev,
+                          [enrollment.id]: e.target.value,
+                        }))
+                      }
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      className="bg-violet-600 hover:bg-violet-700"
+                      disabled={!hasDraft || busy}
+                      onClick={() =>
+                        setConfirmTarget({
+                          enrollment,
+                          delta: draftDelta,
+                          scheduledCount: scheduled.length,
+                        })
+                      }
+                    >
+                      변경 적용
+                    </Button>
+                    {hasDraft && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="gap-2"
+                        disabled={busy}
+                        onClick={() => resetDraft(enrollment.id)}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        되돌리기
+                      </Button>
+                    )}
+                  </div>
+
+                  {cardFeedback && (
+                    <p
+                      className={`rounded-xl px-3 py-2 text-sm ${
+                        cardFeedback.type === "success"
+                          ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
+                          : "border border-red-200 bg-red-50 text-red-800"
+                      }`}
+                    >
+                      {cardFeedback.message}
+                    </p>
                   )}
+
+                  {busy && <p className="text-sm text-gray-500">처리 중…</p>}
                 </CardContent>
               </Card>
             );

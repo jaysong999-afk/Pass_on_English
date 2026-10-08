@@ -8,6 +8,7 @@
     "test:pwa-push": "node scripts/test-pwa-push.mjs",
     "test:enrollment-transfer": "node scripts/test-enrollment-transfer.mjs",
     "test:enrollment-refunds": "node --no-warnings --experimental-strip-types scripts/test-enrollment-refunds.mjs",
+    "test:session-integrity": "node --no-warnings --experimental-strip-types scripts/test-enrollment-session-integrity.mjs",
     "test:pwa-session": "node --no-warnings --experimental-strip-types scripts/test-pwa-session-persistence.mjs",
     "dev": "next dev",
     "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev",

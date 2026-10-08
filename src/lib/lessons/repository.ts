@@ -146,6 +146,7 @@ export async function listLessonsInDb(filter: {
   enrollmentId?: string;
   from?: string;
   to?: string;
+  statuses?: Lesson["status"][];
 }): Promise<Lesson[]> {
   const supabase = await createClient();
   let query = supabase.from("lessons").select(LESSON_SELECT);
@@ -155,6 +156,7 @@ export async function listLessonsInDb(filter: {
   if (filter.enrollmentId) query = query.eq("enrollment_id", filter.enrollmentId);
   if (filter.from) query = query.gte("scheduled_at", filter.from);
   if (filter.to) query = query.lte("scheduled_at", filter.to);
+  if (filter.statuses?.length) query = query.in("status", filter.statuses);
 
   const { data, error } = await query.order("scheduled_at", { ascending: true });
   if (error) throw new Error(`lessons_fetch_failed: ${error.message}`);

@@ -69,6 +69,8 @@ export interface StudentEnrollment {
   curriculum: string;
   /** 이번 달(또는 현재 수강 기간) 전체 수업 횟수 */
   sessionsTotal: number;
+  /** DB에서 원자적으로 관리하는 실제 완료 수업 횟수 */
+  sessionsCompleted?: number;
   /** 잔여 수업 횟수 — 관리자가 가감 가능 */
   sessionsRemaining: number;
   /** Student-initiated reschedules allowed for this enrollment. */

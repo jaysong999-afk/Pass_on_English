@@ -118,7 +118,7 @@ try {
     INSERT INTO public.teachers VALUES ('${teacher}','ET');
     INSERT INTO public.pricing_plans VALUES ('${plan}',20,'{"ko":{"name":"주5회 20분"}}','weekday5_20min');
     INSERT INTO public.enrollments(id,student_id,teacher_id,plan_id,status,payment_status,currency,total_amount,sessions_total,sessions_completed,sessions_remaining)
-      VALUES ('${enrollment}','${student}','${teacher}','${plan}','active','confirmed','KRW',87000,20,6,14);
+      VALUES ('${enrollment}','${student}','${teacher}','${plan}','active','confirmed','KRW',87000,20,0,20);
     INSERT INTO public.payments(enrollment_id,student_id,amount,currency,status,confirmed_at) VALUES ('${enrollment}','${student}',87000,'KRW','confirmed',now());
     INSERT INTO public.chat_rooms VALUES ('${room}','${enrollment}','${student}','${teacher}',now(),now());
     INSERT INTO public.chat_messages(room_id,sender_id,sender_role,body) VALUES ('${room}','${account}','student','old message');
@@ -126,11 +126,44 @@ try {
       SELECT '${enrollment}','${teacher}','${student}',now()-g*interval '1 day','completed',g=1 FROM generate_series(1,6) g;
     INSERT INTO public.lessons(enrollment_id,teacher_id,student_id,scheduled_at,status)
       SELECT '${enrollment}','${teacher}','${student}','2099-01-01'::timestamptz+g*interval '1 day','scheduled' FROM generate_series(1,14) g;
+    CREATE FUNCTION public.on_lesson_completed() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
+    CREATE TRIGGER trg_on_lesson_completed AFTER UPDATE OF status ON public.lessons
+      FOR EACH ROW EXECUTE FUNCTION public.on_lesson_completed();
     SELECT set_config('test.uid','${admin}',false);
   `);
 
   const migration = readFileSync(new URL("../supabase/migrations/048_atomic_enrollment_refunds.sql", import.meta.url), "utf8");
   await db.query(migration);
+  const sessionIntegrityMigration = readFileSync(
+    new URL("../supabase/migrations/055_repair_enrollment_session_counters.sql", import.meta.url),
+    "utf8"
+  );
+  await db.query(sessionIntegrityMigration);
+
+  const repairedCounter = (
+    await db.query("select sessions_completed,sessions_remaining from public.enrollments where id=$1", [enrollment])
+  ).rows[0];
+  assert.equal(repairedCounter.sessions_completed, 6);
+  assert.equal(repairedCounter.sessions_remaining, 14);
+
+  const triggerEnrollment = uid(30), triggerLesson = uid(31);
+  await db.query(`
+    INSERT INTO public.enrollments(id,student_id,teacher_id,plan_id,status,payment_status,currency,total_amount,sessions_total,sessions_completed,sessions_remaining)
+      VALUES ('${triggerEnrollment}','${student}','${teacher}','${plan}','active','confirmed','KRW',10000,1,0,1);
+    INSERT INTO public.lessons(id,enrollment_id,teacher_id,student_id,scheduled_at,status)
+      VALUES ('${triggerLesson}','${triggerEnrollment}','${teacher}','${student}',now(),'scheduled');
+    ALTER TABLE public.enrollments ENABLE ROW LEVEL SECURITY;
+    GRANT SELECT, UPDATE ON public.lessons TO authenticated;
+    SET ROLE authenticated;
+    UPDATE public.lessons SET status='completed' WHERE id='${triggerLesson}';
+    RESET ROLE;
+  `);
+  const triggerCounter = (
+    await db.query("select sessions_completed,sessions_remaining from public.enrollments where id=$1", [triggerEnrollment])
+  ).rows[0];
+  assert.equal(triggerCounter.sessions_completed, 1);
+  assert.equal(triggerCounter.sessions_remaining, 0);
+  console.log("PASS: session counter backfill and teacher completion trigger bypass enrollment RLS safely");
 
   const preview = await callPreview();
   assert.equal(preview.paidSessionsTotal, 20);

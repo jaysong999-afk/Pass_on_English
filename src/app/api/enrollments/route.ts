@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { authErrorResponse } from "@/lib/auth/api-guard";
 import { forbidden, unauthorized } from "@/lib/auth/errors";
 import { assertLearnerAccess, getAuthContext, requireRole } from "@/lib/auth/session";
-import { reportEnrollmentPaymentInDb } from "@/lib/enrollments/repository";
+import {
+  listStudentEnrollmentsInDb,
+  listStudentPaymentRecordsInDb,
+  reportEnrollmentPaymentInDb,
+} from "@/lib/enrollments/repository";
 import {
   getAllEnrollments,
   getEnrollmentById,
-  getEnrollmentsByStudent,
-  getPaymentRecordsByStudent,
 } from "@/lib/enrollment-store-sync";
 import { decorateEnrollmentRenewal } from "@/lib/enrollments/renewal-window";
 import { ensureAccountSession, getActiveLearner, getLearnerById } from "@/lib/account-store";
@@ -38,11 +40,22 @@ export async function GET(request: Request) {
     return authErrorResponse(error);
   }
 
+  if (studentId) {
+    const studentEnrollments = await listStudentEnrollmentsInDb(studentId);
+    const payments = await listStudentPaymentRecordsInDb(studentId, studentEnrollments);
+    return NextResponse.json({
+      enrollments: studentEnrollments.map((enrollment) =>
+        decorateEnrollmentRenewal(enrollment)
+      ),
+      payments,
+    });
+  }
+
   await ensureEnrollmentsBootstrapped();
-  const data = studentId ? getEnrollmentsByStudent(studentId) : getAllEnrollments();
-  const enrollments = data.map((enrollment) => decorateEnrollmentRenewal(enrollment));
-  const payments = studentId ? getPaymentRecordsByStudent(studentId) : undefined;
-  return NextResponse.json({ enrollments, payments });
+  const enrollments = getAllEnrollments().map((enrollment) =>
+    decorateEnrollmentRenewal(enrollment)
+  );
+  return NextResponse.json({ enrollments });
 }
 
 export async function POST(request: Request) {

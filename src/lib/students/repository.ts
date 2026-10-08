@@ -12,6 +12,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getStudentDirectoryCache,
   getStudentDirectoryEntryById,
+  patchStudentDirectoryEntry,
   setStudentDirectoryCache,
   type StudentDirectoryEntry,
 } from "@/lib/students/student-directory-cache";
@@ -169,6 +170,51 @@ export async function warmStudentDirectoryCache(): Promise<void> {
   });
 
   setStudentDirectoryCache(next);
+}
+
+/** Load one student detail without downloading the full admin directory. */
+export async function getStudentDirectoryEntryInDb(
+  studentId: string
+): Promise<StudentDirectoryEntry | undefined> {
+  const supabase = createBootstrapDbClient();
+  const { data, error } = await supabase
+    .from("students")
+    .select(
+      "id, account_holder_id, full_name, english_name, date_of_birth, gender, country, english_level, purposes, onboarding_note, trial_used, is_active, created_at, video_platforms"
+    )
+    .eq("id", studentId)
+    .maybeSingle();
+
+  if (error) throw new Error(`student_detail_fetch_failed: ${error.message}`);
+  if (!data) return undefined;
+
+  const row = data as StudentDbRow;
+  const [enrollmentMeta, trialLessons, profileMap, emailMap] = await Promise.all([
+    fetchLatestEnrollmentMetaByStudent([studentId]),
+    fetchUpcomingTrialLessonsByStudent([studentId]),
+    fetchProfileMap([row.account_holder_id]),
+    fetchAccountEmails([row.account_holder_id]),
+  ]);
+  const trial = trialLessons.get(studentId);
+  const learner = studentDbRowToLearner(row, {
+    paymentStatus: enrollmentMeta.get(studentId)?.paymentStatus,
+    trialScheduledAt: trial?.scheduled_at,
+    trialLessonId: trial?.id,
+    trialDurationMinutes: trial?.duration_minutes,
+  });
+  const email = emailMap.get(row.account_holder_id) ?? "";
+  const student = buildStudentProfile(row, learner, email);
+  const profile = profileMap.get(row.account_holder_id);
+  const entry: StudentDirectoryEntry = {
+    student,
+    learner,
+    accountHolder: profile
+      ? buildAccountHolder(profile, email, student.country)
+      : undefined,
+    isActive: row.is_active,
+  };
+  patchStudentDirectoryEntry(entry);
+  return entry;
 }
 
 export function getStudentDirectoryEntry(id: string): StudentDirectoryEntry | undefined {

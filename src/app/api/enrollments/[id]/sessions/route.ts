@@ -1,21 +1,20 @@
 import { NextResponse } from "next/server";
-import { adjustEnrollmentSessionsInDb } from "@/lib/enrollments/repository";
 import { adjustEnrollmentSessionsWithScheduleBatchInDb } from "@/lib/lessons/schedule-service";
 import { ensureEnrollmentWorkflowBootstrapped } from "@/lib/lesson-scheduler-bootstrap";
+import { guardAdminApi, isAdminGuardResponse } from "@/lib/auth/admin-api-guard";
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await guardAdminApi();
+  if (isAdminGuardResponse(guard)) return guard;
+
   const { id } = await params;
 
   let body: {
     action?: "adjust_sessions" | "add_session" | "remove_session";
     delta?: number;
-    sessionsRemaining?: number;
-    sessionsTotal?: number;
-    deltaRemaining?: number;
-    deltaTotal?: number;
     reason?: string;
     adminName?: string;
   };
@@ -27,7 +26,7 @@ export async function PATCH(
   }
 
   try {
-  await ensureEnrollmentWorkflowBootstrapped();
+    await ensureEnrollmentWorkflowBootstrapped();
   } catch (error) {
     console.error("[enrollments/sessions PATCH] bootstrap", error);
   }
@@ -72,10 +71,5 @@ export async function PATCH(
     });
   }
 
-  const updated = await adjustEnrollmentSessionsInDb(id, body);
-  if (!updated) {
-    return NextResponse.json({ error: "Enrollment not found" }, { status: 404 });
-  }
-
-  return NextResponse.json({ enrollment: updated });
+  return NextResponse.json({ error: "invalid_action" }, { status: 400 });
 }

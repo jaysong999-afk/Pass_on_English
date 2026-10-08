@@ -174,6 +174,10 @@ export function requiredRolesForApi(pathname: string, method: string): UserRole[
     return ["student"];
   }
 
+  if (/^\/api\/enrollments\/[^/]+\/sessions$/.test(pathname)) {
+    return ["admin"];
+  }
+
   if (pathname.startsWith("/api/enrollments")) {
     return ["student", "admin"];
   }

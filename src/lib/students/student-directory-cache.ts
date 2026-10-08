@@ -26,6 +26,18 @@ export function setStudentDirectoryCache(next: StudentDirectoryEntry[]) {
   }));
 }
 
+export function patchStudentDirectoryEntry(next: StudentDirectoryEntry) {
+  const cloned = {
+    ...next,
+    student: { ...next.student },
+    learner: { ...next.learner },
+    accountHolder: next.accountHolder ? { ...next.accountHolder } : undefined,
+  };
+  const index = entries.findIndex((entry) => entry.student.id === next.student.id);
+  if (index === -1) entries.push(cloned);
+  else entries[index] = cloned;
+}
+
 export function clearStudentDirectoryCache() {
   entries = [];
 }
