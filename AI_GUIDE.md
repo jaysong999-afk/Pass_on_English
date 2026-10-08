@@ -3,7 +3,7 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-10-08 (migration 053~054 운영 DB 적용·검증 완료, 연계 앱은 미배포)
+최종 검증일: 2026-10-08 (migration 053~054 및 연계 앱 `4c043e1` 운영 적용·배포 검증 완료)
 기준 브랜치: `main`
 검증된 운영 기준 커밋: `5618074` (`fix: make production dependency install deterministic`)
 
@@ -23,7 +23,7 @@
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
 | DB migration 최신 기준 | `054_legacy_reschedule_rpc_compatibility.sql` — 2026-10-08 싱가포르 운영 DB 적용·권한 검증 완료. 본 정책은 `053`, 현재 운영 앱 호환 계층은 `054` |
-| 현재 운영 이미지 / 릴리스 | `pass-on-english:5618074` / `/opt/pass-on-english/releases/5618074` |
+| 현재 운영 이미지 / 릴리스 | `pass-on-english:4c043e1` / `/opt/pass-on-english/releases/4c043e1` |
 | 남은 검증 | 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관·환불의 실기기·실데이터 확인 필요 |
 
 ### 금지된 연결
@@ -101,7 +101,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 - `051_teacher_compensation_governance.sql`은 2026-10-07 운영 DB에 단독 트랜잭션으로 적용했다. 강사 근속일·월 출석·고정 분기 보너스 필드, 연간 보상 심사·시급 변경 이력·노쇼 패널티 원장, 관리자 원자 처리 RPC 8개를 추가했다. 신규 컬럼 11개, RLS 테이블 3개, 정책 5개, 인덱스 6개와 근속일 backfill 누락 0건을 확인했고, `anon`의 신규 함수 실행·테이블 조회 및 `authenticated`의 직접 DELETE가 차단됨을 검증했다. 연계 앱은 `5618074`로 운영 배포했다.
 - `052_paginated_chat_history.sql`은 2026-10-07 운영 DB에 단독 트랜잭션으로 적용했다. 일반 채팅과 관리자 1:1 채팅의 최신 50건 keyset 조회 RPC 2개와 `(thread/room, created_at DESC, id DESC)` 복합 인덱스 2개를 추가했다. 두 함수가 `SECURITY DEFINER`, `STABLE`, `postgres` 소유이고 `anon` 실행은 차단되며 `authenticated`·`service_role`만 실행 가능한 상태를 확인했다. 연계 앱은 `5618074`로 운영 배포했다.
 - `053_enrollment_reschedule_policy.sql`은 2026-10-08 운영 DB에 단독 트랜잭션으로 적용했다. 수강별 변경 한도·2시간 마감·자동 만료·강사 2회차 보너스 제외를 DB 원자 처리로 전환했으며, 컬럼 5개·이벤트 원장/RLS·인덱스 5개·한도 trigger·함수 5개와 역할별 권한을 검증했다.
-- `054_legacy_reschedule_rpc_compatibility.sql`은 2026-10-08 운영 DB에 적용했다. 아직 운영 중인 앱 `5618074`의 5인자 요청 생성 호출을 유지하되 클라이언트 월 값은 무시하고 053의 4인자 정책 RPC에 위임한다. 두 함수 모두 `SECURITY DEFINER`, `postgres` 소유이며 `anon` 실행은 차단되고 `authenticated`·`service_role`만 실행 가능함을 확인했다. 053 연계 앱 코드는 아직 운영 배포하지 않았다.
+- `054_legacy_reschedule_rpc_compatibility.sql`은 2026-10-08 운영 DB에 적용했다. 앱 `5618074`의 5인자 요청 생성 호출을 유지하되 클라이언트 월 값은 무시하고 053의 4인자 정책 RPC에 위임한다. 두 함수 모두 `SECURITY DEFINER`, `postgres` 소유이며 `anon` 실행은 차단되고 `authenticated`·`service_role`만 실행 가능함을 확인했다. 연계 앱은 `4c043e1`로 운영 배포했다.
 - 같은 날 운영 DB에 `supabase_migrations.schema_migrations`가 없음을 확인했다. 043은 Management API를 통한 해당 SQL 파일 단독 트랜잭션 실행으로 적용했고, CLI 이력을 임의로 생성하거나 과거 이력을 복구하지 않았다. `db push`/전체 migration 재적용 금지: 실제 객체와 과거 적용 기록을 대조한 이력 정합화가 먼저 필요하다.
 - 로컬 `supabase/.temp`의 구 프로젝트 연결을 발견하여 실행을 중단한 후, 공식 CLI `link`로 싱가포르 project ref 및 pooler를 재설정·확인했다. 향후 CLI 실행 전 숨김/ignored 파일의 project-ref도 반드시 확인한다.
 - 운영 DB 적용 전 대상 project ref를 출력 가능한 비밀이 아닌 URL/ref 수준에서 확인하고, 데이터 보존형 SQL인지 검토한다.
@@ -255,6 +255,13 @@ https://passonenglish.com/api/health     → 200
 - CPU 1코어·RAM 1200MB·메모리+스왑 2GB 제한 BuildKit으로 이미지 `pass-on-english:5618074`(`sha256:57e0aebb92881f280ab31ad3c4268814473207628906eeaaac61a154a62bd002`)를 생성했다. 격리 후보에서 싱가포르 Supabase URL, 포털·PWA 자산 200, 공지·급여·채팅 API 익명 요청 401을 확인한 뒤 app→cron→nginx 순서로 전환했다.
 - 운영 app은 healthy·재시작 0이며 배포 후 앱 오류 패턴과 nginx 5xx는 0건이다. cron의 예약 발송·결제 대기 만료 작업은 모두 성공했고 `failed: 0`을 확인했다. 외부 `/ko`, `/zh-CN`, `/ko/signup`, `/teacher`, `/admin`, `/api/health`, manifest, Service Worker와 manifest 아이콘은 모두 200이다.
 - 이전 `33fc09e` 이미지와 릴리스는 즉시 롤백용으로 보존했다.
+
+2026-10-08 migration 053~054 및 트래픽 최적화 연계 앱 배포 검증:
+
+- 커밋 `4c043e1`을 `origin/main`에 푸시하고 `/opt/pass-on-english/releases/4c043e1`에 아카이브해 배포했다. 기존 `.env.production`은 서버 내부에서 복사했으며 공개 Supabase URL은 싱가포르 프로젝트와 일치함을 확인했다.
+- 제한형 BuildKit에서 `pass-on-english:4c043e1` 이미지를 빌드하고 app health를 먼저 확인한 뒤 cron·nginx를 순서대로 전환했다. app·cron·nginx 모두 실행 중이며 app은 healthy, nginx 설정 검사도 통과했다.
+- 새 앱 런타임에서 VAPID 공개·비밀키가 존재하고 키 쌍이 일치함을 값 노출 없이 확인했다. 운영 HTTPS의 `/ko`, `/zh-CN`, `/ko/signup`, `/api/health`, `/manifest.json`, `/sw.js`는 모두 200이고 주요 보호 API 익명 요청은 401이다.
+- 수강변경 정책 053과 기존 앱 호환 054가 운영 DB에 이미 적용된 상태에서 연계 UI·DB 권위 정책·재수강 대기 일괄 조회 최적화를 함께 활성화했다. 이전 `5618074` 이미지와 릴리스는 롤백용으로 보존했다.
 
 ## 7. 테스트 기준
 
