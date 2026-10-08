@@ -1,5 +1,7 @@
 # Pass on English — 데이터베이스 설계 명세서
 
+> 운영 최신 기준: migration 056, 연계 앱 `2bfa6a6` (2026-10-08). 운영 DB에는 migration 이력 테이블이 없으므로 각 SQL 파일은 대상 project ref 확인 후 단독 실행한다.
+
 ## 0. MVP 구현 현황 (2026-09-01)
 
 | 단계 | 상태 | 비고 |

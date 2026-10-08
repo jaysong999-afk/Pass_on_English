@@ -11,7 +11,7 @@
 | **DB 상세** | 컬럼·ENUM·인덱스는 [`db.md`](./db.md)를 SSOT로 따른다. 본 문서는 **UI가 실제로 쓰는 테이블·필드**만 강조한다 |
 | **목표 스택** | Next.js Route Handlers + Supabase PostgreSQL + Auth + (선택) Realtime |
 
-> **현재 (2026-10-08)**: Route Handler **60+**개 + Supabase PostgreSQL 데이터 레이어. 세 역할의 세션 UUID 바인딩, API **기본 거부(default deny)**, 열 단위 DTO 제한, RLS·트랜잭션 보강을 완료했다. 운영 DB 최신 적용은 migration `054`이며, 연계 운영 앱은 `4c043e1`이다. 수업 변경 정책은 053 DB 권위 RPC와 054 호환 RPC를 포함해 운영 배포했고, 재수강 대기 일괄 조회 최적화도 함께 적용했다. E2E 시드는 `supabase/seeds/`로 분리한다. 운영 대상은 신규 싱가포르 프로젝트이며 루트 `AI_GUIDE.md`가 project ref의 SSOT다.
+> **현재 (2026-10-08)**: Route Handler **60+**개 + Supabase PostgreSQL 데이터 레이어. 세 역할의 세션 UUID 바인딩, API **기본 거부(default deny)**, 열 단위 DTO 제한, RLS·트랜잭션 보강을 완료했다. 운영 DB 최신 적용은 migration `056`이며, 연계 운영 앱은 `2bfa6a6`이다. 수업 변경 정책·잔여수업 정합성·학생/강사 쌍별 채팅방 단일화를 운영 DB에 적용했고, 재수강 대기 일괄 조회와 채팅 inbox 범위를 최적화했다. E2E 시드는 `supabase/seeds/`로 분리한다. 운영 대상은 신규 싱가포르 프로젝트이며 루트 `AI_GUIDE.md`가 project ref의 SSOT다.
 
 > `041_targeted_chat_inbox.sql`은 전체 채팅 cache warm을 사용자 범위 집계로 교체하고, `042_harden_chat_rpc_privileges.sql`은 해당 RPC의 익명 실행 권한을 제거한다. 두 migration 모두 신규 싱가포르 운영 DB에 적용됐다.
 
@@ -270,7 +270,7 @@
 | GET/PATCH | `/api/chat/rooms` | chat list, bells | 🗄️ `chat_rooms` | `role`; 과거 링크 fallback `resolveId`; PATCH: `action=read`\|`readAll`, `id` |
 | GET/POST | `/api/chat/messages` | `ChatThread` | 🗄️ `chat_messages` | GET: `roomId`; POST: body, senderRole |
 
-migration 056 적용 후 일반 채팅은 `학생 1명 + 강사 1명 = 채팅방 1개`를 DB UNIQUE로 보장한다. 같은 강사 재수강은 기존 방을 다시 열고, 해당 쌍의 유효 수강이 모두 끝난 경우에만 읽기 전용으로 전환한다. 기존 중복 방은 메시지·읽음 cursor·presence·저장 알림 링크까지 대표 방으로 병합하며, 일반 목록에는 추가 조회가 없고 삭제된 과거 방 링크를 열 때만 별칭 RPC를 1회 호출한다. 관리자 지원용 direct thread는 별도 구조로 계속 사용할 수 있다. 현재 056은 로컬 검증만 완료했고 운영 미적용이다.
+migration 056 적용 후 일반 채팅은 `학생 1명 + 강사 1명 = 채팅방 1개`를 DB UNIQUE로 보장한다. 같은 강사 재수강은 기존 방을 다시 열고, 해당 쌍의 유효 수강이 모두 끝난 경우에만 읽기 전용으로 전환한다. 기존 중복 방은 메시지·읽음 cursor·presence·저장 알림 링크까지 대표 방으로 병합하며, 일반 목록에는 추가 조회가 없고 삭제된 과거 방 링크를 열 때만 별칭 RPC를 1회 호출한다. 관리자 지원용 direct thread는 별도 구조로 계속 사용할 수 있다. migration 056과 연계 앱 `2bfa6a6`은 2026-10-08 운영 적용·배포를 완료했다.
 
 **신규 수업 배정 알림**: 무료체험 lesson 생성 시 `trial:{lessonId}`, 정규 수강 첫 스케줄 생성 시 `enrollment:{enrollmentId}` 키로 teacher notification을 중복 없이 생성한다. payload에는 첫 lesson, 학생명, 수강목적, trial 여부를 포함한다. My Lessons는 unread `teacher_lesson_assignment`만 반환하며 확인 버튼은 기존 `PATCH /api/notifications?role=teacher`로 `read_at`을 기록한다.
 
