@@ -10,6 +10,9 @@ import {
   requiredRolesForApi,
 } from "@/lib/auth/constants";
 import { fetchAuthProfile, fetchAuthProfilePrivileged } from "@/lib/auth/session";
+import { getAdminMfaAssurance, isAdminMfaRequired } from "@/lib/auth/admin-security";
+import { isTrustedAdminMutation } from "@/lib/auth/same-origin";
+import { ADMIN_MFA_COOKIE_NAME, isValidAdminMfaCookie } from "@/lib/auth/admin-mfa-cookie";
 import { getMiddlewareAuthUser } from "@/lib/supabase/middleware";
 import type { UserRole } from "@/lib/auth/types";
 
@@ -51,6 +54,49 @@ function portalPath(role: UserRole, locale: Locale): string {
   if (role === "teacher") return "/teacher";
   if (role === "admin") return "/admin";
   return `/${locale}/student`;
+}
+
+function isAdminSecurityPath(pathname: string): boolean {
+  return pathname === "/admin/security" || pathname.startsWith("/api/admin/security/");
+}
+
+async function enforceAdminMfa(
+  request: NextRequest,
+  response: NextResponse,
+  auth: Awaited<ReturnType<typeof getMiddlewareAuthUser>>
+): Promise<NextResponse | null> {
+  if (!isAdminMfaRequired() || isAdminSecurityPath(request.nextUrl.pathname)) return null;
+
+  try {
+    const bearer = request.headers.get("authorization");
+    const assurance = await getAdminMfaAssurance(
+      auth.supabase,
+      bearer?.startsWith("Bearer ") ? bearer.slice(7).trim() : undefined
+    );
+    const isBearerRequest = bearer?.startsWith("Bearer ") ?? false;
+    const recentMfa = auth.user && !isBearerRequest
+      ? await isValidAdminMfaCookie(
+          request.cookies.get(ADMIN_MFA_COOKIE_NAME)?.value,
+          auth.user.id
+        )
+      : false;
+    if (assurance.currentLevel === "aal2" && (isBearerRequest || recentMfa)) return null;
+  } catch (error) {
+    console.error("[middleware] admin MFA check failed", error);
+  }
+
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return copyResponseCookies(
+      response,
+      NextResponse.json({ error: "mfa_required" }, { status: 403 })
+    );
+  }
+
+  const securityUrl = request.nextUrl.clone();
+  securityUrl.pathname = "/admin/security";
+  securityUrl.search = "";
+  securityUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  return copyResponseCookies(response, NextResponse.redirect(securityUrl));
 }
 
 async function enforceRoles(
@@ -181,6 +227,10 @@ export async function middleware(request: NextRequest) {
   if (pageRole && !isPublicPagePath(pathname)) {
     const denied = await enforceRole(request, response, pageRole, auth);
     if (denied) return denied;
+    if (pageRole === "admin") {
+      const mfaDenied = await enforceAdminMfa(request, response, auth);
+      if (mfaDenied) return mfaDenied;
+    }
   }
 
   if (pathname.startsWith("/api/")) {
@@ -188,6 +238,16 @@ export async function middleware(request: NextRequest) {
     if (apiRoles) {
       const denied = await enforceRoles(request, response, apiRoles, auth);
       if (denied) return denied;
+      if (apiRoles.length === 1 && apiRoles[0] === "admin") {
+        if (!isTrustedAdminMutation(request)) {
+          return copyResponseCookies(
+            response,
+            NextResponse.json({ error: "invalid_origin" }, { status: 403 })
+          );
+        }
+        const mfaDenied = await enforceAdminMfa(request, response, auth);
+        if (mfaDenied) return mfaDenied;
+      }
     }
   }
 

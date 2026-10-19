@@ -108,7 +108,7 @@ function AdminLoginForm() {
             <Input
               id="admin-email"
               type="email"
-              placeholder="demo-admin@example.org"
+              placeholder="관리자 이메일 주소"
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}

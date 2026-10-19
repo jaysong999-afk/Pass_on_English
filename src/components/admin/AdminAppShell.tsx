@@ -16,6 +16,7 @@ import {
   Send,
   HelpCircle,
   Settings,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -147,6 +148,13 @@ const NAV_GROUPS: NavGroup[] = [
     title: "계정",
     items: [
       {
+        href: "/admin/security",
+        matchPath: "/admin/security",
+        label: "로그인 보안",
+        description: "2단계 인증·세션 관리",
+        icon: ShieldCheck,
+      },
+      {
         href: "/admin/settings",
         matchPath: "/admin/settings",
         label: "설정",
@@ -170,6 +178,7 @@ const PAGE_TITLES: { prefix: string; title: string; subtitle?: string }[] = [
   { prefix: "/admin/finance", title: "재무", subtitle: "수입·지출 대시보드" },
   { prefix: "/admin/messages", title: "공지·메시지", subtitle: "학생 공지·채팅·단체 발송" },
   { prefix: "/admin/chat", title: "채팅", subtitle: "대화" },
+  { prefix: "/admin/security", title: "로그인 보안", subtitle: "2단계 인증 및 세션 관리" },
   { prefix: "/admin/settings", title: "설정", subtitle: "계정 보안" },
   { prefix: "/admin", title: "대시보드", subtitle: "Pass on English 관리자" },
 ];

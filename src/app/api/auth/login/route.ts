@@ -8,6 +8,12 @@ import {
   classifyLoginFailure,
   loginErrorLogFields,
 } from "@/lib/auth/login-failure";
+import {
+  checkLoginRateLimit,
+  clearLoginFailures,
+  recordLoginFailure,
+} from "@/lib/auth/login-rate-limit";
+import { appendAdminSecurityEvent } from "@/lib/admin/security-events";
 
 const TRANSIENT_RETRY_DELAY_MS = 300;
 
@@ -36,6 +42,16 @@ export async function POST(request: Request) {
 
   if (!email || !password) {
     return NextResponse.json({ error: "email_password_required" }, { status: 400 });
+  }
+
+  // The requested role is client-controlled. Apply the limiter before auth for
+  // every login so changing or omitting `role` cannot bypass admin protection.
+  const rate = checkLoginRateLimit(request, email);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "auth_rate_limited" },
+      { status: 429, headers: { "Retry-After": String(rate.retryAfterSeconds) } }
+    );
   }
 
   const supabase = await createClient();
@@ -85,6 +101,9 @@ export async function POST(request: Request) {
 
   if (error) {
     const failure = classifyLoginFailure(error);
+    if (failure.code === "invalid_credentials") {
+      recordLoginFailure(request, email);
+    }
     console.error("[auth/login] Supabase Auth sign-in rejected", {
       ...loginErrorLogFields(error),
       attempt: signInAttempts,
@@ -130,6 +149,16 @@ export async function POST(request: Request) {
         await supabase.auth.signOut();
         throw forbidden("teacher_not_active");
       }
+    }
+
+    clearLoginFailures(request, email);
+
+    if (profile.role === "admin") {
+      await appendAdminSecurityEvent({
+        actorId: data.user.id,
+        eventType: "admin_login_succeeded",
+        request,
+      });
     }
 
     return NextResponse.json({

@@ -1,6 +1,6 @@
 # Pass on English — 데이터베이스 설계 명세서
 
-> 운영 최신 기준: migration 056, 연계 앱 `2bfa6a6` (2026-10-08). 운영 DB에는 migration 이력 테이블이 없으므로 각 SQL 파일은 대상 project ref 확인 후 단독 실행한다.
+> 운영 최신 기준: migration 057 (2026-10-19), 연계 앱 `2bfa6a6` (2026-10-08). 운영 DB에는 migration 이력 테이블이 없으므로 각 SQL 파일은 대상 project ref 확인 후 단독 실행한다. migration 057 연계 관리자 보안 앱은 아직 미배포 상태다.
 
 ## 0. MVP 구현 현황 (2026-09-01)
 
@@ -889,7 +889,8 @@ supabase db push
 | 53 | `053_enrollment_reschedule_policy.sql` | 수강별 변경 한도·2시간 마감·자동 만료·강사 2회차 보너스 제외 원장. **2026-10-08 운영 적용·검증 완료** |
 | 54 | `054_legacy_reschedule_rpc_compatibility.sql` | 운영 앱의 기존 5인자 생성 RPC를 053의 4인자 정책 RPC로 위임하는 임시 호환 계층. **2026-10-08 운영 적용·권한 검증 완료** |
 | 55 | `055_repair_enrollment_session_counters.sql` | 완료 수업 카운터·잔여수업 정합성 복구와 학생 범위 채팅 inbox. **2026-10-08 운영 적용·검증 완료** |
-| 56 | `056_close_expired_enrollment_chats.sql` | 학생 1명+강사 1명당 채팅방 1개 강제, 중복 이력 병합·과거 링크 별칭·재수강 재개·최종 수강 종료 차단. **로컬 구현·격리 DB 검증 완료, 운영 미적용** |
+| 56 | `056_close_expired_enrollment_chats.sql` | 학생 1명+강사 1명당 채팅방 1개 강제, 중복 이력 병합·과거 링크 별칭·재수강 재개·최종 수강 종료 차단. **2026-10-08 운영 적용·검증 완료** |
+| 57 | `057_admin_security_audit.sql` | 관리자 보안 감사 이벤트 원장, 보조 인덱스 2개, 관리자 전용 SELECT RLS와 역할별 최소 권한. **2026-10-19 운영 적용·실제 역할 검증 완료, 연계 앱 미배포** |
 | E2E seed | `supabase/seeds/e2e_rich_seed.sql` | 운영 migration history와 분리된 통합 테스트 시드 (수강신청·홀드·입금·스케줄·보강·피드백·재수강) |
 
 ### 8.3 `001` 포함 항목 (개념적 순서)
