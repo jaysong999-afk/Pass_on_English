@@ -1,14 +1,14 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Copy, KeyRound, ShieldCheck, Smartphone } from "lucide-react";
+import { CheckCircle2, Copy, Eye, EyeOff, KeyRound, RefreshCw, ShieldCheck, Smartphone, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { normalizeTotpQrCode } from "@/lib/auth/totp-qr";
 import { createClient } from "@/lib/supabase/client";
 
 interface SecurityStatus {
@@ -49,6 +49,8 @@ function MfaSecurityPanel() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [working, setWorking] = useState(false);
+  const [qrImageFailed, setQrImageFailed] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
 
   const loadStatus = useCallback(async () => {
     const response = await fetch("/api/admin/security/status", { cache: "no-store" });
@@ -65,6 +67,10 @@ function MfaSecurityPanel() {
     setError("");
     setMessage("");
     setWorking(true);
+    setQrImageFailed(false);
+    setShowSecret(false);
+    setCode("");
+    setEnrollment(null);
     try {
       const supabase = createClient();
       const { data: factors, error: factorsError } = await supabase.auth.mfa.listFactors();
@@ -81,14 +87,43 @@ function MfaSecurityPanel() {
         friendlyName: `관리자 인증 앱 ${new Date().toLocaleDateString("ko-KR")}`,
       });
       if (enrollError) throw enrollError;
+      let qrCode: string;
+      try {
+        qrCode = normalizeTotpQrCode(data.totp.qr_code);
+      } catch (qrError) {
+        await supabase.auth.mfa.unenroll({ factorId: data.id });
+        throw qrError;
+      }
       setEnrollment({
         factorId: data.id,
-        qrCode: `data:image/svg+xml;utf8,${encodeURIComponent(data.totp.qr_code)}`,
+        qrCode,
         secret: data.totp.secret,
       });
     } catch (enrollError) {
       console.error("[admin/security] enroll failed", enrollError);
       setError("인증 앱 등록을 시작하지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function cancelEnrollment() {
+    if (!enrollment) return;
+    setError("");
+    setMessage("");
+    setWorking(true);
+    try {
+      const supabase = createClient();
+      const { error: cancelError } = await supabase.auth.mfa.unenroll({ factorId: enrollment.factorId });
+      if (cancelError) throw cancelError;
+      setEnrollment(null);
+      setCode("");
+      setQrImageFailed(false);
+      setShowSecret(false);
+      setMessage("인증 앱 등록을 취소했습니다.");
+    } catch (cancelError) {
+      console.error("[admin/security] enrollment cancellation failed", cancelError);
+      setError("등록을 취소하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setWorking(false);
     }
@@ -118,6 +153,8 @@ function MfaSecurityPanel() {
 
       setCode("");
       setEnrollment(null);
+      setQrImageFailed(false);
+      setShowSecret(false);
       setMessage("2단계 인증이 확인되었습니다.");
       await loadStatus();
       router.refresh();
@@ -208,19 +245,48 @@ function MfaSecurityPanel() {
 
           {enrollment ? (
             <div className="grid gap-5 rounded-xl border border-violet-200 bg-violet-50/40 p-5 md:grid-cols-[220px_1fr]">
-              <div className="rounded-xl bg-white p-3 shadow-sm">
-                <Image src={enrollment.qrCode} alt="관리자 2단계 인증 QR 코드" width={196} height={196} unoptimized />
+              <div className="flex min-h-[220px] items-center justify-center rounded-xl bg-white p-3 shadow-sm">
+                {qrImageFailed ? (
+                  <div role="alert" className="space-y-3 text-center text-sm text-red-700">
+                    <p>QR 코드를 표시하지 못했습니다.</p>
+                    <Button type="button" variant="outline" size="sm" onClick={startEnrollment} disabled={working}>
+                      <RefreshCw className="mr-2 h-4 w-4" /> 새 QR 만들기
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    {/* The QR is a short-lived data URI and must not leave the browser for optimization. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={enrollment.qrCode}
+                      alt="관리자 2단계 인증 QR 코드"
+                      width={196}
+                      height={196}
+                      className="h-[196px] w-[196px]"
+                      onError={() => setQrImageFailed(true)}
+                    />
+                  </>
+                )}
               </div>
               <div className="space-y-3">
                 <p className="font-semibold">1. 인증 앱에서 QR 코드를 스캔하세요.</p>
                 <p className="text-sm text-gray-600">스캔할 수 없다면 아래 키를 인증 앱에 직접 입력하세요.</p>
                 <div className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2">
-                  <code className="min-w-0 flex-1 break-all text-sm">{enrollment.secret}</code>
+                  <code className="min-w-0 flex-1 break-all text-sm">
+                    {showSecret ? enrollment.secret : "•••• •••• •••• •••• •••• •••• •••• ••••"}
+                  </code>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setShowSecret((visible) => !visible)}>
+                    {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    <span className="sr-only">{showSecret ? "비밀키 숨기기" : "비밀키 보기"}</span>
+                  </Button>
                   <Button type="button" variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(enrollment.secret)}>
                     <Copy className="h-4 w-4" />
                     <span className="sr-only">비밀키 복사</span>
                   </Button>
                 </div>
+                <p className="text-xs leading-relaxed text-amber-700">
+                  QR 코드와 비밀키는 동일한 인증 정보입니다. 화면을 캡처하거나 다른 사람에게 공유하지 마세요.
+                </p>
                 <p className="text-sm font-semibold">2. 앱에 표시된 6자리 번호로 등록을 완료하세요.</p>
               </div>
             </div>
@@ -240,9 +306,16 @@ function MfaSecurityPanel() {
                 onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
                 required
               />
-              <Button type="submit" disabled={working} className="bg-violet-600 hover:bg-violet-700">
-                {working ? "확인 중…" : enrollment ? "등록 완료" : "인증하고 계속"}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={working} className="bg-violet-600 hover:bg-violet-700">
+                  {working ? "확인 중…" : enrollment ? "등록 완료" : "인증하고 계속"}
+                </Button>
+                {enrollment ? (
+                  <Button type="button" variant="outline" disabled={working} onClick={cancelEnrollment}>
+                    <X className="mr-2 h-4 w-4" /> 등록 취소
+                  </Button>
+                ) : null}
+              </div>
             </form>
           ) : null}
 
