@@ -3,9 +3,9 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-10-19 (migration 057 운영 적용·권한 검증 완료, 연계 앱은 아직 미배포)
+최종 검증일: 2026-10-19 (migration 057·관리자 보안 앱 `ee6ad29` 운영 배포 및 HTTPS 검증 완료)
 기준 브랜치: `main`
-검증된 운영 기준 커밋: `4c043e1` (`feat: enforce reschedule policy and optimize maintenance`)
+검증된 운영 기준 커밋: `ee6ad29` (`feat: harden administrator authentication`)
 
 ## 1. 절대 혼동하면 안 되는 운영 정보
 
@@ -22,8 +22,8 @@
 | 폐기 대상 Supabase project ref | `yldtimpsgumheiahcwwi` |
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
-| DB migration 최신 기준 | `057_admin_security_audit.sql` — 2026-10-19 싱가포르 운영 DB 적용·인덱스/RLS/역할별 권한 검증 완료. 연계 관리자 보안 앱은 아직 미배포 |
-| 현재 운영 이미지 / 릴리스 | `pass-on-english:2bfa6a6` / `/opt/pass-on-english/releases/2bfa6a6` |
+| DB migration 최신 기준 | `057_admin_security_audit.sql` — 2026-10-19 싱가포르 운영 DB 적용·인덱스/RLS/역할별 권한 검증 및 연계 앱 배포 완료 |
+| 현재 운영 이미지 / 릴리스 | `pass-on-english:ee6ad29` / `/opt/pass-on-english/releases/ee6ad29` |
 | 남은 검증 | 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관·환불의 실기기·실데이터 확인 필요 |
 
 ### 금지된 연결
@@ -125,8 +125,10 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 해당 릴리스 `.env.production`에 로컬 공개키·비밀키 두 항목만 등록했다. 키 쌍 정상 및 로컬/서버 파일 일치 확인.
 기존 `VAPID_SUBJECT`와 Supabase 설정은 보존했고 원본은 동일 디렉터리의 `.env.production.pre-vapid-*`로 백업했다(두 파일 모두 600).
 이후 사용자 승인으로 `35bb954` 새 릴리스에 환경파일을 복사하고 이미지 태그만 바꿔 새 이미지를 빌드·배포했다.
-현재 환경파일은 `/opt/pass-on-english/releases/662886c/deploy/tencent-lighthouse/.env.production`이다.
+현재 환경파일은 `/opt/pass-on-english/releases/ee6ad29/deploy/tencent-lighthouse/.env.production`이다.
 실행 컨테이너 키와 환경파일 일치, 키 쌍 정상, 실제 HTTPS 브라우저 코드의 공개키 포함 및 비밀키 비노출을 확인했다.
+
+2026-10-19 관리자 보안 비밀값 등록: 기존 운영 환경파일을 `.env.production.bak-admin-security-20261019T125717Z`로 백업하고 `ADMIN_SECURITY_EVENT_HMAC_KEY`, `ADMIN_MFA_SESSION_SECRET`, `ADMIN_MFA_MAX_AGE_DAYS=7`을 등록했다. 두 파일은 소유자 전용 `600` 권한이며 원문은 출력·문서화하지 않았다. 두 관리자 모두 TOTP 등록을 마칠 때까지 `ADMIN_MFA_MODE=optional`을 유지한다.
 
 필수 운영 변수:
 
@@ -273,6 +275,14 @@ https://passonenglish.com/api/health     → 200
 - 2GB 호스트에서 CPU 1코어·RAM 1200MB·메모리+스왑 2GB 제한 BuildKit으로 빌드했으며, production build·타입 검사와 정적 페이지 86개 생성을 통과했다. app health 통과 후 cron·nginx를 순서대로 전환했다.
 - 운영 app·cron·nginx가 정상 실행 중이고 app은 healthy다. 서버 내부 및 외부 HTTPS에서 `/ko`, `/zh-CN`, `/ko/signup`, `/api/health`, `/manifest.json`, `/sw.js`가 모두 200이며 최근 app 오류·nginx 5xx는 확인되지 않았다. cron 예약 발송 작업도 `failed: 0`으로 확인했다.
 - 이전 `4c043e1` 릴리스와 이미지는 롤백용으로 보존했다. Supabase URL은 싱가포르 프로젝트와 일치하며 기존 운영 환경변수와 비밀값은 변경·노출하지 않았다.
+
+2026-10-19 migration 057 및 관리자 보안 앱 배포 검증:
+
+- migration `057_admin_security_audit.sql`은 싱가포르 운영 DB에 단독 적용하고 테이블·인덱스 2개·RLS·관리자 SELECT 정책과 역할별 실제 권한을 확인했다. `anon`은 거부되고 `authenticated`는 관리자 RLS를 통과한 SELECT만 가능하며 `service_role`은 감사 이벤트를 기록할 수 있다.
+- 커밋 `ee6ad29`를 `origin/main`에 푸시하고 `/opt/pass-on-english/releases/ee6ad29`에 배포했다. 운영 이미지 `pass-on-english:ee6ad29`의 ID는 `sha256:7f78c59f1e5fbee37e00d6ef01e9707e9142cb44d9c6c8be3ed2f5fb002187c9`다.
+- CPU·메모리 제한 BuildKit에서 production build·타입 검사와 정적 페이지 89개 생성을 통과했다. 격리 후보 컨테이너에서 보안 환경값 주입, 주요 화면, 관리자 보호 API 익명 401, 보안 헤더와 오류 로그 0건을 확인한 뒤 app→cron→nginx 순서로 전환했다.
+- 운영 app은 healthy·재시작 0이며 `/ko`, `/zh-CN`, `/ko/signup`, `/admin/login`, `/api/health`, `/manifest.json`, `/sw.js`가 HTTPS 200이다. `/admin/security` 익명 접근은 관리자 로그인으로 리다이렉트되고 보안 상태 API는 401이다. cron 두 작업은 연속 `failed: 0`, 최근 app·cron 오류와 nginx 5xx는 0건이다.
+- 이전 `2bfa6a6` 이미지와 릴리스는 즉시 롤백용으로 보존했다. 중지된 과거 BuildKit 빌더 4개만 제거해 디스크 사용률을 94%에서 배포 후 68%로 낮췄으며 앱 이미지·운영 데이터는 삭제하지 않았다.
 
 ## 7. 테스트 기준
 

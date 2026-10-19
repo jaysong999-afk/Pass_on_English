@@ -45,6 +45,8 @@ $securityBytes = New-Object byte[] 48
 
 ### 3. Tencent 운영 환경을 준비 모드로 시작
 
+2026-10-19 운영 릴리스 `ee6ad29`에 아래 설정을 등록하고 값 노출 없이 런타임 주입을 확인했다. 현재는 두 관리자 등록 전 잠금을 피하기 위해 `optional` 상태다.
+
 현재 릴리스의 `deploy/tencent-lighthouse/.env.production`에 아래 항목을 추가한다.
 
 ```dotenv
