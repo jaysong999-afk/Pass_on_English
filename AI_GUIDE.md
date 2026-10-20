@@ -3,9 +3,9 @@
 > 이 문서는 AI와 개발자가 작업을 시작할 때 가장 먼저 확인해야 하는 프로젝트의 단일 진실 공급원(SSOT)이다.
 > 다른 문서·대화·주석·과거 배포 기록이 이 문서와 충돌하면 이 문서를 우선한다. 충돌을 발견하면 추측하지 말고 사실을 재검증한 뒤 이 문서도 함께 갱신한다.
 
-최종 검증일: 2026-10-19 (migration 057·관리자 보안 앱 `ee6ad29` 운영 배포 및 HTTPS 검증 완료)
+최종 검증일: 2026-10-20 (관리자 MFA 비밀번호 변경 수정 `8725c94` 운영 배포 및 HTTPS 검증 완료)
 기준 브랜치: `main`
-검증된 운영 기준 커밋: `ee6ad29` (`feat: harden administrator authentication`)
+검증된 운영 기준 커밋: `8725c94` (`fix: preserve MFA assurance during password changes`)
 
 ## 1. 절대 혼동하면 안 되는 운영 정보
 
@@ -23,8 +23,8 @@
 | 운영 배포 방식 | Docker Compose (`app`, `cron`, `nginx`) |
 | 서버 릴리스 경로 | `/opt/pass-on-english/releases/<git-short-sha>/deploy/tencent-lighthouse` |
 | DB migration 최신 기준 | `057_admin_security_audit.sql` — 2026-10-19 싱가포르 운영 DB 적용·인덱스/RLS/역할별 권한 검증 및 연계 앱 배포 완료 |
-| 현재 운영 이미지 / 릴리스 | `pass-on-english:ee6ad29` / `/opt/pass-on-english/releases/ee6ad29` |
-| 남은 검증 | 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관·환불의 실기기·실데이터 확인 필요 |
+| 현재 운영 이미지 / 릴리스 | `pass-on-english:8725c94` / `/opt/pass-on-english/releases/8725c94` |
+| 남은 검증 | 두 번째 관리자의 실제 AAL2 비밀번호 변경·재로그인, 실제 기기의 재부팅 후 로그인 유지와 설치·권한 허용·양방향 Push 수신, 승인된 운영 수강 이관·환불의 실기기·실데이터 확인 필요 |
 
 ### 금지된 연결
 
@@ -104,7 +104,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 - `054_legacy_reschedule_rpc_compatibility.sql`은 2026-10-08 운영 DB에 적용했다. 앱 `5618074`의 5인자 요청 생성 호출을 유지하되 클라이언트 월 값은 무시하고 053의 4인자 정책 RPC에 위임한다. 두 함수 모두 `SECURITY DEFINER`, `postgres` 소유이며 `anon` 실행은 차단되고 `authenticated`·`service_role`만 실행 가능함을 확인했다. 연계 앱은 `4c043e1`로 운영 배포했다.
 - `055_repair_enrollment_session_counters.sql`은 2026-10-08 운영 DB에 단독 적용했다. 완료 수업 trigger를 `SECURITY DEFINER`로 보강하고 실제 완료 수업 기준 카운터를 안전하게 backfill했으며, 활성·결제 완료 수강의 잔여수업 부족을 미해결 일정 아래로 내리지 않도록 정합성을 복구했다. 수강 단위 lessons 인덱스와 학생 범위 채팅 inbox RPC를 추가했고, 양의 완료 카운터 누락·잔여 부족 행은 0건으로 확인했다. 연계 앱은 `662886c`로 운영 배포했다.
 - `056_close_expired_enrollment_chats.sql`은 2026-10-08 싱가포르 운영 DB에 단독 트랜잭션으로 적용했다. 적용 전 채팅방 10개·학생/강사 조합 8개·중복 조합 2개를 확인했고, 적용 후 채팅방 8개·조합 8개·중복 0개·별칭 2개·메시지 21개를 확인했다. 학생·강사 쌍별 UNIQUE, 기존 중복 방 병합, 수강 lifecycle trigger, 재수강 재개, 최종 수강 종료 차단, 과거 링크 resolver와 역할별 RPC 권한을 검증했다. 연계 앱은 `2bfa6a6`으로 운영 배포했다.
-- `057_admin_security_audit.sql`은 2026-10-19 싱가포르 운영 DB에 단독 트랜잭션으로 적용했다. `admin_security_events`와 보조 인덱스 2개, RLS와 관리자 SELECT 정책을 확인했다. `anon`은 실제 REST 조회가 `401/42501`로 거부되고, `authenticated`는 SELECT만 허용되며 관리자 컨텍스트만 행을 조회했다. `service_role` 실제 INSERT도 확인했으며 검증용 임시 행은 즉시 제거했다. 연계 관리자 보안 앱은 아직 운영 배포하지 않았다.
+- `057_admin_security_audit.sql`은 2026-10-19 싱가포르 운영 DB에 단독 트랜잭션으로 적용했다. `admin_security_events`와 보조 인덱스 2개, RLS와 관리자 SELECT 정책을 확인했다. `anon`은 실제 REST 조회가 `401/42501`로 거부되고, `authenticated`는 SELECT만 허용되며 관리자 컨텍스트만 행을 조회했다. `service_role` 실제 INSERT도 확인했으며 검증용 임시 행은 즉시 제거했다. 연계 관리자 보안 앱은 `ee6ad29`부터 운영 배포됐다.
 - 같은 날 운영 DB에 `supabase_migrations.schema_migrations`가 없음을 확인했다. 043은 Management API를 통한 해당 SQL 파일 단독 트랜잭션 실행으로 적용했고, CLI 이력을 임의로 생성하거나 과거 이력을 복구하지 않았다. `db push`/전체 migration 재적용 금지: 실제 객체와 과거 적용 기록을 대조한 이력 정합화가 먼저 필요하다.
 - 로컬 `supabase/.temp`의 구 프로젝트 연결을 발견하여 실행을 중단한 후, 공식 CLI `link`로 싱가포르 project ref 및 pooler를 재설정·확인했다. 향후 CLI 실행 전 숨김/ignored 파일의 project-ref도 반드시 확인한다.
 - 운영 DB 적용 전 대상 project ref를 출력 가능한 비밀이 아닌 URL/ref 수준에서 확인하고, 데이터 보존형 SQL인지 검토한다.
@@ -125,7 +125,7 @@ rg -n "yldtimpsgumheiahcwwi" src scripts deploy supabase .github
 해당 릴리스 `.env.production`에 로컬 공개키·비밀키 두 항목만 등록했다. 키 쌍 정상 및 로컬/서버 파일 일치 확인.
 기존 `VAPID_SUBJECT`와 Supabase 설정은 보존했고 원본은 동일 디렉터리의 `.env.production.pre-vapid-*`로 백업했다(두 파일 모두 600).
 이후 사용자 승인으로 `35bb954` 새 릴리스에 환경파일을 복사하고 이미지 태그만 바꿔 새 이미지를 빌드·배포했다.
-현재 환경파일은 `/opt/pass-on-english/releases/ee6ad29/deploy/tencent-lighthouse/.env.production`이다.
+현재 환경파일은 `/opt/pass-on-english/releases/8725c94/deploy/tencent-lighthouse/.env.production`이다.
 실행 컨테이너 키와 환경파일 일치, 키 쌍 정상, 실제 HTTPS 브라우저 코드의 공개키 포함 및 비밀키 비노출을 확인했다.
 
 2026-10-19 관리자 보안 비밀값 등록: 기존 운영 환경파일을 `.env.production.bak-admin-security-20261019T125717Z`로 백업하고 `ADMIN_SECURITY_EVENT_HMAC_KEY`, `ADMIN_MFA_SESSION_SECRET`, `ADMIN_MFA_MAX_AGE_DAYS=7`을 등록했다. 두 파일은 소유자 전용 `600` 권한이며 원문은 출력·문서화하지 않았다. 두 관리자 모두 TOTP 등록을 마칠 때까지 `ADMIN_MFA_MODE=optional`을 유지한다.
@@ -283,6 +283,14 @@ https://passonenglish.com/api/health     → 200
 - CPU·메모리 제한 BuildKit에서 production build·타입 검사와 정적 페이지 89개 생성을 통과했다. 격리 후보 컨테이너에서 보안 환경값 주입, 주요 화면, 관리자 보호 API 익명 401, 보안 헤더와 오류 로그 0건을 확인한 뒤 app→cron→nginx 순서로 전환했다.
 - 운영 app은 healthy·재시작 0이며 `/ko`, `/zh-CN`, `/ko/signup`, `/admin/login`, `/api/health`, `/manifest.json`, `/sw.js`가 HTTPS 200이다. `/admin/security` 익명 접근은 관리자 로그인으로 리다이렉트되고 보안 상태 API는 401이다. cron 두 작업은 연속 `failed: 0`, 최근 app·cron 오류와 nginx 5xx는 0건이다.
 - 이전 `2bfa6a6` 이미지와 릴리스는 즉시 롤백용으로 보존했다. 중지된 과거 BuildKit 빌더 4개만 제거해 디스크 사용률을 94%에서 배포 후 68%로 낮췄으며 앱 이미지·운영 데이터는 삭제하지 않았다.
+
+2026-10-20 관리자 MFA 비밀번호 변경 수정 배포 검증:
+
+- 운영 로그에서 관리자 비밀번호 변경 실패의 실제 Supabase Auth 코드가 `insufficient_aal`임을 확인했다. 기존 API가 현재 비밀번호 확인을 위해 `signInWithPassword`를 다시 호출하면서 AAL2 세션을 AAL1로 낮춘 뒤 비밀번호 갱신을 시도한 것이 원인이었다.
+- 커밋 `8725c94`에서 중복 재로그인을 제거하고 현재 AAL2 세션의 `updateUser` 요청에 `current_password`를 함께 전달했다. `insufficient_aal`, 현재 비밀번호 오류, 재인증, 세션 만료, 요청 제한을 안전한 앱 오류 코드로 구분하고 변경 성공 후 다른 세션 종료는 유지했다. Auth 호출도 1회 줄었다.
+- 로컬 TypeScript 검사, 관리자 보안 경계 17개, TOTP QR 4개와 production build를 통과했다. 서버에서는 CPU·메모리 제한 BuildKit으로 정적 페이지 89개를 포함한 이미지를 생성했고 이미지 `pass-on-english:8725c94` ID는 `sha256:59995954214dc8be2efda1f361deaf05b4be7b321e9b75604a8220d6796440b0`이다.
+- 격리 후보에서 `/ko`, `/zh-CN`, `/ko/signup`, `/admin/login`, `/api/health` 200, 비밀번호 변경 API 익명 401, 싱가포르 Supabase URL과 오류 로그 0건을 확인한 뒤 app→cron→nginx 순서로 전환했다. 운영 app은 healthy·재시작 0이고 cron 두 작업은 두 주기 연속 `failed: 0`, 최근 Nginx 5xx는 0건이다.
+- DB 스키마와 Supabase 설정은 변경하지 않았다. 이전 `2ee8760` 릴리스와 이미지는 즉시 롤백용으로 보존했으며, 두 번째 관리자의 실제 AAL2 비밀번호 변경과 재로그인은 사용자가 최종 확인한다.
 
 ## 7. 테스트 기준
 
