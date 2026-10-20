@@ -14,6 +14,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   password_mismatch: "새 비밀번호 확인이 일치하지 않습니다.",
   password_unchanged: "현재 비밀번호와 다른 새 비밀번호를 입력해 주세요.",
   invalid_current_password: "현재 비밀번호가 올바르지 않습니다.",
+  reauthentication_required: "보안을 위해 다시 로그인한 뒤 비밀번호 변경을 시도해 주세요.",
+  rate_limited: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
   password_update_failed: "비밀번호 변경에 실패했습니다. 잠시 후 다시 시도해 주세요.",
   unauthorized: "로그인이 필요합니다.",
   forbidden: "관리자 권한이 필요합니다.",

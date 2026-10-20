@@ -32,6 +32,14 @@ expect(
     !loginRoute.includes('expectedRole === "admin" && failure.code === "invalid_credentials"')
 );
 expect("administrator password minimum is fourteen characters", passwordRoute.includes("password.length < 14"));
+expect(
+  "password change preserves the current MFA session",
+  !passwordRoute.includes("signInWithPassword") && passwordRoute.includes("current_password: currentPassword")
+);
+expect(
+  "password change reports insufficient assurance as MFA required",
+  passwordRoute.includes('case "insufficient_aal"') && passwordRoute.includes('{ error: "mfa_required" }')
+);
 expect("password change revokes other sessions", passwordRoute.includes('scope: "others"'));
 expect("administrator logout is audited", logoutRoute.includes('eventType: "admin_logout"'));
 expect("administrator can enroll a TOTP factor", securityPage.includes('factorType: "totp"'));
