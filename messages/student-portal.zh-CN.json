@@ -148,6 +148,7 @@
       "errorSave": "保存失败，请重试。",
       "errorNetwork": "网络错误，请重试。",
       "enrollmentNotice": "接下来将进入选课报名步骤。请在免费体验后再决定是否付费。",
+      "enrollmentNoticePaused": "接下来将进入正式课程报名与付款步骤。",
       "cefr": {
         "A1": "A1 — 基础：能简单问候与自我介绍",
         "A2": "A2 — 初级：能进行日常简单对话",
@@ -168,6 +169,7 @@
     },
     "auth": {
       "signupTitle": "学生注册",
+      "trialPausedNotice": "现有学员迁移期间暂时停止免费试听。请注册后直接申请正式课程。",
       "loginTitle": "学生登录",
       "fullName": "姓名",
       "fullNamePlaceholder": "张三",

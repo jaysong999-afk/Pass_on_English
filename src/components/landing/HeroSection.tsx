@@ -3,11 +3,17 @@ import { useTranslations } from "next-intl";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HeroVisual } from "@/components/landing/HeroVisual";
+import { isFreeTrialProgramEnabled } from "@/lib/free-trial-policy";
 
 export function HeroSection({ locale }: { locale: string }) {
   const t = useTranslations("hero");
+  const freeTrialEnabled = isFreeTrialProgramEnabled();
 
-  const trustItems = [t("trust1"), t("trust2"), t("trust3")];
+  const trustItems = [
+    t(freeTrialEnabled ? "trust1" : "trust1Paused"),
+    t("trust2"),
+    t(freeTrialEnabled ? "trust3" : "trust3Paused"),
+  ];
 
   return (
     <section className="landing-gradient-hero relative overflow-hidden">
@@ -39,7 +45,7 @@ export function HeroSection({ locale }: { locale: string }) {
                 className="h-12 gap-2 rounded-2xl bg-brand-600 px-8 text-base shadow-lg shadow-brand-600/25 hover:bg-brand-700"
               >
                 <Link href={`/${locale}/signup`}>
-                  {t("ctaPrimary")}
+                  {t(freeTrialEnabled ? "ctaPrimary" : "ctaPrimaryPaused")}
                   <ArrowRight className="h-5 w-5" />
                 </Link>
               </Button>

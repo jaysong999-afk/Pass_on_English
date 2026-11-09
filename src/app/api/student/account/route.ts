@@ -19,6 +19,7 @@ import { lessonScheduledAtToKstSlot } from "@/lib/availability/timezone";
 import { VALID_CEFR_LEVELS, VALID_COURSE_PURPOSES } from "@/lib/student-survey-labels";
 import { getTeacherFromCache } from "@/lib/teachers/teacher-profile-cache";
 import { areVideoPlatformsCompatible } from "@/lib/video-platforms";
+import { isFreeTrialEligible } from "@/lib/free-trial-policy";
 
 export async function GET() {
   try {
@@ -31,6 +32,7 @@ export async function GET() {
     return NextResponse.json({
       ...session,
       activeLearner,
+      freeTrialEligible: isFreeTrialEligible(activeLearner),
       legacyProfile: learnerToLegacyProfile(activeLearner),
     });
   } catch (error) {
@@ -140,6 +142,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({
         session: getAccountSession(),
         activeLearner: learner,
+        freeTrialEligible: isFreeTrialEligible(learner),
         legacyProfile: learnerToLegacyProfile(learner),
       });
     }
@@ -169,8 +172,11 @@ export async function PATCH(request: Request) {
       if (learner.id !== learnerId) {
         return NextResponse.json({ error: "learner_not_found" }, { status: 404 });
       }
-      if (learner.trialUsed) {
-        return NextResponse.json({ error: "trial_already_used" }, { status: 400 });
+      if (!isFreeTrialEligible(learner)) {
+        return NextResponse.json(
+          { error: learner.trialUsed ? "trial_already_used" : "trial_unavailable" },
+          { status: learner.trialUsed ? 400 : 409 }
+        );
       }
       const teacher = getTeacherFromCache(teacherId);
       if (!teacher || !areVideoPlatformsCompatible(learner.videoPlatforms, teacher.videoPlatforms)) {

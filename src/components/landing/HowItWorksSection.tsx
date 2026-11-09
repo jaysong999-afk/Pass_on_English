@@ -1,18 +1,21 @@
 import { useTranslations } from "next-intl";
 import { SectionHeading } from "@/components/landing/SectionHeading";
+import { isFreeTrialProgramEnabled } from "@/lib/free-trial-policy";
 
 const stepKeys = ["step1", "step2", "step3", "step4"] as const;
 
 export function HowItWorksSection() {
   const t = useTranslations("howItWorks");
+  const freeTrialEnabled = isFreeTrialProgramEnabled();
+  const key = (value: string) => (freeTrialEnabled ? value : `${value}Paused`);
 
   return (
     <section id="how-it-works" className="landing-section overflow-hidden bg-brand-800 text-white">
       <div className="landing-container">
         <SectionHeading
           eyebrow={t("eyebrow")}
-          title={t("title")}
-          subtitle={t("subtitle")}
+          title={t(key("title"))}
+          subtitle={t(key("subtitle"))}
           className="[&_h2]:text-white [&_p]:text-brand-100"
         />
 
@@ -27,10 +30,10 @@ export function HowItWorksSection() {
                   {String(i + 1).padStart(2, "0")}
                 </div>
                 <h3 className="text-lg font-bold leading-snug md:text-xl">
-                  {t(`${key}Title`)}
+                  {t(freeTrialEnabled ? `${key}Title` : `${key}TitlePaused`)}
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-brand-100 md:text-[0.9375rem] md:leading-[1.7]">
-                  {t(`${key}Desc`)}
+                  {t(freeTrialEnabled ? `${key}Desc` : `${key}DescPaused`)}
                 </p>
               </li>
             ))}

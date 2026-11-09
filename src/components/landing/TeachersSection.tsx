@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SectionHeading } from "@/components/landing/SectionHeading";
 import type { Teacher } from "@/types";
+import { isFreeTrialProgramEnabled } from "@/lib/free-trial-policy";
 
 export function TeachersSection({
   teachers,
@@ -18,6 +19,7 @@ export function TeachersSection({
   standalone?: boolean;
 }) {
   const t = useTranslations("teachers");
+  const freeTrialEnabled = isFreeTrialProgramEnabled();
   const verifiedTeachers = teachers.filter((teacher) => {
     const internalCopy = `${teacher.displayName} ${teacher.bio}`.toLowerCase();
     return Boolean(teacher.avatarUrl) && !internalCopy.includes("demo") && !internalCopy.includes("e2e");
@@ -78,7 +80,7 @@ export function TeachersSection({
           })}
         </div>
 
-        {verifiedTeachers.length === 0 && <p className="mx-auto mt-12 max-w-xl rounded-2xl border border-brand-100 bg-white p-6 text-center leading-7 text-ink-muted">{t("verifiedSoon")}</p>}
+        {verifiedTeachers.length === 0 && <p className="mx-auto mt-12 max-w-xl rounded-2xl border border-brand-100 bg-white p-6 text-center leading-7 text-ink-muted">{t(freeTrialEnabled ? "verifiedSoon" : "verifiedSoonPaused")}</p>}
 
         <div className="mt-10 text-center">
           <Button asChild variant="secondary" size="lg" className="rounded-2xl gap-2">

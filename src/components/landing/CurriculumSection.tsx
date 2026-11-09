@@ -9,6 +9,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { SectionHeading } from "@/components/landing/SectionHeading";
+import { isFreeTrialProgramEnabled } from "@/lib/free-trial-policy";
 
 const curriculumKeys = [
   "daily",
@@ -42,6 +43,7 @@ const accents = [
 
 export function CurriculumSection() {
   const t = useTranslations("curriculum");
+  const freeTrialEnabled = isFreeTrialProgramEnabled();
 
   return (
     <section id="curriculum" className="landing-section bg-surface">
@@ -79,7 +81,7 @@ export function CurriculumSection() {
         </div>
 
         <p className="mx-auto mt-10 max-w-2xl text-center text-sm leading-relaxed text-ink-muted">
-          {t("note")}
+          {t(freeTrialEnabled ? "note" : "notePaused")}
         </p>
       </div>
     </section>

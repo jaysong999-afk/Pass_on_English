@@ -13,6 +13,7 @@ import type { AccountType, CountryCode, VideoPlatform, StudentGender } from "@/t
 import { VideoPlatformSelector } from "@/components/shared/VideoPlatformSelector";
 import { studentPath } from "@/lib/student-paths";
 import { cn } from "@/lib/utils";
+import { isFreeTrialProgramEnabled } from "@/lib/free-trial-policy";
 
 const selectClassName =
   "flex h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500";
@@ -22,6 +23,7 @@ export default function SignupPage() {
   const router = useRouter();
   const locale = (params.locale as string) ?? "ko";
   const t = useTranslations("studentPortal.auth");
+  const freeTrialEnabled = isFreeTrialProgramEnabled();
 
   const [accountType, setAccountType] = useState<AccountType>("self");
   const [fullName, setFullName] = useState("");
@@ -119,6 +121,11 @@ export default function SignupPage() {
             <CardTitle>{t("signupTitle")}</CardTitle>
           </CardHeader>
           <CardContent>
+            {!freeTrialEnabled && (
+              <p className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+                {t("trialPausedNotice")}
+              </p>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label>{t("accountType")}</Label>

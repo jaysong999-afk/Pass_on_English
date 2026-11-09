@@ -15,6 +15,7 @@ interface StudentProfileSummary {
   fullName: string;
   englishName: string;
   trialUsed: boolean;
+  freeTrialEligible: boolean;
 }
 
 interface EnrollmentFlowStateInput {
@@ -60,12 +61,25 @@ export function useEnrollmentFlowState({
             fullName: data.activeLearner.fullName,
             englishName: data.activeLearner.englishName,
             trialUsed: Boolean(data.activeLearner.trialUsed),
+            freeTrialEligible: Boolean(data.freeTrialEligible),
           });
         } else {
-          setProfile({ fullName: "", englishName: "", trialUsed: true });
+          setProfile({
+            fullName: "",
+            englishName: "",
+            trialUsed: true,
+            freeTrialEligible: false,
+          });
         }
       })
-      .catch(() => setProfile({ fullName: "", englishName: "", trialUsed: true }))
+      .catch(() =>
+        setProfile({
+          fullName: "",
+          englishName: "",
+          trialUsed: true,
+          freeTrialEligible: false,
+        })
+      )
       .finally(() => setProfileLoading(false));
   }, [mode]);
 
@@ -97,7 +111,7 @@ export function useEnrollmentFlowState({
     availability.openSlots.find((slot) => slot.id === selectedSlotId) ?? null;
   const enrollmentPath = resolveEnrollmentPath({
     mode,
-    trialUsed: profile?.trialUsed ?? true,
+    freeTrialEligible: profile?.freeTrialEligible ?? false,
     pendingTrialScheduledAt: trialScheduledAt,
   });
   const renewPlan =

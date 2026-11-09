@@ -16,6 +16,7 @@ import { reserveTeacherWeeklySlotsInDb } from "@/lib/teacher-availability/reposi
 import type { DayLabel, SlotStartTime } from "@/lib/availability/types";
 import { lessonScheduledAtToKstSlot } from "@/lib/availability/timezone";
 import { VALID_CEFR_LEVELS, VALID_COURSE_PURPOSES } from "@/lib/student-survey-labels";
+import { isFreeTrialEligible } from "@/lib/free-trial-policy";
 
 /** @deprecated Prefer GET /api/student/account */
 export async function GET() {
@@ -29,6 +30,7 @@ export async function GET() {
     profile: learnerToLegacyProfile(activeLearner),
     account: getAccountSession().account,
     activeLearnerId: getAccountSession().activeLearnerId,
+    freeTrialEligible: isFreeTrialEligible(activeLearner),
   });
 }
 
@@ -110,8 +112,11 @@ export async function PATCH(request: Request) {
     }
 
     const learner = getActiveLearner();
-    if (learner.trialUsed) {
-      return NextResponse.json({ error: "trial_already_used" }, { status: 400 });
+    if (!isFreeTrialEligible(learner)) {
+      return NextResponse.json(
+        { error: learner.trialUsed ? "trial_already_used" : "trial_unavailable" },
+        { status: learner.trialUsed ? 400 : 409 }
+      );
     }
 
     const durationMinutes = sessionMinutes && sessionMinutes > 0 ? sessionMinutes : 20;

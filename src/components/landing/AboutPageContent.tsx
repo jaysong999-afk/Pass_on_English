@@ -12,9 +12,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/landing/SectionHeading";
+import { isFreeTrialProgramEnabled } from "@/lib/free-trial-policy";
 
 export function AboutPageContent({ locale }: { locale: string }) {
   const t = useTranslations("about");
+  const freeTrialEnabled = isFreeTrialProgramEnabled();
 
   const services = [
     { icon: Video, key: "s1" as const },
@@ -91,8 +93,12 @@ export function AboutPageContent({ locale }: { locale: string }) {
                 <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-mint-50 text-brand-700">
                   <Icon className="h-6 w-6" />
                 </div>
-                <h3 className="text-lg font-bold text-ink">{t(`${key}Title`)}</h3>
-                <p className="landing-prose-narrow mt-3 max-w-none">{t(`${key}Desc`)}</p>
+                <h3 className="text-lg font-bold text-ink">
+                  {t(!freeTrialEnabled && key === "s4" ? "s4TitlePaused" : `${key}Title`)}
+                </h3>
+                <p className="landing-prose-narrow mt-3 max-w-none">
+                  {t(!freeTrialEnabled && key === "s4" ? "s4DescPaused" : `${key}Desc`)}
+                </p>
               </article>
             ))}
           </div>
@@ -155,14 +161,14 @@ export function AboutPageContent({ locale }: { locale: string }) {
         <div className="landing-container">
           <div className="rounded-[2rem] landing-gradient-brand px-8 py-14 text-center text-white md:px-16">
             <h2 className="landing-display text-3xl text-white sm:text-4xl">{t("ctaTitle")}</h2>
-            <p className="mx-auto mt-4 max-w-xl text-lg text-mint-100">{t("ctaSubtitle")}</p>
+            <p className="mx-auto mt-4 max-w-xl text-lg text-mint-100">{t(freeTrialEnabled ? "ctaSubtitle" : "ctaSubtitlePaused")}</p>
             <Button
               asChild
               size="lg"
               className="mt-8 h-12 gap-2 rounded-2xl bg-white px-8 text-base font-bold text-brand-700 hover:bg-mint-50"
             >
               <Link href={`/${locale}/signup`}>
-                {t("ctaButton")}
+                {t(freeTrialEnabled ? "ctaButton" : "ctaButtonPaused")}
                 <ArrowRight className="h-5 w-5" />
               </Link>
             </Button>

@@ -15,6 +15,7 @@ import { getStudentDisplayName } from "@/lib/student-display-name";
 import { formatPlanLabel } from "@/lib/pricing-plan-display";
 import { getTeacherFromCache } from "@/lib/teachers/teacher-profile-cache";
 import { areVideoPlatformsCompatible } from "@/lib/video-platforms";
+import { isFreeTrialEligible } from "@/lib/free-trial-policy";
 
 export async function POST(request: Request) {
   let body: {
@@ -134,7 +135,7 @@ export async function POST(request: Request) {
       preferredSlotDay: body.preferredSlotDay,
       preferredSlotTime: body.preferredSlotTime,
       studentName,
-      bookTrial: !activeLearner.trialUsed,
+      bookTrial: isFreeTrialEligible(activeLearner),
     });
 
     try {

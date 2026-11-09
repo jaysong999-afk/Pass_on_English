@@ -12,12 +12,12 @@ export type EnrollmentPath = "trial_first" | "paid_only";
 
 export function resolveEnrollmentPath(input: {
   mode: "new" | "renew";
-  trialUsed: boolean;
+  freeTrialEligible: boolean;
   pendingTrialScheduledAt?: string | null;
 }): EnrollmentPath {
   if (input.mode === "renew") return "paid_only";
   if (isUpcomingTrial(input.pendingTrialScheduledAt)) return "trial_first";
-  if (!input.trialUsed) return "trial_first";
+  if (input.freeTrialEligible) return "trial_first";
   return "paid_only";
 }
 

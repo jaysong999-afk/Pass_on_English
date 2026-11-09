@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import type { CefrLevel, CoursePurpose } from "@/types";
 import { useStudentSurveyOptions } from "@/hooks/useStudentSurveyOptions";
 import { studentPath } from "@/lib/student-paths";
+import { isFreeTrialProgramEnabled } from "@/lib/free-trial-policy";
 
 const selectClassName =
   "flex h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500";
@@ -19,6 +20,7 @@ export default function StudentOnboardingPage() {
   const router = useRouter();
   const locale = useLocale();
   const t = useTranslations("studentPortal.survey");
+  const freeTrialEnabled = isFreeTrialProgramEnabled();
   const { cefrLevels, coursePurposes } = useStudentSurveyOptions();
 
   const [englishLevel, setEnglishLevel] = useState<CefrLevel>("A1");
@@ -124,7 +126,9 @@ export default function StudentOnboardingPage() {
             {submitting ? t("saving") : t("complete")}
           </Button>
 
-          <p className="text-center text-sm text-gray-500">{t("enrollmentNotice")}</p>
+          <p className="text-center text-sm text-gray-500">
+            {t(freeTrialEnabled ? "enrollmentNotice" : "enrollmentNoticePaused")}
+          </p>
         </CardContent>
       </Card>
     </div>

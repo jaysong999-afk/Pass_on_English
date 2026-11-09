@@ -6,11 +6,13 @@ import { Globe2, LogIn, Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { LocaleSwitcher } from "@/components/shared/LocaleSwitcher";
 import { PwaInstallHelp } from "@/components/shared/PwaInstallHelp";
+import { isFreeTrialProgramEnabled } from "@/lib/free-trial-policy";
 
 export function LandingHeader({ locale }: { locale: string }) {
   const t = useTranslations("common");
   const nav = useTranslations("nav");
   const [open, setOpen] = useState(false);
+  const freeTrialEnabled = isFreeTrialProgramEnabled();
 
   const links = [
     { href: `/${locale}/about`, label: nav("about") },
@@ -68,7 +70,7 @@ export function LandingHeader({ locale }: { locale: string }) {
             href={`/${locale}/signup`}
             className="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-brand-600/25 transition hover:bg-brand-700 min-h-11 flex items-center"
           >
-            {t("freeTrial")}
+            {t(freeTrialEnabled ? "freeTrial" : "signup")}
           </Link>
         </div>
 
@@ -133,7 +135,7 @@ export function LandingHeader({ locale }: { locale: string }) {
                   className="flex min-h-12 items-center justify-center rounded-xl bg-brand-600 px-4 py-3 text-center font-bold text-white shadow-md shadow-brand-600/20 transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
                   onClick={() => setOpen(false)}
                 >
-                  {t("freeTrial")}
+                  {t(freeTrialEnabled ? "freeTrial" : "signup")}
                 </Link>
               </div>
             </nav>

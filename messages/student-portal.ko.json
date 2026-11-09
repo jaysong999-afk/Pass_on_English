@@ -148,6 +148,7 @@
       "errorSave": "저장에 실패했습니다. 다시 시도해 주세요.",
       "errorNetwork": "네트워크 오류가 발생했습니다. 다시 시도해 주세요.",
       "enrollmentNotice": "이후 수강신청 단계가 진행됩니다. 결제는 무료체험 후 결정하세요.",
+      "enrollmentNoticePaused": "이후 정규 수강신청과 결제 단계가 진행됩니다.",
       "cefr": {
         "A1": "A1 — 기초: 간단한 인사·자기소개 가능",
         "A2": "A2 — 초급: 일상적인 간단한 대화 가능",
@@ -168,6 +169,7 @@
     },
     "auth": {
       "signupTitle": "학생 회원가입",
+      "trialPausedNotice": "현재 기존 수강생 전환 기간으로 무료체험은 잠시 운영하지 않습니다. 회원가입 후 정규 수강신청을 이용해 주세요.",
       "loginTitle": "학생 로그인",
       "fullName": "이름",
       "fullNamePlaceholder": "홍길동",

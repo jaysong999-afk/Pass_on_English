@@ -10,11 +10,13 @@ import { formatPlanLabel, getPlanDisplayName } from "@/lib/pricing-plan-display"
 import { LESSON_MINUTES } from "@/lib/availability/constants";
 import { formatScheduleDays } from "@/lib/teacher-availability";
 import type { Locale } from "@/lib/i18n/config";
+import { isFreeTrialProgramEnabled } from "@/lib/free-trial-policy";
 
 export function PricingSection({ locale, standalone = false }: { locale: string; standalone?: boolean }) {
   const t = useTranslations("pricing");
   const tp = useTranslations("studentPortal.pricing");
   const isZh = locale === "zh-CN";
+  const freeTrialEnabled = isFreeTrialProgramEnabled();
   const planLocale = locale as Locale;
   const { plans, loading, error, reload } = usePricingPlans(true);
 
@@ -88,10 +90,12 @@ export function PricingSection({ locale, standalone = false }: { locale: string;
                       <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
                       1:1 {tp("nativeTeacher")}
                     </li>
-                    <li className="flex items-start gap-2.5 text-sm text-ink-muted">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                      {tp("firstLessonFree")}
-                    </li>
+                    {freeTrialEnabled && (
+                      <li className="flex items-start gap-2.5 text-sm text-ink-muted">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                        {tp("firstLessonFree")}
+                      </li>
+                    )}
                   </ul>
 
                   <Button
@@ -101,7 +105,9 @@ export function PricingSection({ locale, standalone = false }: { locale: string;
                     }`}
                     variant={popular ? "default" : "secondary"}
                   >
-                    <Link href={`/${locale}/signup`}>{t("cta")}</Link>
+                    <Link href={`/${locale}/signup`}>
+                      {t(freeTrialEnabled ? "cta" : "ctaPaused")}
+                    </Link>
                   </Button>
                 </article>
               );

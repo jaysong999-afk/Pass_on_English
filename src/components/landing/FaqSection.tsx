@@ -4,19 +4,21 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Link from "next/link";
 import { SectionHeading } from "@/components/landing/SectionHeading";
+import { isFreeTrialProgramEnabled } from "@/lib/free-trial-policy";
 
 export function FaqSection() {
   const t = useTranslations("faq");
   const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const freeTrialEnabled = isFreeTrialProgramEnabled();
 
   const items = [
     { q: t("q1"), a: t("a1") },
-    { q: t("q2"), a: t("a2") },
+    { q: t("q2"), a: t(freeTrialEnabled ? "a2" : "a2Paused") },
     { q: t("q3"), a: t("a3") },
     { q: t("q4"), a: t("a4") },
     { q: t("q5"), a: t("a5") },
     { q: t("q6"), a: t("a6") },
-    { q: t("q7"), a: t("a7") },
+    { q: t("q7"), a: t(freeTrialEnabled ? "a7" : "a7Paused") },
     { q: t("q8"), a: t("a8") },
   ];
 

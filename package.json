@@ -40,6 +40,7 @@
     "test:renewal": "node scripts/test-renewal-window.mjs",
     "test:renewal-maintenance": "node scripts/test-renewal-maintenance.mjs",
     "test:payment-deadline": "node --experimental-strip-types scripts/test-payment-deadline.mjs",
+    "test:free-trial-policy": "node --no-warnings --experimental-strip-types scripts/test-free-trial-policy.mjs",
     "test:video-platforms": "node --experimental-strip-types scripts/test-video-platform-resolution.mjs",
     "test:student-chat": "node scripts/test-student-chat.mjs",
     "test:teacher-chat": "node scripts/test-teacher-chat.mjs",
